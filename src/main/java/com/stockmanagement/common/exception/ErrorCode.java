@@ -1,0 +1,31 @@
+package com.stockmanagement.common.exception;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+
+/**
+ * 애플리케이션 전역 에러 코드.
+ *
+ * <p>각 코드는 HTTP 상태 코드와 사용자에게 노출할 메시지를 함께 보관한다.
+ * {@link GlobalExceptionHandler}가 이 값을 읽어 응답 상태와 본문을 결정한다.
+ *
+ * <p>도메인별로 그룹을 나눠 관리하며, 새로운 도메인을 추가할 때 해당 그룹에
+ * 코드를 추가한다.
+ */
+@Getter
+@RequiredArgsConstructor
+public enum ErrorCode {
+
+    // ===== Product =====
+    PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다."),
+    DUPLICATE_SKU(HttpStatus.CONFLICT, "이미 존재하는 SKU입니다."),
+
+    // ===== Common =====
+    INVALID_INPUT(HttpStatus.BAD_REQUEST, "잘못된 입력값입니다."),
+    INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
+
+    private final HttpStatus httpStatus;
+    /** 클라이언트에 그대로 전달되는 메시지 — 민감 정보를 포함하지 않아야 한다. */
+    private final String message;
+}
