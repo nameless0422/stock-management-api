@@ -101,12 +101,21 @@ stock-management-api/
 │   │   │           │   └── dto/
 │   │   │           │       ├── InventoryReceiveRequest.java
 │   │   │           │       └── InventoryResponse.java
-│   │   │           ├── order/                            # 🔄 예정 (2단계)
+│   │   │           ├── order/                            # ✅ 구현 완료 (2단계)
 │   │   │           │   ├── entity/
+│   │   │           │   │   ├── Order.java                # @OneToMany OrderItems, idempotencyKey
+│   │   │           │   │   ├── OrderItem.java            # unitPrice 보존, subtotal 계산 저장
+│   │   │           │   │   └── OrderStatus.java          # PENDING / CONFIRMED / CANCELLED
 │   │   │           │   ├── repository/
-│   │   │           │   ├── service/
-│   │   │           │   ├── controller/
+│   │   │           │   │   ├── OrderRepository.java      # findByIdempotencyKey, fetch join
+│   │   │           │   │   └── OrderItemRepository.java
+│   │   │           │   ├── service/OrderService.java
+│   │   │           │   ├── controller/OrderController.java
 │   │   │           │   └── dto/
+│   │   │           │       ├── OrderCreateRequest.java
+│   │   │           │       ├── OrderItemRequest.java
+│   │   │           │       ├── OrderResponse.java
+│   │   │           │       └── OrderItemResponse.java
 │   │   │           ├── payment/                          # 🔄 예정 (3단계)
 │   │   │           │   ├── entity/
 │   │   │           │   ├── repository/
@@ -124,7 +133,7 @@ stock-management-api/
 │   │       └── db/migration/
 │   │           ├── V1__init_schema.sql               # ✅ products 테이블
 │   │           ├── V2__create_inventory_tables.sql   # ✅ inventory 테이블
-│   │           ├── V3__create_order_tables.sql       # 🔄 예정 (2단계)
+│   │           ├── V3__create_order_tables.sql       # ✅ orders, order_items 테이블
 │   │           └── V4__create_payment_tables.sql     # 🔄 예정 (3단계)
 │   └── test/
 │       └── java/com/stockmanagement/
@@ -212,98 +221,52 @@ available : 현재 주문 가능한 수량 (계산값, DB 미저장)
 
 ---
 
-### 2단계: 주문 & 재고 예약 🔄
-**목표**: 주문 생성 시 재고 예약 및 동시성 제어 구현
+### 2단계: 주문 & 재고 예약 ✅
+**목표**: 주문 생성 시 재고 예약 및 상태 관리 구현
 
 #### 작업 내용
-- [ ] 주문 도메인 구현
-  - `Order`, `OrderItem` Entity 설계
-  - OrderStatus Enum (PENDING, CONFIRMED, CANCELLED)
-- [ ] 재고 예약 로직
-  - 주문 생성 시 `reserved` 수량 증가
-  - `available = onHand - reserved - allocated` 계산
-- [ ] 동시성 제어
-  - **비관적 락**: JPA `@Lock(LockModeType.PESSIMISTIC_WRITE)` 적용
-  - **낙관적 락**: `@Version` 필드로 버전 관리
-  - **분산 락**: Redisson으로 분산 환경 대응
-- [ ] 재고 부족 예외 처리
-  - `InsufficientStockException` 커스텀 예외
-  - `@ControllerAdvice`로 전역 예외 처리
+- [x] 주문 도메인 구현
+  - `Order` Entity (userId Long, totalAmount, idempotencyKey, @OneToMany items)
+  - `OrderItem` Entity (unitPrice 주문 당시 단가 보존, subtotal 계산 저장)
+  - `OrderStatus` Enum (PENDING, CONFIRMED, CANCELLED)
+- [x] 재고 예약 연동
+  - 주문 생성 시 각 항목에 대해 `InventoryService.reserve()` 호출 → `reserved` 수량 증가
+  - 주문 취소 시 `InventoryService.releaseReservation()` 호출 → `reserved` 수량 감소
+  - 결제 완료 시 `InventoryService.confirmAllocation()` 호출 → `reserved` → `allocated` 이전
+- [x] 멱등성 보장
+  - `idempotencyKey` DB UNIQUE 제약
+  - 중복 요청 시 기존 주문을 그대로 반환 (새 주문 미생성)
+- [x] 단가 검증
+  - 요청의 `unitPrice`를 `Product.price`와 비교 검증
+  - 불일치 시 400 에러 반환
 
-#### 핵심 코드 예시
+#### 주요 파일
+```
+src/main/resources/db/migration/
+└── V3__create_order_tables.sql        # orders, order_items 테이블
 
-**Inventory Entity (낙관적 락)**
-```java
-@Entity
-@Table(name = "inventory")
-public class Inventory {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    private Long productId;
-    private Long warehouseId;
-    private Integer onHand;      // 실제 보유 수량
-    private Integer reserved;    // 예약된 수량
-    private Integer allocated;   // 할당된 수량
-
-    @Version
-    private Long version;  // 낙관적 락 버전
-
-    public Integer getAvailable() {
-        return onHand - reserved - allocated;
-    }
-
-    public void reserve(Integer quantity) {
-        if (getAvailable() < quantity) {
-            throw new InsufficientStockException(
-                String.format("재고 부족. 요청: %d, 가용: %d", quantity, getAvailable())
-            );
-        }
-        this.reserved += quantity;
-    }
-}
+src/main/java/.../domain/order/
+├── entity/Order.java, OrderItem.java, OrderStatus.java
+├── repository/OrderRepository.java    # findByIdempotencyKey, findByIdWithItems (fetch join)
+├── repository/OrderItemRepository.java
+├── service/OrderService.java          # InventoryService 의존
+├── controller/OrderController.java
+└── dto/OrderCreateRequest, OrderItemRequest, OrderResponse, OrderItemResponse
 ```
 
-**InventoryRepository (비관적 락)**
-```java
-public interface InventoryRepository extends JpaRepository<Inventory, Long> {
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT i FROM Inventory i WHERE i.productId = :productId AND i.warehouseId = :warehouseId")
-    Optional<Inventory> findByProductIdAndWarehouseIdForUpdate(
-        @Param("productId") Long productId,
-        @Param("warehouseId") Long warehouseId
-    );
-}
+#### API 엔드포인트
+```
+POST   /api/orders              주문 생성 (재고 예약)       → 201
+GET    /api/orders/{id}         주문 단건 조회 (items 포함) → 200
+GET    /api/orders              주문 목록 조회 (페이징)     → 200
+POST   /api/orders/{id}/cancel  주문 취소 (재고 예약 해제)  → 200
 ```
 
-**InventoryService**
-```java
-@Service
-@Transactional(readOnly = true)
-public class InventoryService {
-
-    private final InventoryRepository inventoryRepository;
-
-    @Transactional
-    public void reserveStock(Long productId, Long warehouseId, int quantity, String orderId) {
-        Inventory inventory = inventoryRepository
-            .findByProductIdAndWarehouseIdForUpdate(productId, warehouseId)
-            .orElseThrow(() -> new InventoryNotFoundException());
-
-        inventory.reserve(quantity);
-        inventoryRepository.save(inventory);
-    }
-}
+#### 재고 상태 전이
 ```
-
-#### API 예시
-```
-POST /api/orders                      # 주문 생성 (재고 예약)
-GET  /api/orders/{id}                 # 주문 조회
-GET  /api/orders                      # 주문 목록 조회
-POST /api/orders/{id}/cancel          # 주문 취소 (재고 예약 해제)
+주문 생성 → reserved += quantity
+주문 취소 → reserved -= quantity
+결제 완료 → reserved -= quantity, allocated += quantity
 ```
 
 ---
@@ -702,23 +665,26 @@ CREATE INDEX idx_payment_order ON payments(order_id);
 │ category    │       │ created_at   │
 │ status      │       │ updated_at   │
 │ created_at  │       └──────────────┘
-│ updated_at  │
-└─────────────┘
+│ updated_at  │              ▲
+└──────┬──────┘              │
+       │       ┌─────────────┘
+       │       │
+       │  ┌────┴─────────┐       ┌──────────────────┐
+       │  │   orders     │◄──────│   order_items    │
+       │  ├──────────────┤       ├──────────────────┤
+       │  │ id (PK)      │       │ id (PK)          │
+       │  │ user_id      │       │ order_id (FK)    │
+       │  │ status       │       │ product_id (FK)  │◄──┘
+       │  │ total_amount │       │ quantity         │
+       │  │ idempotency_ │       │ unit_price       │  ← 주문 당시 단가 보존
+       │  │ key (UNIQUE) │       │ subtotal         │
+       │  │ created_at   │       │ created_at       │
+       │  │ updated_at   │       └──────────────────┘
+       │  └──────────────┘
+       └─────────────────────────────────┘
 
-🔄 예정 (2단계~)
-┌─────────────┐       ┌──────────────┐       ┌──────────────┐
-│   users     │       │   orders     │       │ order_items  │
-├─────────────┤       ├──────────────┤       ├──────────────┤
-│ id (PK)     │◄──────│ user_id      │◄──────│ order_id     │
-│ username    │       │ order_number │       │ product_id   │
-│ password    │       │ status       │       │ quantity     │
-│ email       │       │ total_amount │       │ unit_price   │
-│ role        │       │ idempotency  │       │ subtotal     │
-│ created_at  │       │ created_at   │       └──────────────┘
-└─────────────┘       │ updated_at   │
-                      └──────────────┘
-                             │
-                      ┌──────▼──────────┐
+🔄 예정 (3단계~)
+                      ┌─────────────────┐
                       │    payments     │
                       ├─────────────────┤
                       │ id (PK)         │
@@ -730,6 +696,18 @@ CREATE INDEX idx_payment_order ON payments(order_id);
                       │ paid_at         │
                       │ created_at      │
                       └─────────────────┘
+
+🔄 예정 (4단계~)
+┌─────────────┐
+│   users     │
+├─────────────┤
+│ id (PK)     │
+│ username    │
+│ password    │
+│ email       │
+│ role        │
+│ created_at  │
+└─────────────┘
 ```
 
 ### Flyway 마이그레이션 파일
@@ -770,9 +748,34 @@ CREATE TABLE inventory
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 ```
 
-**V3__create_order_tables.sql** 🔄 (2단계 예정)
+**V3__create_order_tables.sql** ✅
 ```sql
--- users, orders, order_items 테이블
+CREATE TABLE orders
+(
+    id              BIGINT         NOT NULL AUTO_INCREMENT,
+    user_id         BIGINT         NOT NULL,
+    status          VARCHAR(20)    NOT NULL DEFAULT 'PENDING',
+    total_amount    DECIMAL(12, 2) NOT NULL,
+    idempotency_key VARCHAR(100)   NOT NULL,
+    created_at      DATETIME(6)    NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at      DATETIME(6)    NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_orders_idempotency_key (idempotency_key)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+CREATE TABLE order_items
+(
+    id         BIGINT         NOT NULL AUTO_INCREMENT,
+    order_id   BIGINT         NOT NULL,
+    product_id BIGINT         NOT NULL,
+    quantity   INT            NOT NULL,
+    unit_price DECIMAL(12, 2) NOT NULL,
+    subtotal   DECIMAL(12, 2) NOT NULL,
+    created_at DATETIME(6)    NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    CONSTRAINT fk_order_items_order   FOREIGN KEY (order_id)   REFERENCES orders (id),
+    CONSTRAINT fk_order_items_product FOREIGN KEY (product_id) REFERENCES products (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 ```
 
 **V4__create_payment_tables.sql** 🔄 (3단계 예정)
@@ -812,15 +815,16 @@ CREATE TABLE inventory
 
 > `reserve` / `releaseReservation` / `confirmAllocation` 은 Order·Payment 연동 시 내부 호출 예정.
 
-### 주문 관리 (Orders) 🔄 예정 (2단계)
+### 주문 관리 (Orders) ✅
 
-| Method | Endpoint | Description | Auth Required | Role |
-|--------|----------|-------------|---------------|------|
-| POST | `/api/orders` | 주문 생성 | Yes | USER |
-| GET | `/api/orders/{id}` | 주문 조회 | Yes | USER |
-| GET | `/api/orders` | 주문 목록 조회 | Yes | USER |
-| POST | `/api/orders/{id}/cancel` | 주문 취소 | Yes | USER |
-| GET | `/api/admin/orders` | 전체 주문 조회 | Yes | ADMIN |
+| Method | Endpoint | Description | 응답 |
+|--------|----------|-------------|------|
+| POST | `/api/orders` | 주문 생성 (재고 예약, 멱등성 지원) | 201 |
+| GET | `/api/orders/{id}` | 주문 단건 조회 (items 포함) | 200 |
+| GET | `/api/orders` | 주문 목록 조회 (페이징) | 200 |
+| POST | `/api/orders/{id}/cancel` | 주문 취소 (재고 예약 해제) | 200 |
+
+> `confirm`은 Payment 도메인에서 내부 호출 예정 — 외부 API 미노출.
 
 ### 결제 (Payments) 🔄 예정 (3단계)
 
@@ -962,20 +966,19 @@ GET /api/inventory/1
 }
 ```
 
-### 6. 주문 생성 🔄 예정
+### 6. 주문 생성 ✅
 ```http
 POST /api/orders
-Authorization: Bearer {token}
 Content-Type: application/json
 
 {
-  "idempotencyKey": "unique-key-12345",
+  "userId": 1,
+  "idempotencyKey": "550e8400-e29b-41d4-a716-446655440000",
   "items": [
     {
       "productId": 1,
-      "warehouseId": 1,
       "quantity": 2,
-      "unitPrice": 1200000
+      "unitPrice": 1200000.00
     }
   ]
 }
@@ -986,20 +989,45 @@ Content-Type: application/json
 {
   "success": true,
   "data": {
-    "orderId": 1,
-    "orderNumber": "ORD20260131120000ABC123",
+    "id": 1,
+    "userId": 1,
     "status": "PENDING",
-    "totalAmount": 2400000,
+    "totalAmount": 2400000.00,
+    "idempotencyKey": "550e8400-e29b-41d4-a716-446655440000",
     "items": [
       {
+        "id": 1,
         "productId": 1,
         "productName": "스마트폰 Galaxy S24",
         "quantity": 2,
-        "unitPrice": 1200000,
-        "subtotal": 2400000
+        "unitPrice": 1200000.00,
+        "subtotal": 2400000.00
       }
     ],
-    "createdAt": "2026-01-31T12:00:00"
+    "createdAt": "2026-03-05T10:30:00",
+    "updatedAt": "2026-03-05T10:30:00"
+  }
+}
+```
+
+### 6-1. 주문 취소 ✅
+```http
+POST /api/orders/1/cancel
+```
+
+**Response (200 OK)**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "userId": 1,
+    "status": "CANCELLED",
+    "totalAmount": 2400000.00,
+    "idempotencyKey": "550e8400-e29b-41d4-a716-446655440000",
+    "items": [...],
+    "createdAt": "2026-03-05T10:30:00",
+    "updatedAt": "2026-03-05T10:35:00"
   }
 }
 ```
@@ -1090,7 +1118,7 @@ docker run -d --name stock-mysql \
 java -jar build/libs/stock-management-api-0.0.1-SNAPSHOT.jar
 ```
 
-Flyway가 기동 시 V1, V2 마이그레이션을 자동 실행합니다.
+Flyway가 기동 시 V1, V2, V3 마이그레이션을 자동 실행합니다.
 
 ### Docker Compose로 전체 스택 실행 🔄 예정 (5단계)
 
