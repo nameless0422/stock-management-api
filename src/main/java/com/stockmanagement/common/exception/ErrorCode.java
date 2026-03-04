@@ -21,6 +21,10 @@ public enum ErrorCode {
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다."),
     DUPLICATE_SKU(HttpStatus.CONFLICT, "이미 존재하는 SKU입니다."),
 
+    // ===== Inventory =====
+    INVENTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "재고 정보를 찾을 수 없습니다."),
+    INSUFFICIENT_STOCK(HttpStatus.CONFLICT, "재고가 부족합니다."),
+
     // ===== Common =====
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "잘못된 입력값입니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
