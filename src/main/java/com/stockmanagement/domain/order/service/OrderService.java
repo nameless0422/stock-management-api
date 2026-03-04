@@ -1,0 +1,189 @@
+package com.stockmanagement.domain.order.service;
+
+import com.stockmanagement.common.exception.BusinessException;
+import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.inventory.service.InventoryService;
+import com.stockmanagement.domain.order.dto.OrderCreateRequest;
+import com.stockmanagement.domain.order.dto.OrderItemRequest;
+import com.stockmanagement.domain.order.dto.OrderResponse;
+import com.stockmanagement.domain.order.entity.Order;
+import com.stockmanagement.domain.order.entity.OrderItem;
+import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.repository.ProductRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 주문 비즈니스 로직 서비스.
+ *
+ * <p>트랜잭션 전략:
+ * <ul>
+ *   <li>클래스 레벨: {@code @Transactional(readOnly = true)} — 조회 기본값
+ *   <li>쓰기 메서드: {@code @Transactional} 로 개별 오버라이드
+ * </ul>
+ *
+ * <p>재고 연동:
+ * <ul>
+ *   <li>주문 생성: 각 항목에 대해 {@link InventoryService#reserve(Long, int)} 호출
+ *   <li>주문 취소: 각 항목에 대해 {@link InventoryService#releaseReservation(Long, int)} 호출
+ *   <li>결제 완료: {@link #confirm(Long)} — Payment 도메인에서 호출
+ * </ul>
+ * 모두 하나의 트랜잭션 내에서 처리되므로, 재고 부족 예외 시 주문과 모든 예약이 함께 롤백된다.
+ */
+@Service
+@Transactional(readOnly = true)
+@RequiredArgsConstructor
+public class OrderService {
+
+    private final OrderRepository orderRepository;
+    private final ProductRepository productRepository;
+    private final InventoryService inventoryService;
+
+    /**
+     * 주문을 생성한다.
+     *
+     * <p>처리 흐름:
+     * <ol>
+     *   <li>멱등성 키 확인 — 중복 요청이면 기존 주문 반환
+     *   <li>각 항목의 상품 존재 및 단가 검증, OrderItem 목록과 totalAmount 계산
+     *   <li>Order 생성 및 저장 (cascade로 OrderItems 함께 저장)
+     *   <li>각 항목에 대해 재고 예약 ({@code inventoryService.reserve})
+     * </ol>
+     *
+     * <p>재고 부족 시 {@link com.stockmanagement.common.exception.InsufficientStockException}이 발생하며
+     * 전체 트랜잭션이 롤백된다 (모든 재고 예약 취소, Order INSERT 취소).
+     *
+     * @param request 주문 생성 요청
+     * @return 생성된 주문 응답
+     */
+    @Transactional
+    public OrderResponse create(OrderCreateRequest request) {
+        // 1. 멱등성 키 중복 확인 — 기존 주문 반환 (새 주문 생성 없음)
+        Optional<Order> existing = orderRepository.findByIdempotencyKey(request.getIdempotencyKey());
+        if (existing.isPresent()) {
+            return OrderResponse.from(existing.get());
+        }
+
+        // 2. 각 항목 검증 및 OrderItem 목록 구성
+        List<OrderItem> items = new ArrayList<>();
+        BigDecimal totalAmount = BigDecimal.ZERO;
+
+        for (OrderItemRequest itemRequest : request.getItems()) {
+            Product product = productRepository.findById(itemRequest.getProductId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+
+            // 단가 검증 — 요청값이 현재 상품 가격과 일치해야 한다
+            if (product.getPrice().compareTo(itemRequest.getUnitPrice()) != 0) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT,
+                        String.format("상품 '%s'의 단가가 일치하지 않습니다. (요청: %s, 현재: %s)",
+                                product.getName(), itemRequest.getUnitPrice(), product.getPrice()));
+            }
+
+            OrderItem item = OrderItem.builder()
+                    .product(product)
+                    .quantity(itemRequest.getQuantity())
+                    .unitPrice(itemRequest.getUnitPrice())
+                    .build();
+
+            items.add(item);
+            totalAmount = totalAmount.add(item.getSubtotal());
+        }
+
+        // 3. Order 생성 (확정된 totalAmount 사용)
+        Order order = Order.builder()
+                .userId(request.getUserId())
+                .totalAmount(totalAmount)
+                .idempotencyKey(request.getIdempotencyKey())
+                .build();
+
+        for (OrderItem item : items) {
+            order.addItem(item);
+        }
+
+        // 4. Order 저장 (cascade로 OrderItems도 함께 저장)
+        Order savedOrder = orderRepository.save(order);
+
+        // 5. 재고 예약 — 예외 발생 시 전체 트랜잭션 롤백
+        for (OrderItem item : savedOrder.getItems()) {
+            inventoryService.reserve(item.getProduct().getId(), item.getQuantity());
+        }
+
+        return OrderResponse.from(savedOrder);
+    }
+
+    /**
+     * 주문 단건을 조회한다.
+     * 항목(items)과 상품 정보를 fetch join으로 함께 로딩한다.
+     */
+    public OrderResponse getById(Long id) {
+        Order order = orderRepository.findByIdWithItems(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        return OrderResponse.from(order);
+    }
+
+    /**
+     * 주문 목록을 페이징 조회한다.
+     * 목록에서는 items를 로딩하지 않는다 (불필요한 쿼리 방지).
+     */
+    public Page<OrderResponse> getList(Pageable pageable) {
+        return orderRepository.findAll(pageable).map(OrderResponse::from);
+    }
+
+    /**
+     * 주문을 취소한다.
+     *
+     * <p>처리 흐름:
+     * <ol>
+     *   <li>주문 조회 (항목 포함 fetch join)
+     *   <li>{@link Order#cancel()} — PENDING 상태 검증 + CANCELLED 전환
+     *   <li>각 항목에 대해 재고 예약 해제
+     * </ol>
+     *
+     * @param id 취소할 주문 ID
+     * @return 취소된 주문 응답
+     * @throws BusinessException PENDING이 아닌 주문에 대해 취소 시도 시
+     */
+    @Transactional
+    public OrderResponse cancel(Long id) {
+        Order order = orderRepository.findByIdWithItems(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        // 상태 검증 + CANCELLED 전환 (PENDING이 아니면 INVALID_ORDER_STATUS 예외)
+        order.cancel();
+
+        // 재고 예약 해제
+        for (OrderItem item : order.getItems()) {
+            inventoryService.releaseReservation(item.getProduct().getId(), item.getQuantity());
+        }
+
+        return OrderResponse.from(order);
+    }
+
+    /**
+     * 결제 완료 시 주문을 확정한다 — Payment 도메인에서 호출한다.
+     *
+     * <p>CONFIRMED 전환 + 각 항목의 재고 예약을 allocated로 이전한다.
+     *
+     * @param id 확정할 주문 ID
+     */
+    @Transactional
+    public void confirm(Long id) {
+        Order order = orderRepository.findByIdWithItems(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        order.confirm();
+
+        for (OrderItem item : order.getItems()) {
+            inventoryService.confirmAllocation(item.getProduct().getId(), item.getQuantity());
+        }
+    }
+}
