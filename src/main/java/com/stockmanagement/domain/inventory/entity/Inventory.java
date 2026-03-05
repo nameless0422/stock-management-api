@@ -144,4 +144,15 @@ public class Inventory {
         this.reserved = Math.max(0, this.reserved - quantity);
         this.allocated += quantity;
     }
+
+    /**
+     * Releases previously allocated stock after payment cancellation / refund.
+     * Decreases {@code allocated} by the given quantity.
+     * Called when a CONFIRMED order is refunded (payment was DONE → CANCELLED).
+     *
+     * @param quantity number of units to release from allocation
+     */
+    public void releaseAllocation(int quantity) {
+        this.allocated = Math.max(0, this.allocated - quantity);
+    }
 }

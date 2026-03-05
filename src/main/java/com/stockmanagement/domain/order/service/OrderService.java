@@ -169,11 +169,12 @@ public class OrderService {
     }
 
     /**
-     * 결제 완료 시 주문을 확정한다 — Payment 도메인에서 호출한다.
+     * Confirms the order after successful payment – called by the Payment domain.
      *
-     * <p>CONFIRMED 전환 + 각 항목의 재고 예약을 allocated로 이전한다.
+     * <p>Transitions PENDING → CONFIRMED and moves each item's inventory
+     * from {@code reserved} to {@code allocated}.
      *
-     * @param id 확정할 주문 ID
+     * @param id order ID to confirm
      */
     @Transactional
     public void confirm(Long id) {
@@ -184,6 +185,29 @@ public class OrderService {
 
         for (OrderItem item : order.getItems()) {
             inventoryService.confirmAllocation(item.getProduct().getId(), item.getQuantity());
+        }
+    }
+
+    /**
+     * Refunds a confirmed order after payment cancellation – called by the Payment domain.
+     *
+     * <p>Different from {@link #cancel(Long)} which handles pre-payment cancellation:
+     * <ul>
+     *   <li>{@code cancel}  – PENDING → CANCELLED, releases {@code reserved} inventory
+     *   <li>{@code refund}  – CONFIRMED → CANCELLED, releases {@code allocated} inventory
+     * </ul>
+     *
+     * @param id order ID to refund
+     */
+    @Transactional
+    public void refund(Long id) {
+        Order order = orderRepository.findByIdWithItems(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        order.refund();
+
+        for (OrderItem item : order.getItems()) {
+            inventoryService.releaseAllocation(item.getProduct().getId(), item.getQuantity());
         }
     }
 }
