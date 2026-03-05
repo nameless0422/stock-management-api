@@ -101,17 +101,33 @@ public class Order {
     }
 
     /**
-     * 결제 완료 처리 — Payment 도메인에서 호출한다.
+     * Confirms the order after successful payment.
+     * Called by the Payment domain upon payment approval.
      *
-     * <p>PENDING 상태인 경우에만 확정 가능하다.
+     * <p>Only a PENDING order can be confirmed.
      *
-     * @throws BusinessException 확정 불가 상태일 경우
+     * @throws BusinessException if the current status is not PENDING
      */
     public void confirm() {
         if (this.status != OrderStatus.PENDING) {
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
         }
         this.status = OrderStatus.CONFIRMED;
+    }
+
+    /**
+     * Transitions a CONFIRMED order back to CANCELLED after payment refund.
+     * Called by the Payment domain when a DONE payment is cancelled.
+     *
+     * <p>Different from {@link #cancel()} which handles pre-payment cancellation (PENDING → CANCELLED).
+     *
+     * @throws BusinessException if the current status is not CONFIRMED
+     */
+    public void refund() {
+        if (this.status != OrderStatus.CONFIRMED) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+        this.status = OrderStatus.CANCELLED;
     }
 
     /**

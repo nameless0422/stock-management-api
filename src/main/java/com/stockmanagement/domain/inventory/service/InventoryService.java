@@ -95,6 +95,17 @@ public class InventoryService {
         inventory.confirmAllocation(quantity);
     }
 
+    /**
+     * Releases allocated stock after payment cancellation / refund.
+     * Called when a CONFIRMED order is refunded (payment DONE → CANCELLED).
+     * Decreases {@code allocated} without touching {@code onHand}.
+     */
+    @Transactional
+    public void releaseAllocation(Long productId, int quantity) {
+        Inventory inventory = findByProductIdWithLock(productId);
+        inventory.releaseAllocation(quantity);
+    }
+
     // ===== private 헬퍼 =====
 
     private Inventory findByProductId(Long productId) {
