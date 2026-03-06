@@ -27,13 +27,14 @@ Spring Boot + MySQL
 - 결제 대기/성공/실패 상태 전이
 - 중복 주문 방지 (idempotency key)
 
-### 3. **결제(Payment)**
-- 결제 요청 → 승인/실패 → 웹훅 처리
-- 재고 확정(할당) 또는 예약 해제
+### 3. **결제(Payment)** ✅
+- TossPayments Core API v1 연동 (준비 → 승인 → 취소/환불)
+- 금액 이중 검증으로 변조 방지
+- 재고 확정(allocated) 또는 할당 해제(releaseAllocation)
 
-### 4. **유저(User)**
-- 회원가입/로그인 (JWT 인증)
-- 주문/결제 이력 조회
+### 4. **유저(User)** ✅
+- 회원가입/로그인 (BCrypt + JWT 인증)
+- 내 정보 조회, 내 주문 목록 조회
 
 ---
 
@@ -51,8 +52,8 @@ Spring Boot + MySQL
 - **Cache/Queue**: Redis (예정)
 
 ### Security & Auth
-- **Security**: Spring Security 6.x (예정)
-- **Auth**: JWT / jjwt 라이브러리 (예정)
+- **Security**: Spring Security 6.x
+- **Auth**: JWT / jjwt 0.12.6
 
 ### Container & DevOps
 - **Container**: Docker, Docker Compose (예정)
@@ -116,25 +117,43 @@ stock-management-api/
 │   │   │           │       ├── OrderItemRequest.java
 │   │   │           │       ├── OrderResponse.java
 │   │   │           │       └── OrderItemResponse.java
-│   │   │           ├── payment/                          # 🔄 예정 (3단계)
+│   │   │           ├── payment/                          # ✅ 구현 완료
 │   │   │           │   ├── entity/
-│   │   │           │   ├── repository/
-│   │   │           │   ├── service/
-│   │   │           │   ├── controller/
-│   │   │           │   └── dto/
-│   │   │           └── user/                             # 🔄 예정 (4단계)
+│   │   │           │   │   ├── Payment.java
+│   │   │           │   │   └── PaymentStatus.java        # PENDING/DONE/CANCELLED/FAILED
+│   │   │           │   ├── repository/PaymentRepository.java
+│   │   │           │   ├── service/PaymentService.java
+│   │   │           │   ├── controller/PaymentController.java
+│   │   │           │   ├── dto/
+│   │   │           │   │   ├── PaymentPrepareRequest/Response.java
+│   │   │           │   │   ├── PaymentConfirmRequest.java
+│   │   │           │   │   ├── PaymentCancelRequest.java
+│   │   │           │   │   └── PaymentResponse.java
+│   │   │           │   └── infrastructure/               # TossPayments 외부 연동
+│   │   │           │       ├── TossPaymentsClient.java
+│   │   │           │       └── dto/                      # Toss API 전용 DTO
+│   │   │           └── user/                             # ✅ 구현 완료
 │   │   │               ├── entity/
-│   │   │               ├── repository/
-│   │   │               ├── service/
+│   │   │               │   ├── User.java
+│   │   │               │   └── UserRole.java             # USER / ADMIN
+│   │   │               ├── repository/UserRepository.java
+│   │   │               ├── service/UserService.java
 │   │   │               ├── controller/
+│   │   │               │   ├── AuthController.java       # /api/auth/**
+│   │   │               │   └── UserController.java       # /api/users/**
 │   │   │               └── dto/
+│   │   │                   ├── SignupRequest.java
+│   │   │                   ├── LoginRequest.java
+│   │   │                   ├── LoginResponse.java
+│   │   │                   └── UserResponse.java
 │   │   └── resources/
 │   │       ├── application.properties
 │   │       └── db/migration/
 │   │           ├── V1__init_schema.sql               # ✅ products 테이블
 │   │           ├── V2__create_inventory_tables.sql   # ✅ inventory 테이블
 │   │           ├── V3__create_order_tables.sql       # ✅ orders, order_items 테이블
-│   │           └── V4__create_payment_tables.sql     # 🔄 예정 (3단계)
+│   │           ├── V4__create_payment_tables.sql     # ✅ payments 테이블
+│   │           └── V5__create_user_tables.sql        # ✅ users 테이블
 │   └── test/
 │       └── java/com/stockmanagement/
 │           └── StockManagementApiApplicationTests.java
@@ -271,204 +290,145 @@ POST   /api/orders/{id}/cancel  주문 취소 (재고 예약 해제)  → 200
 
 ---
 
-### 3단계: 결제 연동 💳
-**목표**: 결제 프로세스 구현 및 재고 상태 전이 관리
+### 3단계: 결제 연동 ✅
+**목표**: TossPayments Core API v1 연동 및 재고 상태 전이 관리
 
 #### 작업 내용
-- [ ] 결제 도메인 구현
-  - `Payment` Entity 설계
-  - PaymentStatus Enum (PENDING, SUCCESS, FAILED, CANCELLED)
-- [ ] 결제 요청 API
-  - 결제 요청 → PG사 연동 (Mock)
-  - 결제 결과 대기 상태로 주문 상태 변경
-- [ ] 웹훅 처리
-  - **결제 성공** → 재고 확정 (`reserved` → `allocated`)
-  - **결제 실패** → 재고 예약 해제 (`reserved` 감소)
-- [ ] 트랜잭션 관리
-  - `@Transactional`로 재고/주문/결제 일관성 보장
-  - 실패 시 롤백 처리
+- [x] 결제 도메인 구현
+  - `Payment` Entity (`tossOrderId` UNIQUE, `paymentKey` null until approved)
+  - `PaymentStatus` Enum (PENDING, DONE, CANCELLED, FAILED, PARTIAL_CANCELLED)
+- [x] 결제 준비 API (`/prepare`)
+  - 금액 사전 검증 (서버의 `Order.totalAmount`와 비교)
+  - PENDING Payment 레코드 생성, `tossOrderId` 반환
+- [x] 결제 승인 API (`/confirm`)
+  - 금액 이중 검증 (클라이언트 변조 방지)
+  - TossPayments `/v1/payments/confirm` 호출
+  - 성공: Payment DONE, Order CONFIRMED, `reserved → allocated`
+  - 실패: Payment FAILED
+- [x] 결제 취소/환불 API (`/{paymentKey}/cancel`)
+  - TossPayments 취소 API 호출 (전액/부분 취소)
+  - Payment CANCELLED, Order CANCELLED, `allocated` 해제
+- [x] 웹훅 수신 (`/webhook`)
+  - `PAYMENT_STATUS_CHANGED` 이벤트 처리
+  - 10초 내 200 응답 (TossPayments 재전송 정책)
+- [x] 멱등성 처리
+  - prepare: 동일 orderId 재요청 시 기존 PENDING Payment 반환
+  - confirm/cancel: 이미 처리된 상태면 기존 결과 반환
+- [x] TossPayments 설정 (`TossPaymentsConfig`)
+  - `RestClient` Bean (Base64 Basic Auth 헤더 사전 주입)
+  - `toss.*` properties (환경 변수 오버라이드 지원)
 
 #### 결제 프로세스 흐름
 
 ```
-[주문 생성] → reserved +10
+[주문 생성] → Inventory: reserved +N
     ↓
-[결제 요청] → Payment(PENDING)
+[POST /api/payments/prepare]
+→ Payment(PENDING) 생성, tossOrderId 반환
     ↓
-[PG사 처리]
+[TossPayments 결제창 (클라이언트)]
+→ paymentKey 발급
     ↓
-    ├─ [성공] → Payment(SUCCESS)
-    │           reserved -10, allocated +10
+[POST /api/payments/confirm]
+    ↓
+    ├─ [성공] → Payment(DONE)
     │           Order(CONFIRMED)
+    │           Inventory: reserved-N, allocated+N
     │
     └─ [실패] → Payment(FAILED)
-                reserved -10
-                Order(PAYMENT_FAILED)
+                Order은 PENDING 유지 (재시도 가능)
+
+[POST /api/payments/{paymentKey}/cancel]
+→ Payment(CANCELLED)
+   Order(CANCELLED)
+   Inventory: allocated-N
 ```
 
-#### 핵심 코드 예시
+#### 취소 시 재고 처리 구분
 
-**PaymentService**
-```java
-@Service
-@Transactional(readOnly = true)
-public class PaymentService {
+| 취소 시점 | 메서드 | Order 전이 | 재고 처리 |
+|---|---|---|---|
+| 결제 전 (`/orders/{id}/cancel`) | `OrderService.cancel()` | PENDING → CANCELLED | `reserved` 감소 |
+| 결제 후 (`/payments/{key}/cancel`) | `OrderService.refund()` | CONFIRMED → CANCELLED | `allocated` 감소 |
 
-    private final PaymentRepository paymentRepository;
-    private final OrderService orderService;
-    private final InventoryService inventoryService;
+#### 주요 파일
+```
+src/main/resources/db/migration/
+└── V4__create_payment_tables.sql      # payments 테이블
 
-    @Transactional
-    public PaymentResponse requestPayment(PaymentRequest request, String username) {
-        Order order = orderService.getOrder(request.getOrderId(), username);
-
-        Payment payment = Payment.builder()
-            .orderId(request.getOrderId())
-            .amount(order.getTotalAmount())
-            .status(PaymentStatus.PENDING)
-            .build();
-
-        return PaymentResponse.from(paymentRepository.save(payment));
-    }
-
-    @Transactional
-    public void processPaymentWebhook(PaymentWebhookRequest webhook) {
-        Payment payment = paymentRepository
-            .findByPgTransactionId(webhook.getPgTransactionId())
-            .orElseThrow();
-
-        if (webhook.isSuccess()) {
-            payment.complete();
-            Order order = orderService.getOrderById(payment.getOrderId());
-            order.confirmPayment();
-
-            // 재고: 예약 → 할당
-            for (OrderItem item : order.getOrderItems()) {
-                inventoryService.allocateStock(
-                    item.getProductId(),
-                    item.getWarehouseId(),
-                    item.getQuantity(),
-                    order.getOrderNumber()
-                );
-            }
-        } else {
-            payment.fail();
-            Order order = orderService.getOrderById(payment.getOrderId());
-
-            // 재고 예약 해제
-            for (OrderItem item : order.getOrderItems()) {
-                inventoryService.releaseReservation(
-                    item.getProductId(),
-                    item.getWarehouseId(),
-                    item.getQuantity(),
-                    order.getOrderNumber()
-                );
-            }
-
-            order.failPayment();
-        }
-    }
-}
+src/main/java/.../
+├── common/config/TossPaymentsConfig.java
+└── domain/payment/
+    ├── entity/Payment.java, PaymentStatus.java
+    ├── repository/PaymentRepository.java
+    ├── service/PaymentService.java
+    ├── controller/PaymentController.java
+    ├── dto/PaymentPrepareRequest/Response, PaymentConfirmRequest,
+    │   PaymentCancelRequest, PaymentResponse
+    └── infrastructure/TossPaymentsClient.java
+        └── dto/TossConfirmRequest/Response, TossCancelRequest, TossWebhookEvent
 ```
 
-#### API 예시
+#### API 엔드포인트
 ```
-POST /api/payments                    # 결제 요청
-POST /api/payments/webhook            # 결제 웹훅 (PG사 → 서버)
-GET  /api/payments/orders/{orderId}   # 결제 조회
+POST /api/payments/prepare              # 결제 준비 (결제창 초기화 전)
+POST /api/payments/confirm              # 결제 승인 (결제창 완료 후)
+POST /api/payments/{paymentKey}/cancel  # 결제 취소/환불
+POST /api/payments/webhook              # TossPayments 웹훅 수신 (public)
+GET  /api/payments/{paymentKey}         # 결제 조회
 ```
 
 ---
 
-### 4단계: 사용자 관리 👤
+### 4단계: 사용자 관리 ✅
 **목표**: JWT 기반 인증/인가 시스템 구현
 
 #### 작업 내용
-- [ ] User 도메인 구현
+- [x] User 도메인 구현
   - `User` Entity (username, password, email, role)
-  - UserRole Enum (USER, ADMIN)
-- [ ] Spring Security + JWT 인증
+  - `UserRole` Enum (USER, ADMIN)
+- [x] Spring Security + JWT 인증
   - `/api/auth/signup`, `/api/auth/login` 엔드포인트
-  - JwtTokenProvider로 토큰 생성/검증
-  - SecurityFilterChain 설정
-- [ ] 사용자별 주문/결제 이력 조회
-  - 현재 로그인 사용자의 주문 목록
-  - 주문 상세 정보 조회
+  - `JwtTokenProvider`: jjwt 0.12.6으로 토큰 생성/검증
+  - `JwtAuthenticationFilter`: `Authorization: Bearer <token>` 헤더 파싱
+  - `SecurityConfig`: Stateless, CSRF 비활성화
+- [x] 사용자별 주문 목록 조회
+  - JWT에서 username 추출 → userId 조회 → 주문 목록 반환
 
-#### 핵심 코드 예시
+#### 인가 규칙
 
-**JwtTokenProvider**
-```java
-@Component
-public class JwtTokenProvider {
+| 엔드포인트 | 허용 |
+|---|---|
+| `POST /api/auth/**` | 모두 허용 (인증 불필요) |
+| `GET /actuator/**` | 모두 허용 |
+| `POST /api/payments/webhook` | 모두 허용 |
+| `POST/PUT/DELETE /api/products/**` | ADMIN 전용 |
+| `POST /api/inventory/**` | ADMIN 전용 |
+| 나머지 전체 | 인증 필요 |
 
-    @Value("${spring.security.jwt.secret}")
-    private String secretKey;
-
-    @Value("${spring.security.jwt.token-validity-in-seconds}")
-    private long tokenValidityInSeconds;
-
-    public String createToken(String username, List<String> roles) {
-        Claims claims = Jwts.claims().setSubject(username);
-        claims.put("roles", roles);
-
-        Date now = new Date();
-        Date validity = new Date(now.getTime() + tokenValidityInSeconds * 1000);
-
-        return Jwts.builder()
-            .setClaims(claims)
-            .setIssuedAt(now)
-            .setExpiration(validity)
-            .signWith(key, SignatureAlgorithm.HS256)
-            .compact();
-    }
-
-    public boolean validateToken(String token) {
-        try {
-            Jwts.parserBuilder()
-                .setSigningKey(key)
-                .build()
-                .parseClaimsJws(token);
-            return true;
-        } catch (JwtException | IllegalArgumentException e) {
-            return false;
-        }
-    }
-}
+#### 주요 파일
+```
+src/main/java/.../
+├── security/
+│   ├── JwtTokenProvider.java         # 토큰 생성/검증 (jjwt 0.12.6)
+│   └── JwtAuthenticationFilter.java  # Bearer 토큰 추출 및 SecurityContext 설정
+├── common/config/
+│   └── SecurityConfig.java           # FilterChain, PasswordEncoder Bean
+└── domain/user/
+    ├── entity/User.java, UserRole.java
+    ├── repository/UserRepository.java
+    ├── service/UserService.java       # signup, login, getMe, getMyOrders
+    ├── controller/AuthController.java # /api/auth/**
+    ├── controller/UserController.java # /api/users/**
+    └── dto/SignupRequest, LoginRequest, LoginResponse, UserResponse
 ```
 
-**SecurityConfig**
-```java
-@Configuration
-@EnableWebSecurity
-public class SecurityConfig {
-
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-            .csrf(csrf -> csrf.disable())
-            .sessionManagement(session ->
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            )
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/actuator/**").permitAll()
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                .anyRequest().authenticated()
-            )
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-
-        return http.build();
-    }
-}
+#### API 엔드포인트
 ```
-
-#### API 예시
-```
-POST /api/auth/signup                 # 회원가입
-POST /api/auth/login                  # 로그인 (JWT 발급)
-GET  /api/users/me                    # 내 정보 조회
-GET  /api/users/me/orders             # 내 주문 목록
+POST /api/auth/signup       # 회원가입 → 201
+POST /api/auth/login        # 로그인 (JWT 발급) → 200
+GET  /api/users/me          # 내 정보 조회 → 200
+GET  /api/users/me/orders   # 내 주문 목록 (페이징) → 200
 ```
 
 ---
@@ -683,31 +643,40 @@ CREATE INDEX idx_payment_order ON payments(order_id);
        │  └──────────────┘
        └─────────────────────────────────┘
 
-🔄 예정 (3단계~)
-                      ┌─────────────────┐
-                      │    payments     │
-                      ├─────────────────┤
-                      │ id (PK)         │
-                      │ order_id (FK)   │
-                      │ amount          │
-                      │ payment_method  │
-                      │ status          │
-                      │ pg_transaction  │
-                      │ paid_at         │
-                      │ created_at      │
-                      └─────────────────┘
+✅ 구현 완료 (3단계)
+                      ┌──────────────────────┐
+                      │       payments       │
+                      ├──────────────────────┤
+                      │ id (PK)              │
+                      │ order_id (FK)        │
+                      │ payment_key          │  ← Toss 부여 (승인 후 확정)
+                      │ toss_order_id (UNIQ) │  ← 우리가 Toss에 전달한 orderId
+                      │ amount               │
+                      │ status               │  ← PENDING/DONE/CANCELLED/FAILED
+                      │ method               │  ← 카드, 가상계좌 등
+                      │ requested_at         │
+                      │ approved_at          │
+                      │ cancel_reason        │
+                      │ failure_code         │
+                      │ failure_message      │
+                      │ created_at           │
+                      │ updated_at           │
+                      └──────────────────────┘
 
-🔄 예정 (4단계~)
+✅ 구현 완료 (4단계)
 ┌─────────────┐
 │   users     │
 ├─────────────┤
 │ id (PK)     │
-│ username    │
-│ password    │
-│ email       │
-│ role        │
+│ username    │  ← UNIQUE
+│ password    │  ← BCrypt 암호화
+│ email       │  ← UNIQUE
+│ role        │  ← USER / ADMIN
 │ created_at  │
+│ updated_at  │
 └─────────────┘
+       ↑
+       │ orders.user_id FK (V5 마이그레이션에서 추가)
 ```
 
 ### Flyway 마이그레이션 파일
@@ -778,16 +747,53 @@ CREATE TABLE order_items
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 ```
 
-**V4__create_payment_tables.sql** 🔄 (3단계 예정)
+**V5__create_user_tables.sql** ✅
 ```sql
--- payments 테이블
+CREATE TABLE users (
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    username   VARCHAR(50)  NOT NULL,
+    password   VARCHAR(255) NOT NULL,
+    email      VARCHAR(100) NOT NULL,
+    role       VARCHAR(20)  NOT NULL DEFAULT 'USER',
+    created_at DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_users_username (username),
+    UNIQUE KEY uk_users_email (email)
+);
+
+ALTER TABLE orders ADD CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users (id);
+```
+
+**V4__create_payment_tables.sql** ✅
+```sql
+CREATE TABLE payments
+(
+    id              BIGINT         NOT NULL AUTO_INCREMENT,
+    order_id        BIGINT         NOT NULL,
+    payment_key     VARCHAR(200),
+    toss_order_id   VARCHAR(64)    NOT NULL UNIQUE,
+    amount          DECIMAL(12, 2) NOT NULL,
+    status          VARCHAR(30)    NOT NULL DEFAULT 'PENDING',
+    method          VARCHAR(50),
+    requested_at    DATETIME(6),
+    approved_at     DATETIME(6),
+    cancel_reason   VARCHAR(200),
+    failure_code    VARCHAR(50),
+    failure_message VARCHAR(200),
+    created_at      DATETIME(6)    NOT NULL,
+    updated_at      DATETIME(6)    NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_payments_toss_order_id (toss_order_id),
+    CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES orders (id)
+);
 ```
 
 ---
 
 ## 📊 API 엔드포인트
 
-### 인증 (Authentication) 🔄 예정 (4단계)
+### 인증 (Authentication) ✅
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
@@ -826,19 +832,21 @@ CREATE TABLE order_items
 
 > `confirm`은 Payment 도메인에서 내부 호출 예정 — 외부 API 미노출.
 
-### 결제 (Payments) 🔄 예정 (3단계)
+### 결제 (Payments) ✅
 
-| Method | Endpoint | Description | Auth Required | Role |
-|--------|----------|-------------|---------------|------|
-| POST | `/api/payments` | 결제 요청 | Yes | USER |
-| POST | `/api/payments/webhook` | 결제 웹훅 (PG사) | No | - |
-| GET | `/api/payments/orders/{orderId}` | 결제 조회 | Yes | USER |
+| Method | Endpoint | Description | 응답 |
+|--------|----------|-------------|------|
+| POST | `/api/payments/prepare` | 결제 준비 (결제창 초기화 전 사전 검증) | 200 |
+| POST | `/api/payments/confirm` | 결제 승인 (결제창 완료 후 서버 확정) | 200 |
+| POST | `/api/payments/{paymentKey}/cancel` | 결제 취소/환불 (전액·부분) | 200 |
+| POST | `/api/payments/webhook` | TossPayments 웹훅 수신 (인증 불필요) | 200 |
+| GET | `/api/payments/{paymentKey}` | 결제 상세 조회 | 200 |
 
 ---
 
 ## 🔧 API 요청/응답 예시
 
-### 1. 회원가입 🔄 예정
+### 1. 회원가입 ✅
 ```http
 POST /api/auth/signup
 Content-Type: application/json
@@ -863,7 +871,7 @@ Content-Type: application/json
 }
 ```
 
-### 2. 로그인 🔄 예정
+### 2. 로그인 ✅
 ```http
 POST /api/auth/login
 Content-Type: application/json
@@ -1032,44 +1040,14 @@ POST /api/orders/1/cancel
 }
 ```
 
-### 7. 결제 요청 🔄 예정
+### 7. 결제 준비 ✅
 ```http
-POST /api/payments
-Authorization: Bearer {token}
+POST /api/payments/prepare
 Content-Type: application/json
 
 {
   "orderId": 1,
-  "paymentMethod": "CREDIT_CARD"
-}
-```
-
-**Response (201 Created)**
-```json
-{
-  "success": true,
-  "data": {
-    "paymentId": 1,
-    "orderId": 1,
-    "amount": 2400000,
-    "status": "PENDING",
-    "pgTransactionId": "PG123456789",
-    "createdAt": "2026-01-31T12:05:00"
-  }
-}
-```
-
-### 8. 결제 웹훅 (PG사 → 서버) 🔄 예정
-```http
-POST /api/payments/webhook
-Content-Type: application/json
-X-PG-Signature: {signature}
-
-{
-  "pgTransactionId": "PG123456789",
-  "status": "SUCCESS",
-  "paidAmount": 2400000,
-  "paidAt": "2026-01-31T12:05:30"
+  "amount": 2400000
 }
 ```
 
@@ -1077,7 +1055,43 @@ X-PG-Signature: {signature}
 ```json
 {
   "success": true,
-  "message": "결제 처리 완료"
+  "data": {
+    "tossOrderId": "order-1-a1b2c3d4",
+    "amount": 2400000.00,
+    "orderName": "스마트폰 Galaxy S24 외 1건"
+  }
+}
+```
+
+> 클라이언트는 `tossOrderId`와 `amount`를 TossPayments 결제창에 전달합니다.
+
+### 8. 결제 승인 ✅
+```http
+POST /api/payments/confirm
+Content-Type: application/json
+
+{
+  "paymentKey": "tviva20240101abc...",
+  "tossOrderId": "order-1-a1b2c3d4",
+  "amount": 2400000
+}
+```
+
+**Response (200 OK)**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "orderId": 1,
+    "paymentKey": "tviva20240101abc...",
+    "tossOrderId": "order-1-a1b2c3d4",
+    "amount": 2400000.00,
+    "status": "DONE",
+    "method": "카드",
+    "requestedAt": "2026-03-06T10:00:00",
+    "approvedAt": "2026-03-06T10:00:01"
+  }
 }
 ```
 
@@ -1118,7 +1132,19 @@ docker run -d --name stock-mysql \
 java -jar build/libs/stock-management-api-0.0.1-SNAPSHOT.jar
 ```
 
-Flyway가 기동 시 V1, V2, V3 마이그레이션을 자동 실행합니다.
+Flyway가 기동 시 V1~V5 마이그레이션을 자동 실행합니다.
+
+#### 3. JWT Secret 설정 (선택, 기본값은 개발용 placeholder)
+```bash
+export JWT_SECRET=your-secret-key-at-least-32-characters-long
+```
+
+#### 4. TossPayments 키 설정 (결제 기능 사용 시)
+```bash
+export TOSS_SECRET_KEY=test_sk_your_actual_key
+export TOSS_CLIENT_KEY=test_ck_your_actual_key
+```
+테스트 키는 [TossPayments 개발자센터](https://developers.tosspayments.com)에서 발급받습니다.
 
 ### Docker Compose로 전체 스택 실행 🔄 예정 (5단계)
 
@@ -1158,23 +1184,16 @@ open build/reports/jacoco/test/html/index.html
 
 ---
 
-## 🔒 보안 가이드 🔄 예정 (4단계)
+## 🔒 보안 가이드 ✅
 
 ### 1. 비밀번호 암호화
-```java
-@Bean
-public PasswordEncoder passwordEncoder() {
-    return new BCryptPasswordEncoder(12);
-}
-```
+BCryptPasswordEncoder 사용. 회원가입 시 자동 암호화, 로그인 시 matches()로 검증.
 
 ### 2. JWT Secret 설정
-```yaml
-spring:
-  security:
-    jwt:
-      secret: ${JWT_SECRET}  # 환경 변수로 관리
+```bash
+export JWT_SECRET=your-secret-key-at-least-32-characters-long
 ```
+`application.properties`의 기본값(`stock-management-secret-key-for-development-only`)은 개발용 전용이며, 운영 환경에서는 반드시 환경 변수로 교체해야 한다.
 
 ### 3. HTTPS 설정 (프로덕션)
 ```yaml
