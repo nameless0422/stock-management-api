@@ -5,72 +5,84 @@ import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.redisson.api.RLock;
-import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.MySQLContainer;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Statement;
-import java.util.concurrent.TimeUnit;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * 통합 테스트 기반 클래스.
  *
- * <p>H2 in-memory DB(MySQL 호환 모드)를 사용하며, @AfterEach에서
- * TRUNCATE TABLE로 테스트 간 데이터 격리를 보장한다.
+ * <p>Singleton Container 패턴으로 MySQL·Redis 컨테이너를 JVM 당 1회만 시작하고
+ * 모든 통합 테스트 클래스가 공유한다. {@code @DynamicPropertySource}가 컨테이너의
+ * 동적 포트를 Spring 환경에 주입해 실제 MySQL·Redis 연결을 사용한다.
+ *
+ * <p>분산 락(Redisson)·캐시(Redis)가 실제 컨테이너에 연결되므로
+ * H2 Mock 기반보다 운영 환경에 가까운 통합 테스트를 제공한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("integration")
 abstract class AbstractIntegrationTest {
 
-    // RedisConfig의 실제 RedissonClient 대신 Mock으로 대체 — 통합 테스트에서 Redis 불필요
-    @MockBean
-    protected RedissonClient redissonClient;
+    // ===== Singleton Testcontainers =====
 
-    @Autowired
-    protected MockMvc mockMvc;
+    @SuppressWarnings("resource")
+    static final MySQLContainer<?> MYSQL =
+            new MySQLContainer<>("mysql:8").withDatabaseName("stock_management");
 
-    @Autowired
-    protected ObjectMapper objectMapper;
+    @SuppressWarnings({"resource", "rawtypes"})
+    static final GenericContainer REDIS =
+            new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
 
-    @Autowired
-    protected UserRepository userRepository;
-
-    @Autowired
-    protected PasswordEncoder passwordEncoder;
-
-    @Autowired
-    private DataSource dataSource;
+    static {
+        MYSQL.start();
+        REDIS.start();
+    }
 
     /**
-     * DistributedLockAspect가 RedissonClient를 사용하므로 Mock 동작을 설정한다.
-     * @MockBean은 테스트 메서드마다 초기화되므로 @BeforeEach에서 매번 stub을 설정한다.
+     * 컨테이너의 동적 포트를 Spring 환경 프로퍼티로 주입한다.
+     * application-integration.properties의 H2/mock 설정을 오버라이드한다.
      */
-    @BeforeEach
-    void setUpRedissonMock() throws InterruptedException {
-        RLock mockLock = mock(RLock.class);
-        lenient().when(redissonClient.getLock(anyString())).thenReturn(mockLock);
-        lenient().when(mockLock.tryLock(anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(true);
-        lenient().when(mockLock.isHeldByCurrentThread()).thenReturn(true);
+    @DynamicPropertySource
+    static void containerProperties(DynamicPropertyRegistry registry) {
+        // MySQL
+        registry.add("spring.datasource.url",                MYSQL::getJdbcUrl);
+        registry.add("spring.datasource.username",           MYSQL::getUsername);
+        registry.add("spring.datasource.password",           MYSQL::getPassword);
+        registry.add("spring.datasource.driver-class-name", () -> "com.mysql.cj.jdbc.Driver");
+        registry.add("spring.jpa.properties.hibernate.dialect",
+                     () -> "org.hibernate.dialect.MySQLDialect");
+        registry.add("spring.jpa.hibernate.ddl-auto",        () -> "validate");
+        registry.add("spring.flyway.enabled",                () -> "true");
+
+        // Redis
+        registry.add("spring.data.redis.host", REDIS::getHost);
+        registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
+        registry.add("spring.cache.type",      () -> "redis");
     }
+
+    // ===== Spring Beans =====
+
+    @Autowired protected MockMvc mockMvc;
+    @Autowired protected ObjectMapper objectMapper;
+    @Autowired protected UserRepository userRepository;
+    @Autowired protected PasswordEncoder passwordEncoder;
+    @Autowired private DataSource dataSource;
 
     /** 각 테스트 후 모든 테이블을 FK 순서대로 DELETE하여 테스트 간 격리를 보장한다. */
     @AfterEach
@@ -87,6 +99,8 @@ abstract class AbstractIntegrationTest {
             stmt.execute("DELETE FROM users");
         }
     }
+
+    // ===== 공통 헬퍼 =====
 
     /** 회원가입 후 JWT 토큰을 반환한다. */
     protected String signupAndLogin(String username, String password, String email) throws Exception {
