@@ -4,6 +4,7 @@ import com.stockmanagement.common.config.SecurityConfig;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.inventory.dto.InventoryResponse;
+import com.stockmanagement.domain.inventory.dto.InventoryTransactionResponse;
 import com.stockmanagement.domain.inventory.service.InventoryService;
 import com.stockmanagement.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +17,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -72,6 +75,43 @@ class InventoryControllerTest {
                     .willThrow(new BusinessException(ErrorCode.INVENTORY_NOT_FOUND));
 
             mockMvc.perform(get("/api/inventory/999"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.success").value(false));
+        }
+    }
+
+    // ===== GET /api/inventory/{productId}/transactions =====
+
+    @Nested
+    @DisplayName("GET /api/inventory/{productId}/transactions")
+    class GetTransactions {
+
+        @Test
+        @WithMockUser
+        @DisplayName("인증된 사용자 — 이력 조회 → 200")
+        void returnsTransactions() throws Exception {
+            given(inventoryService.getTransactions(1L)).willReturn(List.of(mock(InventoryTransactionResponse.class)));
+
+            mockMvc.perform(get("/api/inventory/1/transactions"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @DisplayName("인증 없음 → 403")
+        void unauthorizedWithoutAuth() throws Exception {
+            mockMvc.perform(get("/api/inventory/1/transactions"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser
+        @DisplayName("재고가 없는 상품 이력 조회 → 404")
+        void returnsNotFoundWhenInventoryMissing() throws Exception {
+            given(inventoryService.getTransactions(999L))
+                    .willThrow(new BusinessException(ErrorCode.INVENTORY_NOT_FOUND));
+
+            mockMvc.perform(get("/api/inventory/999/transactions"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
         }

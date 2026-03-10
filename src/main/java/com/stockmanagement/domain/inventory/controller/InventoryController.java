@@ -3,10 +3,13 @@ package com.stockmanagement.domain.inventory.controller;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.inventory.dto.InventoryReceiveRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryResponse;
+import com.stockmanagement.domain.inventory.dto.InventoryTransactionResponse;
 import com.stockmanagement.domain.inventory.service.InventoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * 재고 REST API 컨트롤러.
@@ -14,8 +17,9 @@ import org.springframework.web.bind.annotation.*;
  * <p>Base URL: {@code /api/inventory}
  *
  * <pre>
- * GET  /api/inventory/{productId}          재고 현황 조회 → 200 OK
- * POST /api/inventory/{productId}/receive  입고 처리     → 200 OK
+ * GET  /api/inventory/{productId}                재고 현황 조회  → 200 OK
+ * GET  /api/inventory/{productId}/transactions   재고 이력 조회  → 200 OK
+ * POST /api/inventory/{productId}/receive        입고 처리       → 200 OK
  * </pre>
  *
  * <p>reserve / releaseReservation / confirmAllocation 은 Order·Payment 도메인에서
@@ -32,6 +36,12 @@ public class InventoryController {
     @GetMapping("/{productId}")
     public ApiResponse<InventoryResponse> getByProductId(@PathVariable Long productId) {
         return ApiResponse.ok(inventoryService.getByProductId(productId));
+    }
+
+    /** 상품의 재고 변동 이력 조회 (최신순) */
+    @GetMapping("/{productId}/transactions")
+    public ApiResponse<List<InventoryTransactionResponse>> getTransactions(@PathVariable Long productId) {
+        return ApiResponse.ok(inventoryService.getTransactions(productId));
     }
 
     /**
