@@ -7,6 +7,8 @@ import com.stockmanagement.domain.user.dto.SignupRequest;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.service.UserService;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
  *
  * 두 엔드포인트 모두 인증 불필요 (SecurityConfig에서 permitAll).
  */
+@Tag(name = "인증", description = "회원가입 · 로그인 (JWT 발급) — 인증 불필요")
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -28,12 +31,14 @@ public class AuthController {
 
     private final UserService userService;
 
+    @Operation(summary = "회원가입", description = "username 중복 시 409.")
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<UserResponse> signup(@RequestBody @Valid SignupRequest request) {
         return ApiResponse.ok(userService.signup(request));
     }
 
+    @Operation(summary = "로그인", description = "성공 시 accessToken(JWT) 반환.")
     @PostMapping("/login")
     public ApiResponse<LoginResponse> login(@RequestBody @Valid LoginRequest request) {
         return ApiResponse.ok(userService.login(request));

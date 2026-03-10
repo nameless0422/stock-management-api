@@ -5,6 +5,8 @@ import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.service.OrderService;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
  * <p>confirm (결제 완료 처리)은 Payment 도메인에서 {@link OrderService}를 직접 호출하므로
  * 외부 API로 노출하지 않는다.
  */
+@Tag(name = "주문", description = "주문 생성 · 조회 · 취소")
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
@@ -35,28 +38,20 @@ public class OrderController {
 
     private final OrderService orderService;
 
-    /**
-     * 주문을 생성한다.
-     *
-     * <p>멱등성 키({@code idempotencyKey})가 동일한 재요청의 경우
-     * 기존 주문을 그대로 반환한다 (새 주문 미생성).
-     */
+    @Operation(summary = "주문 생성", description = "재고 예약(reserved++) 후 PENDING 주문 생성. 동일 idempotencyKey 재요청 시 기존 주문 반환.")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<OrderResponse> create(@RequestBody @Valid OrderCreateRequest request) {
         return ApiResponse.ok(orderService.create(request));
     }
 
-    /** 주문 단건을 조회한다 (주문 항목 포함). */
+    @Operation(summary = "주문 단건 조회", description = "주문 항목(items) 포함.")
     @GetMapping("/{id}")
     public ApiResponse<OrderResponse> getById(@PathVariable Long id) {
         return ApiResponse.ok(orderService.getById(id));
     }
 
-    /**
-     * 주문 목록을 페이징 조회한다.
-     * 기본값: 최신 순 정렬, 페이지당 20건.
-     */
+    @Operation(summary = "주문 목록 조회 (페이징)", description = "기본: 최신순, 20건.")
     @GetMapping
     public ApiResponse<Page<OrderResponse>> getList(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
@@ -64,7 +59,7 @@ public class OrderController {
         return ApiResponse.ok(orderService.getList(pageable));
     }
 
-    /** 주문을 취소한다. PENDING 상태인 주문만 취소 가능하다. */
+    @Operation(summary = "주문 취소", description = "PENDING 상태만 취소 가능. 재고 예약 해제(reserved--).")
     @PostMapping("/{id}/cancel")
     public ApiResponse<OrderResponse> cancel(@PathVariable Long id) {
         return ApiResponse.ok(orderService.cancel(id));

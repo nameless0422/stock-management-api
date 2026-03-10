@@ -4,6 +4,8 @@ import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.service.UserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * JWT 인증이 필요하다. {@link AuthenticationPrincipal}로 username을 주입받아 서비스에 전달한다.
  */
+@Tag(name = "사용자", description = "내 정보 조회 · 내 주문 목록 — JWT 인증 필요")
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
@@ -31,11 +34,13 @@ public class UserController {
 
     private final UserService userService;
 
+    @Operation(summary = "내 정보 조회")
     @GetMapping("/me")
     public ApiResponse<UserResponse> getMe(@AuthenticationPrincipal String username) {
         return ApiResponse.ok(userService.getMe(username));
     }
 
+    @Operation(summary = "내 주문 목록 (페이징)", description = "기본: 최신순, 20건.")
     @GetMapping("/me/orders")
     public ApiResponse<Page<OrderResponse>> getMyOrders(
             @AuthenticationPrincipal String username,
