@@ -9,6 +9,9 @@ import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -49,7 +52,8 @@ public class ProductService {
         return ProductResponse.from(productRepository.save(product));
     }
 
-    /** 단건 조회 — 존재하지 않으면 404 예외 */
+    /** 단건 조회 — 캐시 hit 시 Redis에서 반환, miss 시 DB 조회 후 캐싱 */
+    @Cacheable(cacheNames = "products", key = "#id")
     public ProductResponse getById(Long id) {
         return ProductResponse.from(findById(id));
     }
@@ -63,8 +67,10 @@ public class ProductService {
     /**
      * 상품 정보를 수정한다.
      * 더티 체킹(dirty checking)으로 별도 save() 호출 없이 UPDATE가 수행된다.
+     * 수정 후 캐시도 최신 상태로 갱신한다.
      */
     @Transactional
+    @CachePut(cacheNames = "products", key = "#id")
     public ProductResponse update(Long id, ProductUpdateRequest request) {
         Product product = findById(id);
         product.update(request.getName(), request.getDescription(),
@@ -75,8 +81,10 @@ public class ProductService {
     /**
      * 상품을 삭제한다 (소프트 삭제).
      * 실제 DELETE 대신 status를 DISCONTINUED로 변경해 데이터를 보존한다.
+     * 삭제 후 캐시에서 제거한다.
      */
     @Transactional
+    @CacheEvict(cacheNames = "products", key = "#id")
     public void delete(Long id) {
         Product product = findById(id);
         product.changeStatus(ProductStatus.DISCONTINUED);
