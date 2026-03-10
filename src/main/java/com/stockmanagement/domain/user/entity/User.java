@@ -50,4 +50,9 @@ public class User {
         this.email = email;
         this.role = role != null ? role : UserRole.USER;
     }
+
+    /** 관리자가 사용자 권한을 변경한다. */
+    public void changeRole(UserRole role) {
+        this.role = role;
+    }
 }
