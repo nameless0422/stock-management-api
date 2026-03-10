@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 
 /**
@@ -38,4 +39,11 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     /** 주문 목록 전체 페이징 조회 (관리자용) */
     Page<Order> findByStatus(OrderStatus status, Pageable pageable);
+
+    /** 상태별 주문 수 집계 (대시보드용) */
+    long countByStatus(OrderStatus status);
+
+    /** 특정 상태의 주문 총 매출액 (대시보드용) */
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.status = :status")
+    BigDecimal sumTotalAmountByStatus(@Param("status") OrderStatus status);
 }

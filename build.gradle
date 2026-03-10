@@ -36,6 +36,10 @@ dependencies {
 	implementation 'org.redisson:redisson-spring-boot-starter:3.27.2'
 	// Swagger / OpenAPI UI
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.4'
+	// Spring Boot Admin (인프라 모니터링 Web UI)
+	implementation 'de.codecentric:spring-boot-admin-starter-server:3.4.3'
+	implementation 'de.codecentric:spring-boot-admin-starter-client:3.4.3'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'com.mysql:mysql-connector-j'
 	implementation 'org.flywaydb:flyway-core'
