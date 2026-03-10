@@ -34,6 +34,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	// Redisson — 분산 락 (멀티 인스턴스 동시성 제어)
 	implementation 'org.redisson:redisson-spring-boot-starter:3.27.2'
+	// Swagger / OpenAPI UI
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.4'
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'com.mysql:mysql-connector-j'
 	implementation 'org.flywaydb:flyway-core'
