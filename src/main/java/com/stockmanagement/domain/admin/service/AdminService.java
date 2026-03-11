@@ -2,13 +2,16 @@ package com.stockmanagement.domain.admin.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.admin.dto.AdminOrderResponse;
 import com.stockmanagement.domain.admin.dto.DashboardResponse;
 import com.stockmanagement.domain.admin.dto.LowStockItem;
 import com.stockmanagement.domain.admin.dto.RoleUpdateRequest;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
-import com.stockmanagement.domain.order.dto.OrderResponse;
+import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.product.dto.ProductResponse;
+import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.repository.UserRepository;
@@ -19,6 +22,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /** 관리자 전용 서비스 — 대시보드 통계, 사용자 관리, 전체 주문 조회 */
 @Service
@@ -32,6 +38,7 @@ public class AdminService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final InventoryRepository inventoryRepository;
+    private final ProductRepository productRepository;
 
     /** 관리자 대시보드 — 주문 통계, 매출, 사용자 수, 저재고 목록 */
     public DashboardResponse getDashboard() {
@@ -54,8 +61,11 @@ public class AdminService {
         );
     }
 
-    /** 전체 사용자 목록 (페이징) */
-    public Page<UserResponse> getUsers(Pageable pageable) {
+    /** 전체 사용자 목록 (페이징). search가 있으면 username/email로 필터링 */
+    public Page<UserResponse> getUsers(Pageable pageable, String search) {
+        if (search != null && !search.isBlank()) {
+            return userRepository.searchByUsernameOrEmail(search, pageable).map(UserResponse::from);
+        }
         return userRepository.findAll(pageable).map(UserResponse::from);
     }
 
@@ -68,11 +78,32 @@ public class AdminService {
         return UserResponse.from(user);
     }
 
-    /** 전체 주문 목록 (페이징, status 필터 선택) */
-    public Page<OrderResponse> getOrders(OrderStatus status, Pageable pageable) {
-        if (status != null) {
-            return orderRepository.findByStatus(status, pageable).map(OrderResponse::from);
+    /** 전체 주문 목록 (페이징, status·userId 필터 선택). 사용자명(username) 포함 */
+    public Page<AdminOrderResponse> getOrders(OrderStatus status, Long userId, Pageable pageable) {
+        Page<Order> orders;
+        if (userId != null && status != null) {
+            orders = orderRepository.findByUserIdAndStatus(userId, status, pageable);
+        } else if (userId != null) {
+            orders = orderRepository.findByUserId(userId, pageable);
+        } else if (status != null) {
+            orders = orderRepository.findByStatus(status, pageable);
+        } else {
+            orders = orderRepository.findAll(pageable);
         }
-        return orderRepository.findAll(pageable).map(OrderResponse::from);
+
+        // userId 목록으로 사용자명 일괄 조회
+        Set<Long> userIds = orders.stream().map(Order::getUserId).collect(Collectors.toSet());
+        Map<Long, String> usernameMap = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getUsername));
+
+        return orders.map(o -> AdminOrderResponse.from(o, usernameMap.getOrDefault(o.getUserId(), "(알 수 없음)")));
+    }
+
+    /** 전체 상품 목록 (ACTIVE + DISCONTINUED, 관리자 전용). search가 있으면 상품명/SKU로 필터링 */
+    public Page<ProductResponse> getAllProducts(Pageable pageable, String search) {
+        if (search != null && !search.isBlank()) {
+            return productRepository.searchAll(search, pageable).map(ProductResponse::from);
+        }
+        return productRepository.findAll(pageable).map(ProductResponse::from);
     }
 }

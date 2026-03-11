@@ -3,6 +3,7 @@ package com.stockmanagement.domain.inventory.service;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.lock.DistributedLock;
+import com.stockmanagement.domain.inventory.dto.InventoryAdjustRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryReceiveRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryResponse;
 import com.stockmanagement.domain.inventory.dto.InventoryTransactionResponse;
@@ -90,7 +91,25 @@ public class InventoryService {
                 ));
 
         inventory.receive(request.getQuantity());
-        recordTransaction(inventory, InventoryTransactionType.RECEIVE, request.getQuantity());
+        recordTransaction(inventory, InventoryTransactionType.RECEIVE, request.getQuantity(), request.getNote());
+        return InventoryResponse.from(inventory);
+    }
+
+    /**
+     * 관리자 수동 재고 조정.
+     *
+     * @param productId 조정 대상 상품 ID
+     * @param request   조정 수량(양수/음수) 및 사유
+     */
+    @DistributedLock(key = "'inventory:' + #productId")
+    @Transactional
+    public InventoryResponse adjust(Long productId, InventoryAdjustRequest request) {
+        if (request.getQuantity() == 0) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        Inventory inventory = findByProductIdWithLock(productId);
+        inventory.adjust(request.getQuantity());
+        recordTransaction(inventory, InventoryTransactionType.ADJUSTMENT, request.getQuantity(), request.getNote());
         return InventoryResponse.from(inventory);
     }
 
@@ -151,13 +170,19 @@ public class InventoryService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVENTORY_NOT_FOUND));
     }
 
-    /** 재고 뮤테이션 이후 이력을 기록한다. */
+    /** 재고 뮤테이션 이후 이력을 기록한다 (note 없음). */
     private void recordTransaction(Inventory inventory, InventoryTransactionType type, int quantity) {
+        recordTransaction(inventory, type, quantity, null);
+    }
+
+    /** 재고 뮤테이션 이후 이력을 기록한다 (note 포함). */
+    private void recordTransaction(Inventory inventory, InventoryTransactionType type, int quantity, String note) {
         transactionRepository.save(
                 InventoryTransaction.builder()
                         .inventory(inventory)
                         .type(type)
                         .quantity(quantity)
+                        .note(note)
                         .build()
         );
     }

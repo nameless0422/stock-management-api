@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.inventory.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.domain.inventory.dto.InventoryAdjustRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryReceiveRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryResponse;
 import com.stockmanagement.domain.inventory.dto.InventoryTransactionResponse;
@@ -53,5 +54,13 @@ public class InventoryController {
             @PathVariable Long productId,
             @RequestBody @Valid InventoryReceiveRequest request) {
         return ApiResponse.ok(inventoryService.receive(productId, request));
+    }
+
+    @Operation(summary = "재고 수동 조정", description = "ADMIN 전용. quantity 양수=증가, 음수=감소.")
+    @PostMapping("/{productId}/adjust")
+    public ApiResponse<InventoryResponse> adjust(
+            @PathVariable Long productId,
+            @RequestBody @Valid InventoryAdjustRequest request) {
+        return ApiResponse.ok(inventoryService.adjust(productId, request));
     }
 }

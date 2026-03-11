@@ -13,5 +13,7 @@ public enum InventoryTransactionType {
     /** 결제 완료 후 출고 확정 */
     CONFIRM_ALLOCATION,
     /** 환불 처리 시 확정 해제 */
-    RELEASE_ALLOCATION
+    RELEASE_ALLOCATION,
+    /** 관리자 수동 재고 조정 (onHand 직접 보정) */
+    ADJUSTMENT
 }

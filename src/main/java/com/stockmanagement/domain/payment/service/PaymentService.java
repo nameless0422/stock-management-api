@@ -275,6 +275,17 @@ public class PaymentService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
     }
 
+    /**
+     * 주문 ID로 결제 정보를 조회한다. 결제 레코드가 없으면 빈 Optional을 반환한다.
+     * (관리자 주문 상세 조회용 — 결제 전 PENDING 주문은 null 반환)
+     *
+     * @param orderId 조회할 주문 ID
+     * @return 결제 정보 (없으면 Optional.empty())
+     */
+    public Optional<PaymentResponse> getByOrderId(Long orderId) {
+        return paymentRepository.findByOrderId(orderId).map(PaymentResponse::from);
+    }
+
     // ===== Private helpers =====
 
     /**
