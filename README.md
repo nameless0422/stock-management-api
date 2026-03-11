@@ -15,6 +15,8 @@ Spring Boot 기반 쇼핑몰 재고 관리 API.
 | 캐시 / 락 | Redis 7, Redisson 3.27.2 (분산 락), Spring Cache |
 | 인증 | Spring Security 6 + JWT (jjwt 0.12.6) |
 | 결제 | TossPayments Core API v1 |
+| API 문서 | springdoc-openapi 2.8.4 (Swagger UI) |
+| 관리자 | Spring Boot Admin 3.4.3 |
 | 테스트 | JUnit 5, Mockito, Testcontainers (MySQL + Redis) |
 | 인프라 | Docker Compose |
 
@@ -45,7 +47,16 @@ Flyway가 기동 시 V1~V6 마이그레이션을 자동 실행합니다.
 export JWT_SECRET=your-secret-key-at-least-32-characters-long
 export TOSS_SECRET_KEY=test_sk_your_actual_key
 export TOSS_CLIENT_KEY=test_ck_your_actual_key
+export ADMIN_USERNAME=admin          # Spring Boot Admin UI 계정 (기본: admin)
+export ADMIN_PASSWORD=your-password  # Spring Boot Admin UI 비밀번호 (기본: changeme)
 ```
+
+### 접속 URL
+
+| URL | 설명 |
+|---|---|
+| `http://localhost:8080/swagger-ui/index.html` | Swagger API 문서 |
+| `http://localhost:8080/admin-ui` | Spring Boot Admin (인프라 모니터링) |
 
 ---
 
@@ -76,7 +87,8 @@ export TOSS_CLIENT_KEY=test_ck_your_actual_key
 ```
 com.stockmanagement/
 ├── common/
-│   ├── config/          # SecurityConfig, JpaConfig, RedisConfig, CacheConfig, TossPaymentsConfig
+│   ├── config/          # SecurityConfig, AdminSecurityConfig, SpringBootAdminConfig
+│   │                    # JpaConfig, RedisConfig, CacheConfig, OpenApiConfig, TossPaymentsConfig
 │   ├── dto/             # ApiResponse<T> — 전 엔드포인트 통합 응답 래퍼
 │   ├── exception/       # BusinessException, InsufficientStockException, ErrorCode, GlobalExceptionHandler
 │   └── lock/            # @DistributedLock (어노테이션), DistributedLockAspect (AOP)
@@ -85,7 +97,8 @@ com.stockmanagement/
 │   ├── inventory/       # 재고 4-state 모델 + 변동 이력(InventoryTransaction)
 │   ├── order/           # 주문 생성·취소, 멱등성 키
 │   ├── payment/         # TossPayments 연동, 결제 준비·확인·취소
-│   └── user/            # 회원가입·로그인, ADMIN/USER 역할
+│   ├── user/            # 회원가입·로그인, ADMIN/USER 역할
+│   └── admin/           # 관리자 대시보드, 사용자 관리, 전체 주문 조회
 └── security/            # JwtTokenProvider, JwtAuthenticationFilter
 ```
 
@@ -151,15 +164,45 @@ available = onHand - reserved - allocated
 
 ---
 
+## 🔑 관리자 페이지
+
+### Spring Boot Admin — 인프라 모니터링
+
+`http://localhost:8080/admin-ui` 접속 후 form login (계정: `admin` / `changeme`).
+
+| 기능 | 설명 |
+|---|---|
+| 애플리케이션 상태 | Health, 메모리/힙/GC, 스레드 |
+| HTTP 트레이스 | 최근 요청/응답 내역 |
+| 로그 레벨 | 런타임에서 패키지별 레벨 즉시 변경 |
+| 빈 목록 | Spring 컨텍스트의 전체 빈 확인 |
+| 환경변수 | application.properties 설정값 조회 |
+
+### Admin REST API
+
+모두 **ADMIN JWT** 인증 필요.
+
+| Method | Endpoint | 설명 |
+|---|---|---|
+| GET | `/api/admin/dashboard` | 주문 통계, 매출, 사용자 수, 저재고 목록 |
+| GET | `/api/admin/users` | 전체 사용자 목록 (페이징) |
+| PATCH | `/api/admin/users/{id}/role` | 사용자 권한 변경 (USER ↔ ADMIN) |
+| GET | `/api/admin/orders` | 전체 주문 목록 (`?status=PENDING` 필터 가능) |
+
+---
+
 ## 📊 API 엔드포인트
 
-### 인증
+> Swagger UI에서 직접 테스트 가능: `http://localhost:8080/swagger-ui/index.html`
+
+### 인증 / 사용자
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
 | POST | `/api/auth/signup` | 회원가입 | 공개 |
 | POST | `/api/auth/login` | 로그인 → JWT | 공개 |
 | GET | `/api/users/me` | 내 정보 조회 | USER |
+| GET | `/api/users/me/orders` | 내 주문 목록 | USER |
 
 ### 상품
 
@@ -260,10 +303,14 @@ Authorization: Bearer <token>
 
 ## 🔒 보안
 
-- 미인증 요청 → 403 (Spring Security 6 기본)
-- ADMIN 전용: `POST/PUT/DELETE /api/products/**`, `POST /api/inventory/**`
-- 공개: `/api/auth/**`, `/actuator/**`, `/api/payments/webhook`
-- JWT Secret은 반드시 환경 변수(`JWT_SECRET`)로 교체 (기본값은 개발용)
+| 체인 | 우선순위 | 경로 | 인증 방식 |
+|---|---|---|---|
+| `AdminSecurityConfig` | @Order(1) | `/admin-ui/**`, `/instances/**` | Form Login + 세션 |
+| `SecurityConfig` | @Order(2) | 나머지 전체 | JWT (stateless) |
+
+- 미인증 → 403
+- 공개: `/api/auth/**`, `/actuator/**`, `/api/payments/webhook`, `/swagger-ui/**`
+- JWT Secret은 반드시 환경 변수(`JWT_SECRET`)로 교체
 
 ---
 
