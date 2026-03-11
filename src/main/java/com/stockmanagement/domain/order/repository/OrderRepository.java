@@ -40,6 +40,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     /** 주문 목록 전체 페이징 조회 (관리자용) */
     Page<Order> findByStatus(OrderStatus status, Pageable pageable);
 
+    /** 특정 사용자 + 상태 조합 조회 (관리자용) */
+    Page<Order> findByUserIdAndStatus(Long userId, OrderStatus status, Pageable pageable);
+
     /** 상태별 주문 수 집계 (대시보드용) */
     long countByStatus(OrderStatus status);
 

@@ -4,6 +4,7 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
 import com.stockmanagement.domain.product.dto.ProductResponse;
+import com.stockmanagement.domain.product.dto.ProductStatusRequest;
 import com.stockmanagement.domain.product.dto.ProductUpdateRequest;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
@@ -58,10 +59,22 @@ public class ProductService {
         return ProductResponse.from(findById(id));
     }
 
-    /** ACTIVE 상태인 상품만 페이징 조회 */
-    public Page<ProductResponse> getList(Pageable pageable) {
+    /** ACTIVE 상태인 상품만 페이징 조회. search가 있으면 상품명/SKU로 필터링 */
+    public Page<ProductResponse> getList(Pageable pageable, String search) {
+        if (search != null && !search.isBlank()) {
+            return productRepository.searchByStatus(ProductStatus.ACTIVE, search, pageable)
+                    .map(ProductResponse::from);
+        }
         return productRepository.findByStatus(ProductStatus.ACTIVE, pageable)
                 .map(ProductResponse::from);
+    }
+
+    /** 전체 상품 페이징 조회 (ACTIVE + DISCONTINUED, 관리자 전용). search가 있으면 상품명/SKU로 필터링 */
+    public Page<ProductResponse> getListAll(Pageable pageable, String search) {
+        if (search != null && !search.isBlank()) {
+            return productRepository.searchAll(search, pageable).map(ProductResponse::from);
+        }
+        return productRepository.findAll(pageable).map(ProductResponse::from);
     }
 
     /**
@@ -88,6 +101,15 @@ public class ProductService {
     public void delete(Long id) {
         Product product = findById(id);
         product.changeStatus(ProductStatus.DISCONTINUED);
+    }
+
+    /** 상품 판매 상태를 변경한다 (ACTIVE ↔ DISCONTINUED). */
+    @Transactional
+    @CacheEvict(cacheNames = "products", key = "#id")
+    public ProductResponse changeStatus(Long id, ProductStatusRequest request) {
+        Product product = findById(id);
+        product.changeStatus(request.getStatus());
+        return ProductResponse.from(product);
     }
 
     /** 공통 조회 헬퍼 — 없으면 PRODUCT_NOT_FOUND 예외 발생 */

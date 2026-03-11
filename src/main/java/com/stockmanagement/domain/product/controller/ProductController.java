@@ -3,6 +3,7 @@ package com.stockmanagement.domain.product.controller;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
 import com.stockmanagement.domain.product.dto.ProductResponse;
+import com.stockmanagement.domain.product.dto.ProductStatusRequest;
 import com.stockmanagement.domain.product.dto.ProductUpdateRequest;
 import com.stockmanagement.domain.product.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -36,11 +37,12 @@ public class ProductController {
         return ApiResponse.ok(productService.getById(id));
     }
 
-    @Operation(summary = "상품 목록 조회 (페이징)", description = "?page=0&size=10&sort=name,asc")
+    @Operation(summary = "상품 목록 조회 (페이징)", description = "?page=0&size=10&sort=name,asc&search=키워드")
     @GetMapping
     public ApiResponse<Page<ProductResponse>> getList(
+            @RequestParam(required = false) String search,
             @PageableDefault(size = 20, sort = "id") Pageable pageable) {
-        return ApiResponse.ok(productService.getList(pageable));
+        return ApiResponse.ok(productService.getList(pageable, search));
     }
 
     @Operation(summary = "상품 수정", description = "ADMIN 전용.")
@@ -56,5 +58,13 @@ public class ProductController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
         productService.delete(id);
+    }
+
+    @Operation(summary = "상품 상태 변경", description = "ADMIN 전용. ACTIVE ↔ DISCONTINUED 전환.")
+    @PatchMapping("/{id}/status")
+    public ApiResponse<ProductResponse> changeStatus(
+            @PathVariable Long id,
+            @RequestBody @Valid ProductStatusRequest request) {
+        return ApiResponse.ok(productService.changeStatus(id, request));
     }
 }

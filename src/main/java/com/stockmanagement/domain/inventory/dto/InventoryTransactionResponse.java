@@ -13,6 +13,7 @@ public class InventoryTransactionResponse {
     private final Long id;
     private final String type;
     private final int quantity;
+    private final String note;
     private final int snapshotOnHand;
     private final int snapshotReserved;
     private final int snapshotAllocated;
@@ -23,6 +24,7 @@ public class InventoryTransactionResponse {
                 tx.getId(),
                 tx.getType().name(),
                 tx.getQuantity(),
+                tx.getNote(),
                 tx.getSnapshotOnHand(),
                 tx.getSnapshotReserved(),
                 tx.getSnapshotAllocated(),

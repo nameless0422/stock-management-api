@@ -155,4 +155,23 @@ public class Inventory {
     public void releaseAllocation(int quantity) {
         this.allocated = Math.max(0, this.allocated - quantity);
     }
+
+    /**
+     * 관리자 수동 재고 조정 — onHand를 delta만큼 보정한다.
+     * delta 양수: 재고 증가, 음수: 재고 감소.
+     *
+     * <p>조정 후 onHand가 0 미만이거나 available이 0 미만이 되면 예외를 발생시킨다.
+     *
+     * @param delta 조정 수량 (양수 또는 음수, 0 불가)
+     */
+    public void adjust(int delta) {
+        int newOnHand = this.onHand + delta;
+        if (newOnHand < 0) {
+            throw new InsufficientStockException(Math.abs(delta), this.onHand);
+        }
+        if (newOnHand - this.reserved - this.allocated < 0) {
+            throw new InsufficientStockException(Math.abs(delta), getAvailable());
+        }
+        this.onHand = newOnHand;
+    }
 }

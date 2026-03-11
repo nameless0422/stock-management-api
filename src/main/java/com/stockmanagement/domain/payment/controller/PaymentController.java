@@ -16,11 +16,12 @@ import org.springframework.web.bind.annotation.*;
  *
  * <p>Endpoint overview:
  * <pre>
- *   POST /api/payments/prepare          – prepare payment session (before checkout widget)
- *   POST /api/payments/confirm          – confirm payment (after checkout widget)
+ *   POST /api/payments/prepare             – prepare payment session (before checkout widget)
+ *   POST /api/payments/confirm             – confirm payment (after checkout widget)
  *   POST /api/payments/{paymentKey}/cancel – cancel / refund payment
- *   POST /api/payments/webhook          – receive TossPayments webhook events (public)
- *   GET  /api/payments/{paymentKey}     – query payment details
+ *   POST /api/payments/webhook             – receive TossPayments webhook events (public)
+ *   GET  /api/payments/{paymentKey}        – query payment details by paymentKey
+ *   GET  /api/payments/order/{orderId}     – query payment details by orderId (admin use)
  * </pre>
  */
 @Tag(name = "결제", description = "TossPayments 결제 준비 · 승인 · 취소 · 조회 · 웹훅")
@@ -65,5 +66,12 @@ public class PaymentController {
     public ResponseEntity<ApiResponse<PaymentResponse>> getByPaymentKey(
             @PathVariable String paymentKey) {
         return ResponseEntity.ok(ApiResponse.ok(paymentService.getByPaymentKey(paymentKey)));
+    }
+
+    @Operation(summary = "주문별 결제 조회", description = "주문 ID로 결제 정보 조회. 결제 전이면 data: null 반환.")
+    @GetMapping("/order/{orderId}")
+    public ResponseEntity<ApiResponse<PaymentResponse>> getByOrderId(
+            @PathVariable Long orderId) {
+        return ResponseEntity.ok(ApiResponse.ok(paymentService.getByOrderId(orderId).orElse(null)));
     }
 }

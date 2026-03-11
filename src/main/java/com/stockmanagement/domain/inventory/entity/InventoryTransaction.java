@@ -37,6 +37,10 @@ public class InventoryTransaction {
     @Column(nullable = false)
     private int quantity;
 
+    /** 입고·조정 시 관리자가 입력한 사유 (선택) */
+    @Column(length = 255)
+    private String note;
+
     /** 변동 이후 onHand 스냅샷 */
     @Column(nullable = false)
     private int snapshotOnHand;
@@ -54,10 +58,11 @@ public class InventoryTransaction {
     private LocalDateTime createdAt;
 
     @Builder
-    private InventoryTransaction(Inventory inventory, InventoryTransactionType type, int quantity) {
+    private InventoryTransaction(Inventory inventory, InventoryTransactionType type, int quantity, String note) {
         this.inventory = inventory;
         this.type = type;
         this.quantity = quantity;
+        this.note = note;
         // 뮤테이션 이후 Inventory 상태를 스냅샷으로 기록
         this.snapshotOnHand = inventory.getOnHand();
         this.snapshotReserved = inventory.getReserved();

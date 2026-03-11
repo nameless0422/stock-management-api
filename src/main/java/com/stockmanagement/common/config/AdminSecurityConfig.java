@@ -54,7 +54,7 @@ public class AdminSecurityConfig {
         InMemoryUserDetailsManager detailsManager = new InMemoryUserDetailsManager(adminUser);
 
         http
-                .securityMatcher("/admin-ui/**", "/instances/**")
+                .securityMatcher("/admin-ui/**")
                 .authorizeHttpRequests(auth -> auth
                         // SBA UI 정적 자원과 로그인 페이지는 공개
                         .requestMatchers("/admin-ui/assets/**", "/admin-ui/login").permitAll()
@@ -67,10 +67,11 @@ public class AdminSecurityConfig {
                 .logout(logout -> logout.logoutUrl("/admin-ui/logout"))
                 // SBA 클라이언트 자기 등록(/instances): HTTP Basic Auth
                 .httpBasic(Customizer.withDefaults())
-                // CSRF: SBA UI에서 필요 (쿠키 기반)
+                // CSRF: SBA UI에서 필요 (쿠키 기반), 클라이언트 등록(/instances)은 제외
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
+                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                        .ignoringRequestMatchers("/admin-ui/instances/**"))
                 .userDetailsService(detailsManager);
 
         return http.build();
