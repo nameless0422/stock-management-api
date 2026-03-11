@@ -42,6 +42,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/payments/webhook").permitAll()
                         // Swagger UI
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                        // 관리자 랜딩 페이지 (정적 파일 — API 인증은 JS에서 JWT로 처리)
+                        .requestMatchers("/admin-page/**").permitAll()
                         // ADMIN 전용
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/products").hasRole("ADMIN")
