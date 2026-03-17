@@ -4,6 +4,7 @@ import com.stockmanagement.common.config.SecurityConfig;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.dto.OrderResponse;
+import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
 import com.stockmanagement.domain.order.service.OrderService;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.security.JwtTokenProvider;
@@ -192,6 +193,42 @@ class OrderControllerTest {
             mockMvc.perform(post("/api/orders/1/cancel"))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.success").value(false));
+        }
+    }
+
+    // ===== GET /api/orders/{id}/history =====
+
+    @Nested
+    @DisplayName("GET /api/orders/{id}/history")
+    class GetHistory {
+
+        @Test
+        @WithMockUser
+        @DisplayName("인증된 사용자 — 주문 상태 이력 조회 → 200")
+        void returnsHistory() throws Exception {
+            given(orderService.getHistory(1L)).willReturn(List.of(mock(OrderStatusHistoryResponse.class)));
+
+            mockMvc.perform(get("/api/orders/1/history"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @DisplayName("인증 없음 → 403")
+        void unauthorizedWithoutAuth() throws Exception {
+            mockMvc.perform(get("/api/orders/1/history"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser
+        @DisplayName("존재하지 않는 주문 → 404")
+        void returnsNotFound() throws Exception {
+            given(orderService.getHistory(999L))
+                    .willThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+            mockMvc.perform(get("/api/orders/999/history"))
+                    .andExpect(status().isNotFound());
         }
     }
 }

@@ -6,14 +6,20 @@ import com.stockmanagement.domain.inventory.service.InventoryService;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
+import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderItem;
+import com.stockmanagement.domain.order.entity.OrderStatus;
+import com.stockmanagement.domain.order.entity.OrderStatusHistory;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +53,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final InventoryService inventoryService;
+    private final OrderStatusHistoryRepository historyRepository;
 
     /**
      * 주문을 생성한다.
@@ -117,6 +124,9 @@ public class OrderService {
             inventoryService.reserve(item.getProduct().getId(), item.getQuantity());
         }
 
+        // 6. 상태 이력 기록 (최초 생성: fromStatus=null, toStatus=PENDING)
+        recordHistory(savedOrder.getId(), null, OrderStatus.PENDING, null);
+
         return OrderResponse.from(savedOrder);
     }
 
@@ -136,6 +146,15 @@ public class OrderService {
      */
     public Page<OrderResponse> getList(Pageable pageable) {
         return orderRepository.findAll(pageable).map(OrderResponse::from);
+    }
+
+    /** 특정 주문의 상태 변경 이력을 시간순으로 조회한다. */
+    public List<OrderStatusHistoryResponse> getHistory(Long orderId) {
+        if (!orderRepository.existsById(orderId)) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_FOUND);
+        }
+        return historyRepository.findByOrderIdOrderByCreatedAtAsc(orderId)
+                .stream().map(OrderStatusHistoryResponse::from).toList();
     }
 
     /**
@@ -165,6 +184,7 @@ public class OrderService {
             inventoryService.releaseReservation(item.getProduct().getId(), item.getQuantity());
         }
 
+        recordHistory(order.getId(), OrderStatus.PENDING, OrderStatus.CANCELLED, null);
         return OrderResponse.from(order);
     }
 
@@ -186,6 +206,8 @@ public class OrderService {
         for (OrderItem item : order.getItems()) {
             inventoryService.confirmAllocation(item.getProduct().getId(), item.getQuantity());
         }
+
+        recordHistory(order.getId(), OrderStatus.PENDING, OrderStatus.CONFIRMED, null);
     }
 
     /**
@@ -209,5 +231,30 @@ public class OrderService {
         for (OrderItem item : order.getItems()) {
             inventoryService.releaseAllocation(item.getProduct().getId(), item.getQuantity());
         }
+
+        recordHistory(order.getId(), OrderStatus.CONFIRMED, OrderStatus.CANCELLED, null);
+    }
+
+    // ===== 내부 헬퍼 =====
+
+    /** 현재 인증 컨텍스트의 사용자명을 반환한다. 인증 정보가 없으면 "system"을 반환한다. */
+    private String currentUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {
+            return "system";
+        }
+        return auth.getName();
+    }
+
+    private void recordHistory(Long orderId, OrderStatus from, OrderStatus to, String note) {
+        historyRepository.save(
+                OrderStatusHistory.builder()
+                        .orderId(orderId)
+                        .fromStatus(from)
+                        .toStatus(to)
+                        .changedBy(currentUser())
+                        .note(note)
+                        .build()
+        );
     }
 }

@@ -3,6 +3,7 @@ package com.stockmanagement.domain.order.controller;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
+import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
 import com.stockmanagement.domain.order.service.OrderService;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
@@ -15,22 +16,25 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 /**
  * 주문 REST API 컨트롤러.
  *
  * <p>Base URL: {@code /api/orders}
  *
  * <pre>
- * POST /api/orders              주문 생성 (재고 예약)       → 201 Created
- * GET  /api/orders/{id}         주문 단건 조회              → 200 OK
- * GET  /api/orders              주문 목록 조회 (페이징)     → 200 OK
- * POST /api/orders/{id}/cancel  주문 취소 (재고 예약 해제)  → 200 OK
+ * POST /api/orders                  주문 생성 (재고 예약)              → 201 Created
+ * GET  /api/orders/{id}             주문 단건 조회                     → 200 OK
+ * GET  /api/orders                  주문 목록 조회 (페이징)            → 200 OK
+ * POST /api/orders/{id}/cancel      주문 취소 (재고 예약 해제)         → 200 OK
+ * GET  /api/orders/{id}/history     주문 상태 변경 이력 조회           → 200 OK
  * </pre>
  *
  * <p>confirm (결제 완료 처리)은 Payment 도메인에서 {@link OrderService}를 직접 호출하므로
  * 외부 API로 노출하지 않는다.
  */
-@Tag(name = "주문", description = "주문 생성 · 조회 · 취소")
+@Tag(name = "주문", description = "주문 생성 · 조회 · 취소 · 상태 이력")
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
@@ -63,5 +67,11 @@ public class OrderController {
     @PostMapping("/{id}/cancel")
     public ApiResponse<OrderResponse> cancel(@PathVariable Long id) {
         return ApiResponse.ok(orderService.cancel(id));
+    }
+
+    @Operation(summary = "주문 상태 변경 이력 조회", description = "생성·취소·확정·환불 등 모든 상태 전이를 시간순으로 반환.")
+    @GetMapping("/{id}/history")
+    public ApiResponse<List<OrderStatusHistoryResponse>> getHistory(@PathVariable Long id) {
+        return ApiResponse.ok(orderService.getHistory(id));
     }
 }
