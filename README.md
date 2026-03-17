@@ -211,6 +211,7 @@ available = onHand - reserved - allocated
 |---|---|---|---|
 | POST | `/api/auth/signup` | 회원가입 | 공개 |
 | POST | `/api/auth/login` | 로그인 → JWT | 공개 |
+| POST | `/api/auth/logout` | 로그아웃 (JWT 블랙리스트 등록) | 공개 |
 | GET | `/api/users/me` | 내 정보 조회 | USER |
 | GET | `/api/users/me/orders` | 내 주문 목록 | USER |
 
@@ -319,8 +320,18 @@ Authorization: Bearer <token>
 | `SecurityConfig` | @Order(2) | 나머지 전체 | JWT (stateless) |
 
 - 미인증 → 403
-- 공개: `/api/auth/**`, `/actuator/**`, `/api/payments/webhook`, `/swagger-ui/**`
+- 공개: `/api/auth/**`, `/actuator/health`, `/actuator/info`, `/api/payments/webhook`, `/swagger-ui/**`
+- ADMIN 전용: `/actuator/**` (health/info 제외)
 - JWT Secret은 반드시 환경 변수(`JWT_SECRET`)로 교체
+
+### 추가 보안 기능
+
+| 기능 | 구현 |
+|---|---|
+| 로그인 Rate Limiting | Redis 기반, 15분 내 5회 초과 시 429 |
+| JWT 블랙리스트 | 로그아웃 시 jti로 Redis에 등록, 토큰 만료까지 유효 |
+| Toss 웹훅 서명 검증 | `Toss-Signature` 헤더 HMAC-SHA256 검증 |
+| CORS | `cors.allowed-origins` 환경 변수로 허용 도메인 제어 |
 
 ---
 
