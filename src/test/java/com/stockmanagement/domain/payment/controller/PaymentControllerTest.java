@@ -5,6 +5,8 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.payment.dto.PaymentPrepareResponse;
 import com.stockmanagement.domain.payment.dto.PaymentResponse;
+import com.stockmanagement.common.security.JwtBlacklist;
+import com.stockmanagement.domain.payment.infrastructure.TossWebhookVerifier;
 import com.stockmanagement.domain.payment.service.PaymentService;
 import com.stockmanagement.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +42,12 @@ class PaymentControllerTest {
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
+
+    @MockBean
+    private JwtBlacklist jwtBlacklist;
+
+    @MockBean
+    private TossWebhookVerifier webhookVerifier;
 
     // ===== POST /api/payments/prepare =====
 
