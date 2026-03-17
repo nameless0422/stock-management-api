@@ -39,7 +39,7 @@ docker compose -f docker/docker-compose.yml up -d
 ./gradlew bootRun
 ```
 
-Flyway가 기동 시 V1~V6 마이그레이션을 자동 실행합니다.
+Flyway가 기동 시 V1~V8 마이그레이션을 자동 실행합니다.
 
 ### 환경 변수 (선택)
 
@@ -149,11 +149,19 @@ available = onHand - reserved - allocated
 결제 후 취소(/cancel): Payment CANCELLED, Order CANCELLED, allocated 해제
 ```
 
+#### 멱등성 보장
+
+| 레이어 | 전략 |
+|---|---|
+| `prepare()` | `payments.order_id` DB UNIQUE 제약 — 동시 요청 시 하나만 저장 |
+| `confirm()` / `cancel()` | Redis SETNX로 PROCESSING 상태 원자적 선점, 완료 결과 24h 캐싱 |
+| Toss API 호출 | `Idempotency-Key: {tossOrderId}` 헤더 — 네트워크 재시도 시 Toss 측 중복 방지 |
+
 ---
 
 ## 📌 DB 마이그레이션
 
-| 버전 | 테이블 |
+| 버전 | 내용 |
 |---|---|
 | V1 | products |
 | V2 | inventory |
@@ -161,6 +169,8 @@ available = onHand - reserved - allocated
 | V4 | payments |
 | V5 | users |
 | V6 | inventory_transactions |
+| V7 | inventory_transactions.note 컬럼 추가 |
+| V8 | payments.order_id UNIQUE 제약 추가 |
 
 ---
 
