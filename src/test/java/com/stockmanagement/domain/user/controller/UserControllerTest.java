@@ -5,6 +5,7 @@ import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.service.UserService;
+import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -48,6 +49,9 @@ class UserControllerTest {
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
+
+    @MockBean
+    private JwtBlacklist jwtBlacklist;
 
     /** String principal을 가진 인증 토큰 생성 헬퍼 */
     private static UsernamePasswordAuthenticationToken userAuth(String username) {

@@ -11,6 +11,7 @@ import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
+import com.stockmanagement.common.security.LoginRateLimiter;
 import com.stockmanagement.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -33,6 +34,7 @@ public class UserService {
     private final OrderRepository orderRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final LoginRateLimiter loginRateLimiter;
 
     /** 회원가입. username/email 중복 시 예외. */
     @Transactional
@@ -54,8 +56,10 @@ public class UserService {
         return UserResponse.from(userRepository.save(user));
     }
 
-    /** 로그인. 자격증명 검증 후 JWT 토큰 발급. */
+    /** 로그인. Rate Limit 확인 → 자격증명 검증 → JWT 발급. */
     public LoginResponse login(LoginRequest request) {
+        loginRateLimiter.checkAndIncrement(request.username());
+
         User user = userRepository.findByUsername(request.username())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
 
@@ -63,6 +67,7 @@ public class UserService {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
 
+        loginRateLimiter.reset(request.username());
         String token = jwtTokenProvider.createToken(user.getUsername(), user.getRole().name());
         return LoginResponse.of(token, jwtTokenProvider.getTokenValidityInSeconds());
     }

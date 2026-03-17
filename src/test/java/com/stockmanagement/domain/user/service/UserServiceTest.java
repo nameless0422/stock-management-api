@@ -11,6 +11,7 @@ import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
+import com.stockmanagement.common.security.LoginRateLimiter;
 import com.stockmanagement.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -50,6 +51,9 @@ class UserServiceTest {
 
     @Mock
     private JwtTokenProvider jwtTokenProvider;
+
+    @Mock
+    private LoginRateLimiter loginRateLimiter;
 
     @InjectMocks
     private UserService userService;

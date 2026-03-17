@@ -36,6 +36,7 @@ public enum ErrorCode {
     INVALID_PAYMENT_STATUS(HttpStatus.CONFLICT, "현재 결제 상태에서 허용되지 않는 작업입니다."),
     TOSS_PAYMENTS_ERROR(HttpStatus.BAD_GATEWAY, "결제 처리 중 오류가 발생했습니다."),
     PAYMENT_PROCESSING_IN_PROGRESS(HttpStatus.CONFLICT, "결제가 처리 중입니다. 잠시 후 다시 시도해주세요."),
+    WEBHOOK_SIGNATURE_INVALID(HttpStatus.UNAUTHORIZED, "유효하지 않은 웹훅 서명입니다."),
 
     // ===== User =====
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
@@ -46,7 +47,8 @@ public enum ErrorCode {
     // ===== Common =====
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "잘못된 입력값입니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),
-    LOCK_ACQUISITION_FAILED(HttpStatus.TOO_MANY_REQUESTS, "현재 요청이 많습니다. 잠시 후 다시 시도해주세요.");
+    LOCK_ACQUISITION_FAILED(HttpStatus.TOO_MANY_REQUESTS, "현재 요청이 많습니다. 잠시 후 다시 시도해주세요."),
+    TOO_MANY_LOGIN_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해주세요.");
 
     private final HttpStatus httpStatus;
     /** 클라이언트에 그대로 전달되는 메시지 — 민감 정보를 포함하지 않아야 한다. */

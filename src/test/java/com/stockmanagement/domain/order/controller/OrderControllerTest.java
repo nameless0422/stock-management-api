@@ -5,6 +5,7 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.service.OrderService;
+import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -40,6 +41,9 @@ class OrderControllerTest {
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
+
+    @MockBean
+    private JwtBlacklist jwtBlacklist;
 
     // ===== POST /api/orders =====
 

@@ -7,6 +7,7 @@ import com.stockmanagement.domain.user.dto.LoginResponse;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.service.UserService;
+import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -36,6 +37,9 @@ class AuthControllerTest {
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
+
+    @MockBean
+    private JwtBlacklist jwtBlacklist;
 
     // ===== POST /api/auth/signup =====
 
@@ -139,5 +143,22 @@ class AuthControllerTest {
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.success").value(false));
         }
+    }
+
+    // ===== POST /api/auth/logout =====
+
+    @Nested
+    @DisplayName("POST /api/auth/logout")
+    class Logout {
+
+        @Test
+        @DisplayName("유효한 Bearer 토큰 → 200, 블랙리스트 등록")
+        void logoutSuccess() throws Exception {
+            mockMvc.perform(post("/api/auth/logout")
+                            .header("Authorization", "Bearer valid-jwt-token"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
     }
 }

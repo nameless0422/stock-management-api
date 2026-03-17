@@ -1,7 +1,10 @@
 package com.stockmanagement.domain.payment.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.payment.dto.*;
+import com.stockmanagement.domain.payment.infrastructure.TossWebhookVerifier;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
 import com.stockmanagement.domain.payment.service.PaymentService;
 import jakarta.validation.Valid;
@@ -31,6 +34,8 @@ import org.springframework.web.bind.annotation.*;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final TossWebhookVerifier webhookVerifier;
+    private final ObjectMapper objectMapper;
 
     @Operation(summary = "결제 준비", description = "TossPayments 결제창 렌더링 전 호출. tossOrderId와 amount 반환.")
     @PostMapping("/prepare")
@@ -54,9 +59,13 @@ public class PaymentController {
         return ResponseEntity.ok(ApiResponse.ok(paymentService.cancel(paymentKey, request)));
     }
 
-    @Operation(summary = "TossPayments 웹훅 수신", description = "공개 엔드포인트. TossPayments가 결제 이벤트를 POST로 전송.")
+    @Operation(summary = "TossPayments 웹훅 수신", description = "공개 엔드포인트. Toss-Signature 헤더로 HMAC-SHA256 서명 검증 후 처리.")
     @PostMapping("/webhook")
-    public ResponseEntity<Void> webhook(@RequestBody TossWebhookEvent event) {
+    public ResponseEntity<Void> webhook(
+            @RequestHeader(value = "Toss-Signature", required = false) String signature,
+            @RequestBody String rawBody) throws JsonProcessingException {
+        webhookVerifier.verify(rawBody, signature);
+        TossWebhookEvent event = objectMapper.readValue(rawBody, TossWebhookEvent.class);
         paymentService.handleWebhook(event);
         return ResponseEntity.ok().build();
     }
