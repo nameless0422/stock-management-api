@@ -38,6 +38,8 @@ public class TossPaymentsClient {
         try {
             return tossRestClient.post()
                     .uri("/payments/confirm")
+                    // Toss 측 중복 처리 방지: 동일 orderId 재요청 시 이전 결과 반환
+                    .header("Idempotency-Key", request.getOrderId())
                     .body(request)
                     .retrieve()
                     .body(TossConfirmResponse.class);

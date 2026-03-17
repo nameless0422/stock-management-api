@@ -145,7 +145,7 @@ class ProductServiceTest {
             Page<Product> page = new PageImpl<>(List.of(product), pageable, 1);
             given(productRepository.findByStatus(ProductStatus.ACTIVE, pageable)).willReturn(page);
 
-            Page<ProductResponse> result = productService.getList(pageable);
+            Page<ProductResponse> result = productService.getList(pageable, null);
 
             assertThat(result.getTotalElements()).isEqualTo(1);
             assertThat(result.getContent().get(0).getName()).isEqualTo("테스트 상품");
@@ -158,7 +158,7 @@ class ProductServiceTest {
             given(productRepository.findByStatus(ProductStatus.ACTIVE, pageable))
                     .willReturn(Page.empty());
 
-            Page<ProductResponse> result = productService.getList(pageable);
+            Page<ProductResponse> result = productService.getList(pageable, null);
 
             assertThat(result).isEmpty();
         }
@@ -170,7 +170,7 @@ class ProductServiceTest {
             given(productRepository.findByStatus(ProductStatus.ACTIVE, pageable))
                     .willReturn(Page.empty());
 
-            productService.getList(pageable);
+            productService.getList(pageable, null);
 
             verify(productRepository).findByStatus(ProductStatus.ACTIVE, pageable);
         }

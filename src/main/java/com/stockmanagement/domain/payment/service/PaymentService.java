@@ -10,6 +10,7 @@ import com.stockmanagement.domain.order.service.OrderService;
 import com.stockmanagement.domain.payment.dto.*;
 import com.stockmanagement.domain.payment.entity.Payment;
 import com.stockmanagement.domain.payment.entity.PaymentStatus;
+import com.stockmanagement.domain.payment.infrastructure.PaymentIdempotencyManager;
 import com.stockmanagement.domain.payment.infrastructure.TossPaymentsClient;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossCancelRequest;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmRequest;
@@ -55,6 +56,7 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final OrderService orderService;
     private final TossPaymentsClient tossPaymentsClient;
+    private final PaymentIdempotencyManager idempotencyManager;
 
     /**
      * Prepares a payment session for the given order.
@@ -109,12 +111,13 @@ public class PaymentService {
      *
      * <p>Steps:
      * <ol>
-     *   <li>Finds the Payment by tossOrderId
-     *   <li>Re-validates the amount against the DB-stored value (prevents tampering)
-     *   <li>Returns immediately if already DONE (idempotent)
+     *   <li>Redis 완료 캐시 확인 → 있으면 즉시 반환 (idempotency)
+     *   <li>Redis SETNX로 PROCESSING 상태 선점 → 실패 시 처리 중 예외
+     *   <li>DB 상태 재확인 (Redis TTL 만료 후 재요청 대비 이중 안전장치)
      *   <li>Calls TossPayments confirmation API
      *   <li>Transitions Payment to DONE or FAILED
      *   <li>Calls {@link OrderService#confirm(Long)} → Order CONFIRMED + Inventory allocated
+     *   <li>결과를 Redis에 캐싱 (24h TTL)
      * </ol>
      *
      * @param request paymentKey, tossOrderId, and amount forwarded from the checkout widget
@@ -122,58 +125,84 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResponse confirm(PaymentConfirmRequest request) {
-        Payment payment = paymentRepository.findByTossOrderId(request.getTossOrderId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        String idempotencyKey = "confirm:" + request.getTossOrderId();
 
-        // Idempotency: already confirmed
-        if (payment.getStatus() == PaymentStatus.DONE) {
-            return PaymentResponse.from(payment);
+        // 1. Redis 완료 캐시 확인 (이전 성공 요청의 결과가 있으면 즉시 반환)
+        Optional<PaymentResponse> cached = idempotencyManager.getIfCompleted(idempotencyKey);
+        if (cached.isPresent()) {
+            return cached.get();
         }
 
-        // Reject requests for already-processed (non-PENDING) payments
-        if (payment.getStatus() != PaymentStatus.PENDING) {
-            throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED);
+        // 2. PROCESSING으로 원자적 선점 (SETNX) — 동시 요청 중 하나만 통과
+        if (!idempotencyManager.tryAcquire(idempotencyKey)) {
+            throw new BusinessException(ErrorCode.PAYMENT_PROCESSING_IN_PROGRESS);
         }
 
-        // Server-side amount re-verification (prevents client-side amount manipulation)
-        if (payment.getAmount().compareTo(request.getAmount()) != 0) {
-            throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
-        }
+        try {
+            Payment payment = paymentRepository.findByTossOrderId(request.getTossOrderId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
-        // Call TossPayments confirmation API
-        TossConfirmResponse tossResponse = tossPaymentsClient.confirm(
-                new TossConfirmRequest(request.getPaymentKey(), request.getTossOrderId(), request.getAmount())
-        );
-
-        // Handle payment failure
-        if (!"DONE".equals(tossResponse.getStatus())) {
-            String failureCode = null;
-            String failureMessage = null;
-            if (tossResponse.getFailure() != null) {
-                failureCode = tossResponse.getFailure().getCode();
-                failureMessage = tossResponse.getFailure().getMessage();
+            // 3. DB 상태 재확인 (Redis TTL 만료 후 재요청 시 이중 안전장치)
+            if (payment.getStatus() == PaymentStatus.DONE) {
+                PaymentResponse response = PaymentResponse.from(payment);
+                idempotencyManager.complete(idempotencyKey, response);
+                return response;
             }
-            payment.fail(failureCode, failureMessage);
-            log.warn("Payment failed: tossOrderId={}, code={}, message={}",
-                    request.getTossOrderId(), failureCode, failureMessage);
-            throw new BusinessException(ErrorCode.TOSS_PAYMENTS_ERROR,
-                    failureMessage != null ? failureMessage : "결제 승인 실패");
+
+            // Reject requests for already-processed (non-PENDING) payments
+            if (payment.getStatus() != PaymentStatus.PENDING) {
+                throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED);
+            }
+
+            // Server-side amount re-verification (prevents client-side amount manipulation)
+            if (payment.getAmount().compareTo(request.getAmount()) != 0) {
+                throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
+            }
+
+            // 4. Call TossPayments confirmation API
+            TossConfirmResponse tossResponse = tossPaymentsClient.confirm(
+                    new TossConfirmRequest(request.getPaymentKey(), request.getTossOrderId(), request.getAmount())
+            );
+
+            // Handle payment failure
+            if (!"DONE".equals(tossResponse.getStatus())) {
+                String failureCode = null;
+                String failureMessage = null;
+                if (tossResponse.getFailure() != null) {
+                    failureCode = tossResponse.getFailure().getCode();
+                    failureMessage = tossResponse.getFailure().getMessage();
+                }
+                payment.fail(failureCode, failureMessage);
+                log.warn("Payment failed: tossOrderId={}, code={}, message={}",
+                        request.getTossOrderId(), failureCode, failureMessage);
+                throw new BusinessException(ErrorCode.TOSS_PAYMENTS_ERROR,
+                        failureMessage != null ? failureMessage : "결제 승인 실패");
+            }
+
+            // 5. Transition payment to DONE
+            payment.approve(
+                    tossResponse.getPaymentKey(),
+                    tossResponse.getMethod(),
+                    parseDateTime(tossResponse.getRequestedAt()),
+                    parseDateTime(tossResponse.getApprovedAt())
+            );
+
+            // Confirm order: PENDING → CONFIRMED, and move inventory: reserved → allocated
+            orderService.confirm(payment.getOrderId());
+
+            // 6. 결과를 Redis에 캐싱 (24h TTL)
+            PaymentResponse response = PaymentResponse.from(payment);
+            idempotencyManager.complete(idempotencyKey, response);
+
+            log.info("Payment confirmed: paymentKey={}, orderId={}, amount={}",
+                    payment.getPaymentKey(), payment.getOrderId(), payment.getAmount());
+            return response;
+
+        } catch (Exception e) {
+            // 실패 시 Redis 키 삭제 → 클라이언트 재시도 허용
+            idempotencyManager.release(idempotencyKey);
+            throw e;
         }
-
-        // Transition payment to DONE
-        payment.approve(
-                tossResponse.getPaymentKey(),
-                tossResponse.getMethod(),
-                parseDateTime(tossResponse.getRequestedAt()),
-                parseDateTime(tossResponse.getApprovedAt())
-        );
-
-        // Confirm order: PENDING → CONFIRMED, and move inventory: reserved → allocated
-        orderService.confirm(payment.getOrderId());
-
-        log.info("Payment confirmed: paymentKey={}, orderId={}, amount={}",
-                payment.getPaymentKey(), payment.getOrderId(), payment.getAmount());
-        return PaymentResponse.from(payment);
     }
 
     /**
@@ -181,11 +210,13 @@ public class PaymentService {
      *
      * <p>Steps:
      * <ol>
-     *   <li>Finds the Payment by paymentKey
-     *   <li>Returns immediately if already CANCELLED (idempotent)
+     *   <li>Redis 완료 캐시 확인 → 있으면 즉시 반환 (idempotency)
+     *   <li>Redis SETNX로 PROCESSING 상태 선점 → 실패 시 처리 중 예외
+     *   <li>DB 상태 재확인 (Redis TTL 만료 후 재요청 대비 이중 안전장치)
      *   <li>Calls TossPayments cancellation API
      *   <li>Transitions Payment to CANCELLED
      *   <li>Calls {@link OrderService#refund(Long)} → Order CANCELLED + Inventory allocated released
+     *   <li>결과를 Redis에 캐싱 (24h TTL)
      * </ol>
      *
      * @param paymentKey TossPayments-assigned payment key
@@ -194,32 +225,58 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResponse cancel(String paymentKey, PaymentCancelRequest request) {
-        Payment payment = paymentRepository.findByPaymentKey(paymentKey)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        String idempotencyKey = "cancel:" + paymentKey;
 
-        // Idempotency: already cancelled
-        if (payment.getStatus() == PaymentStatus.CANCELLED) {
-            return PaymentResponse.from(payment);
+        // 1. Redis 완료 캐시 확인
+        Optional<PaymentResponse> cached = idempotencyManager.getIfCompleted(idempotencyKey);
+        if (cached.isPresent()) {
+            return cached.get();
         }
 
-        // Only DONE payments can be cancelled/refunded
-        if (payment.getStatus() != PaymentStatus.DONE) {
-            throw new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS);
+        // 2. PROCESSING으로 원자적 선점 (SETNX)
+        if (!idempotencyManager.tryAcquire(idempotencyKey)) {
+            throw new BusinessException(ErrorCode.PAYMENT_PROCESSING_IN_PROGRESS);
         }
 
-        // Call TossPayments cancellation API
-        tossPaymentsClient.cancel(paymentKey,
-                new TossCancelRequest(request.getCancelReason(), request.getCancelAmount()));
+        try {
+            Payment payment = paymentRepository.findByPaymentKey(paymentKey)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
-        // Transition payment to CANCELLED
-        payment.cancel(request.getCancelReason());
+            // 3. DB 상태 재확인 (이중 안전장치)
+            if (payment.getStatus() == PaymentStatus.CANCELLED) {
+                PaymentResponse response = PaymentResponse.from(payment);
+                idempotencyManager.complete(idempotencyKey, response);
+                return response;
+            }
 
-        // Refund order: CONFIRMED → CANCELLED, and release inventory: allocated → freed
-        orderService.refund(payment.getOrderId());
+            // Only DONE payments can be cancelled/refunded
+            if (payment.getStatus() != PaymentStatus.DONE) {
+                throw new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS);
+            }
 
-        log.info("Payment cancelled: paymentKey={}, orderId={}, reason={}",
-                paymentKey, payment.getOrderId(), request.getCancelReason());
-        return PaymentResponse.from(payment);
+            // 4. Call TossPayments cancellation API
+            tossPaymentsClient.cancel(paymentKey,
+                    new TossCancelRequest(request.getCancelReason(), request.getCancelAmount()));
+
+            // Transition payment to CANCELLED
+            payment.cancel(request.getCancelReason());
+
+            // Refund order: CONFIRMED → CANCELLED, and release inventory: allocated → freed
+            orderService.refund(payment.getOrderId());
+
+            // 5. 결과를 Redis에 캐싱 (24h TTL)
+            PaymentResponse response = PaymentResponse.from(payment);
+            idempotencyManager.complete(idempotencyKey, response);
+
+            log.info("Payment cancelled: paymentKey={}, orderId={}, reason={}",
+                    paymentKey, payment.getOrderId(), request.getCancelReason());
+            return response;
+
+        } catch (Exception e) {
+            // 실패 시 Redis 키 삭제 → 재시도 허용
+            idempotencyManager.release(idempotencyKey);
+            throw e;
+        }
     }
 
     /**
