@@ -8,6 +8,7 @@ import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.common.security.JwtBlacklist;
+import com.stockmanagement.common.security.RefreshTokenStore;
 import com.stockmanagement.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -40,6 +41,9 @@ class AuthControllerTest {
 
     @MockBean
     private JwtBlacklist jwtBlacklist;
+
+    @MockBean
+    private RefreshTokenStore refreshTokenStore;
 
     // ===== POST /api/auth/signup =====
 
@@ -108,9 +112,9 @@ class AuthControllerTest {
                 "{\"username\":\"testuser\",\"password\":\"password123\"}";
 
         @Test
-        @DisplayName("로그인 성공 (인증 불필요) — JWT 반환 → 200")
+        @DisplayName("로그인 성공 (인증 불필요) — JWT + Refresh Token 반환 → 200")
         void loginSuccess() throws Exception {
-            LoginResponse response = LoginResponse.of("jwt-token", 86400L);
+            LoginResponse response = LoginResponse.of("jwt-token", 86400L, "refresh-uuid");
             given(userService.login(any())).willReturn(response);
 
             mockMvc.perform(post("/api/auth/login")
@@ -119,7 +123,8 @@ class AuthControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.accessToken").value("jwt-token"))
-                    .andExpect(jsonPath("$.data.tokenType").value("Bearer"));
+                    .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+                    .andExpect(jsonPath("$.data.refreshToken").value("refresh-uuid"));
         }
 
         @Test
@@ -145,6 +150,41 @@ class AuthControllerTest {
         }
     }
 
+    // ===== POST /api/auth/refresh =====
+
+    @Nested
+    @DisplayName("POST /api/auth/refresh")
+    class Refresh {
+
+        @Test
+        @DisplayName("유효한 Refresh Token → 200, 새 Access Token + Refresh Token 반환")
+        void refreshSuccess() throws Exception {
+            LoginResponse response = LoginResponse.of("new-jwt-token", 86400L, "new-refresh-uuid");
+            given(userService.refresh(any())).willReturn(response);
+
+            mockMvc.perform(post("/api/auth/refresh")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"refreshToken\":\"old-refresh-uuid\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.accessToken").value("new-jwt-token"))
+                    .andExpect(jsonPath("$.data.refreshToken").value("new-refresh-uuid"));
+        }
+
+        @Test
+        @DisplayName("만료된 Refresh Token → 401")
+        void invalidRefreshToken() throws Exception {
+            given(userService.refresh(any()))
+                    .willThrow(new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN));
+
+            mockMvc.perform(post("/api/auth/refresh")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"refreshToken\":\"expired-token\"}"))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.success").value(false));
+        }
+    }
+
     // ===== POST /api/auth/logout =====
 
     @Nested
@@ -159,6 +199,5 @@ class AuthControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
-
     }
 }

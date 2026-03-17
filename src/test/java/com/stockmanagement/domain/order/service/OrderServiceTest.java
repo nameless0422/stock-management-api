@@ -11,6 +11,7 @@ import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderItem;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,6 +49,9 @@ class OrderServiceTest {
 
     @Mock
     private InventoryService inventoryService;
+
+    @Mock
+    private OrderStatusHistoryRepository historyRepository;
 
     @InjectMocks
     private OrderService orderService;

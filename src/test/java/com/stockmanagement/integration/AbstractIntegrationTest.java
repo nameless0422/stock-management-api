@@ -90,8 +90,10 @@ abstract class AbstractIntegrationTest {
         try (Connection conn = dataSource.getConnection();
              Statement stmt = conn.createStatement()) {
             // FK 참조 방향: order_items → orders → users / order_items → products ← inventory_transactions ← inventory
+            // order_status_history → orders (ON DELETE CASCADE로 자동 삭제되지만 명시적으로 먼저 삭제)
             stmt.execute("DELETE FROM order_items");
             stmt.execute("DELETE FROM payments");
+            stmt.execute("DELETE FROM order_status_history");
             stmt.execute("DELETE FROM orders");
             stmt.execute("DELETE FROM inventory_transactions");
             stmt.execute("DELETE FROM inventory");
