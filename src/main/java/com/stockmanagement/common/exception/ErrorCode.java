@@ -35,6 +35,7 @@ public enum ErrorCode {
     PAYMENT_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 결제입니다."),
     INVALID_PAYMENT_STATUS(HttpStatus.CONFLICT, "현재 결제 상태에서 허용되지 않는 작업입니다."),
     TOSS_PAYMENTS_ERROR(HttpStatus.BAD_GATEWAY, "결제 처리 중 오류가 발생했습니다."),
+    PAYMENT_PROCESSING_IN_PROGRESS(HttpStatus.CONFLICT, "결제가 처리 중입니다. 잠시 후 다시 시도해주세요."),
 
     // ===== User =====
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),

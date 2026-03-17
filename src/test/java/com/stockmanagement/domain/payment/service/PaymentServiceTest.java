@@ -9,6 +9,7 @@ import com.stockmanagement.domain.order.service.OrderService;
 import com.stockmanagement.domain.payment.dto.*;
 import com.stockmanagement.domain.payment.entity.Payment;
 import com.stockmanagement.domain.payment.entity.PaymentStatus;
+import com.stockmanagement.domain.payment.infrastructure.PaymentIdempotencyManager;
 import com.stockmanagement.domain.payment.infrastructure.TossPaymentsClient;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmResponse;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
@@ -27,6 +28,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
@@ -48,6 +50,9 @@ class PaymentServiceTest {
 
     @Mock
     private TossPaymentsClient tossPaymentsClient;
+
+    @Mock
+    private PaymentIdempotencyManager idempotencyManager;
 
     @InjectMocks
     private PaymentService paymentService;
@@ -71,6 +76,10 @@ class PaymentServiceTest {
                 .tossOrderId("toss-order-001")
                 .amount(new BigDecimal("10000"))
                 .build();
+
+        // 기본: Redis에 캐시 없음, 선점 항상 성공
+        lenient().when(idempotencyManager.getIfCompleted(anyString())).thenReturn(Optional.empty());
+        lenient().when(idempotencyManager.tryAcquire(anyString())).thenReturn(true);
     }
 
     // ===== prepare() =====
@@ -257,6 +266,38 @@ class PaymentServiceTest {
         }
 
         @Test
+        @DisplayName("Redis에 완료 캐시가 있으면 DB/Toss API 호출 없이 캐시 결과를 반환한다 (Redis 멱등성)")
+        void returnsCachedResponseWhenRedisHit() {
+            PaymentConfirmRequest request = mock(PaymentConfirmRequest.class);
+            given(request.getTossOrderId()).willReturn("toss-order-001");
+
+            PaymentResponse cached = mock(PaymentResponse.class);
+            given(idempotencyManager.getIfCompleted("confirm:toss-order-001"))
+                    .willReturn(Optional.of(cached));
+
+            PaymentResponse response = paymentService.confirm(request);
+
+            assertThat(response).isSameAs(cached);
+            verifyNoInteractions(paymentRepository, tossPaymentsClient, orderService);
+        }
+
+        @Test
+        @DisplayName("PROCESSING 선점 실패 시 PAYMENT_PROCESSING_IN_PROGRESS 예외 발생")
+        void throwsWhenProcessingInProgress() {
+            PaymentConfirmRequest request = mock(PaymentConfirmRequest.class);
+            given(request.getTossOrderId()).willReturn("toss-order-001");
+
+            given(idempotencyManager.tryAcquire("confirm:toss-order-001")).willReturn(false);
+
+            assertThatThrownBy(() -> paymentService.confirm(request))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.PAYMENT_PROCESSING_IN_PROGRESS));
+
+            verifyNoInteractions(paymentRepository, tossPaymentsClient, orderService);
+        }
+
+        @Test
         @DisplayName("Toss API가 DONE이 아닌 상태 반환 시 FAILED 전환 후 TOSS_PAYMENTS_ERROR 예외 발생")
         void failsWhenTossReturnsNonDoneStatus() {
             PaymentConfirmRequest request = mock(PaymentConfirmRequest.class);
@@ -329,6 +370,32 @@ class PaymentServiceTest {
             verifyNoInteractions(tossPaymentsClient);
             verifyNoInteractions(orderService);
             assertThat(response.getStatus()).isEqualTo(PaymentStatus.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("Redis에 완료 캐시가 있으면 DB/Toss API 호출 없이 캐시 결과를 반환한다 (Redis 멱등성)")
+        void returnsCachedResponseWhenRedisHit() {
+            PaymentResponse cached = mock(PaymentResponse.class);
+            given(idempotencyManager.getIfCompleted("cancel:pk-001"))
+                    .willReturn(Optional.of(cached));
+
+            PaymentResponse response = paymentService.cancel("pk-001", mock(PaymentCancelRequest.class));
+
+            assertThat(response).isSameAs(cached);
+            verifyNoInteractions(paymentRepository, tossPaymentsClient, orderService);
+        }
+
+        @Test
+        @DisplayName("PROCESSING 선점 실패 시 PAYMENT_PROCESSING_IN_PROGRESS 예외 발생")
+        void throwsWhenProcessingInProgress() {
+            given(idempotencyManager.tryAcquire("cancel:pk-001")).willReturn(false);
+
+            assertThatThrownBy(() -> paymentService.cancel("pk-001", mock(PaymentCancelRequest.class)))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.PAYMENT_PROCESSING_IN_PROGRESS));
+
+            verifyNoInteractions(paymentRepository, tossPaymentsClient, orderService);
         }
 
         @Test

@@ -146,7 +146,7 @@ class ProductControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 상품 목록 페이징 조회 → 200")
         void returnsList() throws Exception {
-            given(productService.getList(any(Pageable.class)))
+            given(productService.getList(any(Pageable.class), any()))
                     .willReturn(new PageImpl<>(List.of()));
 
             mockMvc.perform(get("/api/products"))
