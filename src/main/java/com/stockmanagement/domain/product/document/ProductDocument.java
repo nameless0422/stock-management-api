@@ -63,7 +63,7 @@ public class ProductDocument {
                 .description(product.getDescription())
                 .price(product.getPrice() != null ? product.getPrice().doubleValue() : 0)
                 .sku(product.getSku())
-                .category(product.getCategory())
+                .category(product.getCategoryName())
                 .status(product.getStatus() != null ? product.getStatus().name() : null)
                 .createdAt(product.getCreatedAt())
                 .build();

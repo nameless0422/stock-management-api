@@ -2,6 +2,8 @@ package com.stockmanagement.domain.product.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.product.category.entity.Category;
+import com.stockmanagement.domain.product.category.repository.CategoryRepository;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
 import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.dto.ProductSearchRequest;
@@ -37,22 +39,25 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final ProductSearchService productSearchService;
+    private final CategoryRepository categoryRepository;
 
     /**
      * 상품을 등록한다.
      * SKU 중복 여부를 먼저 확인해 충돌을 방지한다.
+     * categoryId가 있으면 Category를 조회해 연결한다.
      */
     @Transactional
     public ProductResponse create(ProductCreateRequest request) {
         if (productRepository.existsBySku(request.getSku())) {
             throw new BusinessException(ErrorCode.DUPLICATE_SKU);
         }
+        Category category = resolveCategory(request.getCategoryId());
         Product product = Product.builder()
                 .name(request.getName())
                 .description(request.getDescription())
                 .price(request.getPrice())
                 .sku(request.getSku())
-                .category(request.getCategory())
+                .category(category)
                 .build();
         Product saved = productRepository.save(product);
         safeIndex(saved);
@@ -101,8 +106,8 @@ public class ProductService {
     @CachePut(cacheNames = "products", key = "#id")
     public ProductResponse update(Long id, ProductUpdateRequest request) {
         Product product = findById(id);
-        product.update(request.getName(), request.getDescription(),
-                request.getPrice(), request.getCategory());
+        Category category = resolveCategory(request.getCategoryId());
+        product.update(request.getName(), request.getDescription(), request.getPrice(), category);
         safeIndex(product);
         return ProductResponse.from(product);
     }
@@ -135,10 +140,19 @@ public class ProductService {
         return ProductResponse.from(product);
     }
 
+    // ===== 내부 헬퍼 =====
+
     /** 공통 조회 헬퍼 — 없으면 PRODUCT_NOT_FOUND 예외 발생 */
     private Product findById(Long id) {
         return productRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    /** categoryId가 있으면 Category 조회, null이면 null 반환 */
+    private Category resolveCategory(Long categoryId) {
+        if (categoryId == null) return null;
+        return categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
     }
 
     /** ES 색인을 시도하고 실패해도 CRUD 흐름을 중단하지 않는다. */

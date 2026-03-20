@@ -20,12 +20,33 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
     }
 
     private long createProduct(String adminToken, String name, String sku, int price, String category) throws Exception {
-        String categoryJson = category != null ? ",\"category\":\"" + category + "\"" : "";
+        Long categoryId = null;
+        if (category != null) {
+            // 카테고리 목록에서 동일 이름이 있으면 재사용, 없으면 생성
+            String listBody = mockMvc.perform(get("/api/categories")).andReturn().getResponse().getContentAsString();
+            com.fasterxml.jackson.databind.JsonNode cats = objectMapper.readTree(listBody).path("data");
+            for (com.fasterxml.jackson.databind.JsonNode cat : cats) {
+                if (category.equals(cat.path("name").asText())) {
+                    categoryId = cat.path("id").asLong();
+                    break;
+                }
+            }
+            if (categoryId == null) {
+                String catBody = mockMvc.perform(post("/api/categories")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(String.format("{\"name\":\"%s\"}", category)))
+                        .andExpect(status().isCreated())
+                        .andReturn().getResponse().getContentAsString();
+                categoryId = objectMapper.readTree(catBody).path("data").path("id").asLong();
+            }
+        }
+        String catPart = categoryId != null ? ",\"categoryId\":" + categoryId : "";
         String body = mockMvc.perform(post("/api/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
-                                "{\"name\":\"%s\",\"sku\":\"%s\",\"price\":%d%s}", name, sku, price, categoryJson)))
+                                "{\"name\":\"%s\",\"sku\":\"%s\",\"price\":%d%s}", name, sku, price, catPart)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("data").path("id").asLong();

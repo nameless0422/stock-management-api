@@ -28,6 +28,9 @@ public class ProductResponse {
     private final String description;
     private final BigDecimal price;
     private final String sku;
+    /** 카테고리 ID — null이면 미분류 */
+    private final Long categoryId;
+    /** 카테고리 이름 — ES 검색 호환성 및 UI 표시용 */
     private final String category;
     private final ProductStatus status;
     private final LocalDateTime createdAt;
@@ -41,7 +44,8 @@ public class ProductResponse {
                 .description(product.getDescription())
                 .price(product.getPrice())
                 .sku(product.getSku())
-                .category(product.getCategory())
+                .categoryId(product.getCategory() != null ? product.getCategory().getId() : null)
+                .category(product.getCategoryName())
                 .status(product.getStatus())
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())

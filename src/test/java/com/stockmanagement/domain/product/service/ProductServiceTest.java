@@ -2,6 +2,7 @@ package com.stockmanagement.domain.product.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.product.category.repository.CategoryRepository;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
 import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.dto.ProductUpdateRequest;
@@ -41,10 +42,13 @@ class ProductServiceTest {
     @Mock
     private ProductSearchService productSearchService;
 
+    @Mock
+    private CategoryRepository categoryRepository;
+
     @InjectMocks
     private ProductService productService;
 
-    /** 공통 픽스처 — 저장 완료 상태를 가정한 Product */
+    /** 공통 픽스처 — 저장 완료 상태를 가정한 Product (카테고리 없음) */
     private Product product;
 
     @BeforeEach
@@ -54,7 +58,6 @@ class ProductServiceTest {
                 .description("상품 설명")
                 .price(new BigDecimal("10000"))
                 .sku("SKU-001")
-                .category("전자기기")
                 .build();
     }
 
@@ -69,13 +72,13 @@ class ProductServiceTest {
         @BeforeEach
         void setUp() {
             // ProductCreateRequest는 공개 생성자가 없으므로 Mock으로 생성
-            // lenient: SKU 중복 예외 경로에서는 name/description/price/category getter가 호출되지 않음
+            // lenient: SKU 중복 예외 경로에서는 name/description/price/categoryId getter가 호출되지 않음
             request = mock(ProductCreateRequest.class);
             lenient().when(request.getName()).thenReturn("테스트 상품");
             lenient().when(request.getDescription()).thenReturn("상품 설명");
             lenient().when(request.getPrice()).thenReturn(new BigDecimal("10000"));
             lenient().when(request.getSku()).thenReturn("SKU-001");
-            lenient().when(request.getCategory()).thenReturn("전자기기");
+            lenient().when(request.getCategoryId()).thenReturn(null); // 미분류
         }
 
         @Test
@@ -190,12 +193,12 @@ class ProductServiceTest {
         @BeforeEach
         void setUp() {
             // ProductUpdateRequest는 공개 생성자가 없으므로 Mock으로 생성
-            // lenient: 미존재 예외 경로에서는 name/description/price/category getter가 호출되지 않음
+            // lenient: 미존재 예외 경로에서는 name/description/price/categoryId getter가 호출되지 않음
             request = mock(ProductUpdateRequest.class);
             lenient().when(request.getName()).thenReturn("수정된 상품명");
             lenient().when(request.getDescription()).thenReturn("수정된 설명");
             lenient().when(request.getPrice()).thenReturn(new BigDecimal("20000"));
-            lenient().when(request.getCategory()).thenReturn("가전");
+            lenient().when(request.getCategoryId()).thenReturn(null); // 미분류로 변경
         }
 
         @Test
@@ -209,7 +212,7 @@ class ProductServiceTest {
             assertThat(response.getName()).isEqualTo("수정된 상품명");
             assertThat(response.getDescription()).isEqualTo("수정된 설명");
             assertThat(response.getPrice()).isEqualByComparingTo("20000");
-            assertThat(response.getCategory()).isEqualTo("가전");
+            assertThat(response.getCategory()).isNull(); // categoryId=null → 미분류
             verify(productRepository, never()).save(any());
         }
 
