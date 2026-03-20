@@ -85,6 +85,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/inventory/**").hasRole("ADMIN")
                         // 배송 상태 변경 (출고/완료/반품)은 ADMIN 전용
                         .requestMatchers(HttpMethod.PATCH, "/api/shipments/**").hasRole("ADMIN")
+                        // 카테고리 조회 공개, 관리 (생성/수정/삭제)는 ADMIN 전용
+                        .requestMatchers(HttpMethod.GET, "/api/categories/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/categories").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/categories/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/categories/**").hasRole("ADMIN")
+                        // 쿠폰 관리 (생성/비활성화)는 ADMIN 전용
+                        .requestMatchers(HttpMethod.POST, "/api/coupons").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/coupons/**").hasRole("ADMIN")
                         // 나머지는 인증 필요
                         .anyRequest().authenticated()
                 )
