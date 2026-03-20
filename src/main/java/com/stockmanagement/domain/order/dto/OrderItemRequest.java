@@ -35,4 +35,13 @@ public class OrderItemRequest {
     @NotNull(message = "단가는 필수입니다.")
     @DecimalMin(value = "0.01", message = "단가는 0보다 커야 합니다.")
     private BigDecimal unitPrice;
+
+    /** 장바구니 결제 전환 등 내부 호출용 팩토리 메서드. */
+    public static OrderItemRequest of(Long productId, int quantity, BigDecimal unitPrice) {
+        OrderItemRequest req = new OrderItemRequest();
+        req.productId = productId;
+        req.quantity = quantity;
+        req.unitPrice = unitPrice;
+        return req;
+    }
 }

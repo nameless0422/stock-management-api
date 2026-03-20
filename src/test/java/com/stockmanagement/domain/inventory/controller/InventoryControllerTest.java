@@ -4,7 +4,6 @@ import com.stockmanagement.common.config.SecurityConfig;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.inventory.dto.InventoryResponse;
-import com.stockmanagement.domain.inventory.dto.InventoryTransactionResponse;
 import com.stockmanagement.domain.inventory.service.InventoryService;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.security.JwtTokenProvider;
@@ -15,11 +14,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -46,6 +44,67 @@ class InventoryControllerTest {
 
     @MockBean
     private JwtBlacklist jwtBlacklist;
+
+    // ===== GET /api/inventory =====
+
+    @Nested
+    @DisplayName("GET /api/inventory")
+    class Search {
+
+        @Test
+        @WithMockUser
+        @DisplayName("인증된 사용자 — 필터 없이 조회 → 200, Page 구조 반환")
+        void returnsPage() throws Exception {
+            given(inventoryService.search(any(), any())).willReturn(Page.empty());
+
+            mockMvc.perform(get("/api/inventory"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.content").isArray());
+        }
+
+        @Test
+        @WithMockUser
+        @DisplayName("status=LOW_STOCK 파라미터 → 200")
+        void filterByStatus() throws Exception {
+            given(inventoryService.search(any(), any())).willReturn(Page.empty());
+
+            mockMvc.perform(get("/api/inventory").param("status", "LOW_STOCK"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @WithMockUser
+        @DisplayName("productName + category + 가용 범위 복합 파라미터 → 200")
+        void filterByMultipleParams() throws Exception {
+            given(inventoryService.search(any(), any())).willReturn(Page.empty());
+
+            mockMvc.perform(get("/api/inventory")
+                            .param("productName", "노트북")
+                            .param("category", "전자기기")
+                            .param("minAvailable", "5")
+                            .param("maxAvailable", "100")
+                            .param("page", "0")
+                            .param("size", "10"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @WithMockUser
+        @DisplayName("잘못된 status 값 → 400")
+        void invalidStatusParam_returns400() throws Exception {
+            mockMvc.perform(get("/api/inventory").param("status", "INVALID_STATUS"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("인증 없음 → 403")
+        void unauthorizedWithoutAuth() throws Exception {
+            mockMvc.perform(get("/api/inventory"))
+                    .andExpect(status().isForbidden());
+        }
+    }
 
     // ===== GET /api/inventory/{productId} =====
 
@@ -94,7 +153,7 @@ class InventoryControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 이력 조회 → 200")
         void returnsTransactions() throws Exception {
-            given(inventoryService.getTransactions(1L)).willReturn(List.of(mock(InventoryTransactionResponse.class)));
+            given(inventoryService.getTransactions(eq(1L), any())).willReturn(Page.empty());
 
             mockMvc.perform(get("/api/inventory/1/transactions"))
                     .andExpect(status().isOk())
@@ -112,7 +171,7 @@ class InventoryControllerTest {
         @WithMockUser
         @DisplayName("재고가 없는 상품 이력 조회 → 404")
         void returnsNotFoundWhenInventoryMissing() throws Exception {
-            given(inventoryService.getTransactions(999L))
+            given(inventoryService.getTransactions(eq(999L), any()))
                     .willThrow(new BusinessException(ErrorCode.INVENTORY_NOT_FOUND));
 
             mockMvc.perform(get("/api/inventory/999/transactions"))

@@ -4,12 +4,14 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
 import com.stockmanagement.domain.product.dto.ProductResponse;
+import com.stockmanagement.domain.product.dto.ProductSearchRequest;
 import com.stockmanagement.domain.product.dto.ProductStatusRequest;
 import com.stockmanagement.domain.product.dto.ProductUpdateRequest;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
@@ -27,12 +29,14 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>쓰기 메서드: {@code @Transactional} 으로 개별 오버라이드
  * </ul>
  */
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final ProductSearchService productSearchService;
 
     /**
      * 상품을 등록한다.
@@ -50,7 +54,9 @@ public class ProductService {
                 .sku(request.getSku())
                 .category(request.getCategory())
                 .build();
-        return ProductResponse.from(productRepository.save(product));
+        Product saved = productRepository.save(product);
+        safeIndex(saved);
+        return ProductResponse.from(saved);
     }
 
     /** 단건 조회 — 캐시 hit 시 Redis에서 반환, miss 시 DB 조회 후 캐싱 */
@@ -59,11 +65,20 @@ public class ProductService {
         return ProductResponse.from(findById(id));
     }
 
-    /** ACTIVE 상태인 상품만 페이징 조회. search가 있으면 상품명/SKU로 필터링 */
-    public Page<ProductResponse> getList(Pageable pageable, String search) {
-        if (search != null && !search.isBlank()) {
-            return productRepository.searchByStatus(ProductStatus.ACTIVE, search, pageable)
-                    .map(ProductResponse::from);
+    /**
+     * 상품 목록을 조회한다.
+     *
+     * <p>검색 조건({@code q}, {@code minPrice}, {@code maxPrice}, {@code category}, {@code sort})이
+     * 하나라도 있으면 Elasticsearch로 검색하고, 없으면 MySQL 페이징 조회를 사용한다.
+     * ES 장애 시 MySQL로 fallback하여 서비스 가용성을 유지한다.
+     */
+    public Page<ProductResponse> getList(Pageable pageable, ProductSearchRequest request) {
+        if (request != null && request.hasSearchCondition()) {
+            try {
+                return productSearchService.search(request, pageable);
+            } catch (Exception e) {
+                log.warn("Elasticsearch 검색 실패, MySQL fallback 사용. query={}", request.getQ(), e);
+            }
         }
         return productRepository.findByStatus(ProductStatus.ACTIVE, pageable)
                 .map(ProductResponse::from);
@@ -88,6 +103,7 @@ public class ProductService {
         Product product = findById(id);
         product.update(request.getName(), request.getDescription(),
                 request.getPrice(), request.getCategory());
+        safeIndex(product);
         return ProductResponse.from(product);
     }
 
@@ -101,6 +117,7 @@ public class ProductService {
     public void delete(Long id) {
         Product product = findById(id);
         product.changeStatus(ProductStatus.DISCONTINUED);
+        safeDeleteFromIndex(id);
     }
 
     /** 상품 판매 상태를 변경한다 (ACTIVE ↔ DISCONTINUED). */
@@ -109,6 +126,12 @@ public class ProductService {
     public ProductResponse changeStatus(Long id, ProductStatusRequest request) {
         Product product = findById(id);
         product.changeStatus(request.getStatus());
+        // ACTIVE → 색인, DISCONTINUED → 색인 삭제
+        if (request.getStatus() == ProductStatus.ACTIVE) {
+            safeIndex(product);
+        } else {
+            safeDeleteFromIndex(id);
+        }
         return ProductResponse.from(product);
     }
 
@@ -116,5 +139,23 @@ public class ProductService {
     private Product findById(Long id) {
         return productRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    /** ES 색인을 시도하고 실패해도 CRUD 흐름을 중단하지 않는다. */
+    private void safeIndex(Product product) {
+        try {
+            productSearchService.index(product);
+        } catch (Exception e) {
+            log.warn("Elasticsearch 색인 실패. productId={}", product.getId(), e);
+        }
+    }
+
+    /** ES 색인 삭제를 시도하고 실패해도 CRUD 흐름을 중단하지 않는다. */
+    private void safeDeleteFromIndex(Long productId) {
+        try {
+            productSearchService.deleteFromIndex(productId);
+        } catch (Exception e) {
+            log.warn("Elasticsearch 색인 삭제 실패. productId={}", productId, e);
+        }
     }
 }

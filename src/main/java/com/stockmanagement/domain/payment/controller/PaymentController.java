@@ -3,6 +3,7 @@ package com.stockmanagement.domain.payment.controller;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.domain.payment.dto.*;
 import com.stockmanagement.domain.payment.infrastructure.TossWebhookVerifier;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
@@ -46,6 +47,7 @@ public class PaymentController {
 
     @Operation(summary = "결제 승인", description = "결제창 완료 후 paymentKey로 호출. Order → CONFIRMED, reserved→allocated.")
     @PostMapping("/confirm")
+    @RateLimit(limit = 5, windowSeconds = 60)
     public ResponseEntity<ApiResponse<PaymentResponse>> confirm(
             @RequestBody @Valid PaymentConfirmRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(paymentService.confirm(request)));

@@ -10,10 +10,13 @@ import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderItem;
 import com.stockmanagement.domain.order.entity.OrderStatus;
+import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.user.entity.User;
+import com.stockmanagement.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -52,6 +55,9 @@ class OrderServiceTest {
 
     @Mock
     private OrderStatusHistoryRepository historyRepository;
+
+    @Mock
+    private UserRepository userRepository;
 
     @InjectMocks
     private OrderService orderService;
@@ -235,16 +241,31 @@ class OrderServiceTest {
     class GetList {
 
         @Test
-        @DisplayName("주문 목록을 페이징하여 반환한다")
-        void returnsPagedOrders() {
+        @DisplayName("ADMIN — 필터 없이 전체 주문 반환")
+        void admin_returnsAllOrders() {
             Pageable pageable = PageRequest.of(0, 10);
-            given(orderRepository.findAll(pageable))
+            given(orderRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class)))
                     .willReturn(new PageImpl<>(List.of(order), pageable, 1));
 
-            Page<OrderResponse> result = orderService.getList(pageable);
+            Page<OrderResponse> result = orderService.getList("admin", true, new OrderSearchRequest(), pageable);
 
             assertThat(result.getTotalElements()).isEqualTo(1);
             assertThat(result.getContent().get(0).getIdempotencyKey()).isEqualTo("idem-key-001");
+        }
+
+        @Test
+        @DisplayName("USER — 본인 userId로 강제 필터링")
+        void user_filtersOwnOrdersOnly() {
+            Pageable pageable = PageRequest.of(0, 10);
+            User mockUser = mock(User.class);
+            given(mockUser.getId()).willReturn(1L);
+            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser));
+            given(orderRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class)))
+                    .willReturn(new PageImpl<>(List.of(order), pageable, 1));
+
+            Page<OrderResponse> result = orderService.getList("user1", false, new OrderSearchRequest(), pageable);
+
+            assertThat(result.getTotalElements()).isEqualTo(1);
         }
     }
 

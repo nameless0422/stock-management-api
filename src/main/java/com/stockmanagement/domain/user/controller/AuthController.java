@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.user.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.RefreshTokenStore;
 import com.stockmanagement.domain.user.dto.LoginRequest;
@@ -39,6 +40,7 @@ public class AuthController {
     @Operation(summary = "회원가입", description = "username 중복 시 409.")
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)
+    @RateLimit(limit = 5, windowSeconds = 3600, keyType = RateLimit.KeyType.IP)
     public ApiResponse<UserResponse> signup(@RequestBody @Valid SignupRequest request) {
         return ApiResponse.ok(userService.signup(request));
     }

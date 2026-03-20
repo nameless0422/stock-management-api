@@ -121,10 +121,12 @@ class ProductControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
-        void unauthorizedWithoutAuth() throws Exception {
+        @DisplayName("인증 없음 → 200 (상품 조회 공개 허용)")
+        void allowsUnauthenticatedAccess() throws Exception {
+            given(productService.getById(1L)).willReturn(mock(ProductResponse.class));
+
             mockMvc.perform(get("/api/products/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isOk());
         }
 
         @Test

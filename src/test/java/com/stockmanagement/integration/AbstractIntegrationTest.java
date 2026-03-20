@@ -1,13 +1,16 @@
 package com.stockmanagement.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stockmanagement.domain.product.document.ProductDocument;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
@@ -16,6 +19,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -49,9 +53,16 @@ abstract class AbstractIntegrationTest {
     static final GenericContainer REDIS =
             new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
 
+    @SuppressWarnings("resource")
+    static final ElasticsearchContainer ELASTICSEARCH =
+            new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:8.18.0")
+                    .withEnv("xpack.security.enabled", "false")
+                    .withEnv("ES_JAVA_OPTS", "-Xms256m -Xmx256m");
+
     static {
         MYSQL.start();
         REDIS.start();
+        ELASTICSEARCH.start();
     }
 
     /**
@@ -74,6 +85,9 @@ abstract class AbstractIntegrationTest {
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         registry.add("spring.cache.type",      () -> "redis");
+
+        // Elasticsearch
+        registry.add("spring.elasticsearch.uris", () -> "http://" + ELASTICSEARCH.getHttpHostAddress());
     }
 
     // ===== Spring Beans =====
@@ -83,6 +97,8 @@ abstract class AbstractIntegrationTest {
     @Autowired protected UserRepository userRepository;
     @Autowired protected PasswordEncoder passwordEncoder;
     @Autowired private DataSource dataSource;
+    @Autowired private RedissonClient redissonClient;
+    @Autowired private ElasticsearchOperations elasticsearchOperations;
 
     /** 각 테스트 후 모든 테이블을 FK 순서대로 DELETE하여 테스트 간 격리를 보장한다. */
     @AfterEach
@@ -91,15 +107,26 @@ abstract class AbstractIntegrationTest {
              Statement stmt = conn.createStatement()) {
             // FK 참조 방향: order_items → orders → users / order_items → products ← inventory_transactions ← inventory
             // order_status_history → orders (ON DELETE CASCADE로 자동 삭제되지만 명시적으로 먼저 삭제)
+            stmt.execute("DELETE FROM cart_items");
+            stmt.execute("DELETE FROM shipments");
             stmt.execute("DELETE FROM order_items");
             stmt.execute("DELETE FROM payments");
             stmt.execute("DELETE FROM order_status_history");
-            stmt.execute("DELETE FROM orders");
+            stmt.execute("DELETE FROM orders");          // delivery_address_id FK → delivery_addresses
+            stmt.execute("DELETE FROM delivery_addresses");
             stmt.execute("DELETE FROM inventory_transactions");
             stmt.execute("DELETE FROM inventory");
             stmt.execute("DELETE FROM products");
             stmt.execute("DELETE FROM users");
         }
+        // Redis 전체 초기화 — 캐시·rate limit 카운터 테스트 간 격리
+        redissonClient.getKeys().flushall();
+
+        // Elasticsearch products 인덱스 초기화 — 테스트 간 격리
+        try {
+            elasticsearchOperations.indexOps(ProductDocument.class).delete();
+            elasticsearchOperations.indexOps(ProductDocument.class).createWithMapping();
+        } catch (Exception ignored) { }
     }
 
     // ===== 공통 헬퍼 =====

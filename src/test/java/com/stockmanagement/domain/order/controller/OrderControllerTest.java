@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -150,7 +151,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 주문 목록 페이징 조회 → 200")
         void returnsList() throws Exception {
-            given(orderService.getList(any(Pageable.class)))
+            given(orderService.getList(any(), anyBoolean(), any(), any(Pageable.class)))
                     .willReturn(new PageImpl<>(List.of()));
 
             mockMvc.perform(get("/api/orders"))

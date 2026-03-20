@@ -75,12 +75,16 @@ public class SecurityConfig {
                         .requestMatchers("/admin-page/**").permitAll()
                         // 결제 테스트 페이지
                         .requestMatchers("/payment-test.html").permitAll()
+                        // 상품 조회 — 비로그인 허용 (쇼핑몰 특성상 누구나 열람 가능)
+                        .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         // ADMIN 전용
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/products").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/products/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/inventory/**").hasRole("ADMIN")
+                        // 배송 상태 변경 (출고/완료/반품)은 ADMIN 전용
+                        .requestMatchers(HttpMethod.PATCH, "/api/shipments/**").hasRole("ADMIN")
                         // 나머지는 인증 필요
                         .anyRequest().authenticated()
                 )

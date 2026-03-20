@@ -39,6 +39,19 @@ public enum ErrorCode {
     PAYMENT_PROCESSING_IN_PROGRESS(HttpStatus.CONFLICT, "결제가 처리 중입니다. 잠시 후 다시 시도해주세요."),
     WEBHOOK_SIGNATURE_INVALID(HttpStatus.UNAUTHORIZED, "유효하지 않은 웹훅 서명입니다."),
 
+    // ===== DeliveryAddress =====
+    DELIVERY_ADDRESS_NOT_FOUND(HttpStatus.NOT_FOUND, "배송지를 찾을 수 없습니다."),
+    DELIVERY_ADDRESS_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 배송지만 접근할 수 있습니다."),
+
+    // ===== Cart =====
+    CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니에서 해당 상품을 찾을 수 없습니다."),
+    CART_EMPTY(HttpStatus.BAD_REQUEST, "장바구니가 비어 있습니다."),
+
+    // ===== Shipment =====
+    SHIPMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "배송 정보를 찾을 수 없습니다."),
+    SHIPMENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 배송이 생성된 주문입니다."),
+    INVALID_SHIPMENT_STATUS(HttpStatus.CONFLICT, "현재 배송 상태에서 허용되지 않는 작업입니다."),
+
     // ===== User =====
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
     DUPLICATE_USERNAME(HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다."),
@@ -50,7 +63,8 @@ public enum ErrorCode {
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "잘못된 입력값입니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),
     LOCK_ACQUISITION_FAILED(HttpStatus.TOO_MANY_REQUESTS, "현재 요청이 많습니다. 잠시 후 다시 시도해주세요."),
-    TOO_MANY_LOGIN_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해주세요.");
+    TOO_MANY_LOGIN_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해주세요."),
+    TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.");
 
     private final HttpStatus httpStatus;
     /** 클라이언트에 그대로 전달되는 메시지 — 민감 정보를 포함하지 않아야 한다. */

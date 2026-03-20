@@ -16,15 +16,16 @@ import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
+import java.util.Map;
 
 /**
  * Redis Cache 설정.
  *
  * <p>캐시 전략:
  * <ul>
- *   <li>TTL: 10분 (상품 정보는 변경 빈도 낮음)
  *   <li>직렬화: JSON (타입 정보 포함 — 역직렬화 시 정확한 타입 복원)
- *   <li>null 캐싱: 비활성화 (PRODUCT_NOT_FOUND 예외가 캐싱되지 않도록)
+ *   <li>null 캐싱: 비활성화 (NOT_FOUND 예외가 캐싱되지 않도록)
+ *   <li>TTL: 캐시별 상이 — products(10분), inventory(5분), orders(5분)
  * </ul>
  */
 @EnableCaching
@@ -46,16 +47,25 @@ public class CacheConfig {
                         JsonTypeInfo.As.PROPERTY
                 );
 
-        RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofMinutes(10))
+        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(cacheMapper);
+
+        RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
-                        .fromSerializer(new GenericJackson2JsonRedisSerializer(cacheMapper)));
+                        .fromSerializer(serializer));
 
         return RedisCacheManager.builder(connectionFactory)
-                .cacheDefaults(config)
+                .cacheDefaults(base.entryTtl(Duration.ofMinutes(10)))
+                .withInitialCacheConfigurations(Map.of(
+                        // 상품: 변경 빈도 낮음 — 10분
+                        "products", base.entryTtl(Duration.ofMinutes(10)),
+                        // 재고: 주문마다 변경 → 5분 + 명시적 evict
+                        "inventory", base.entryTtl(Duration.ofMinutes(5)),
+                        // 주문: 상태 변경 가능 → 5분 + 명시적 evict
+                        "orders", base.entryTtl(Duration.ofMinutes(5))
+                ))
                 .build();
     }
 }

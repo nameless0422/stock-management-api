@@ -67,6 +67,10 @@ public class Order {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private final List<OrderItem> items = new ArrayList<>();
 
+    /** 선택된 배송지 ID — nullable (배송지 미선택 시 null) */
+    @Column(name = "delivery_address_id")
+    private Long deliveryAddressId;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -76,11 +80,13 @@ public class Order {
     private LocalDateTime updatedAt;
 
     @Builder
-    private Order(Long userId, BigDecimal totalAmount, String idempotencyKey) {
+    private Order(Long userId, BigDecimal totalAmount, String idempotencyKey,
+                  Long deliveryAddressId) {
         this.userId = userId;
         this.status = OrderStatus.PENDING;
         this.totalAmount = totalAmount;
         this.idempotencyKey = idempotencyKey;
+        this.deliveryAddressId = deliveryAddressId;
     }
 
     // ===== 비즈니스 메서드 =====

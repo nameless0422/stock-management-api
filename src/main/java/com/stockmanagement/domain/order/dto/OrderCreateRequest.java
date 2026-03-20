@@ -36,8 +36,21 @@ public class OrderCreateRequest {
     @Size(max = 100, message = "멱등성 키는 100자 이하여야 합니다.")
     private String idempotencyKey;
 
+    /** 배송지 ID — 선택 항목. null이면 배송지 미지정 */
+    private Long deliveryAddressId;
+
     /** 주문 항목 목록 — 최소 1개 이상 */
     @NotEmpty(message = "주문 항목은 1개 이상이어야 합니다.")
     @Valid
     private List<OrderItemRequest> items;
+
+    /** 장바구니 결제 전환 등 내부 호출용 팩토리 메서드. */
+    public static OrderCreateRequest of(Long userId, String idempotencyKey,
+                                        List<OrderItemRequest> items) {
+        OrderCreateRequest req = new OrderCreateRequest();
+        req.userId = userId;
+        req.idempotencyKey = idempotencyKey;
+        req.items = items;
+        return req;
+    }
 }

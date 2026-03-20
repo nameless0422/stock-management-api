@@ -1,7 +1,9 @@
 package com.stockmanagement.domain.order.dto;
 
 import com.stockmanagement.domain.order.entity.OrderItem;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.extern.jackson.Jacksonized;
 
 import java.math.BigDecimal;
 
@@ -9,8 +11,11 @@ import java.math.BigDecimal;
  * 주문 항목 응답 DTO.
  *
  * <p>{@link OrderItem} 엔티티를 클라이언트에게 노출할 형태로 변환한다.
+ * {@code @Jacksonized}로 Redis 캐시 역직렬화를 지원한다.
  */
 @Getter
+@Builder
+@Jacksonized
 public class OrderItemResponse {
 
     private final Long id;
@@ -28,17 +33,15 @@ public class OrderItemResponse {
     /** 소계 = unitPrice × quantity */
     private final BigDecimal subtotal;
 
-    private OrderItemResponse(OrderItem item) {
-        this.id = item.getId();
-        this.productId = item.getProduct().getId();
-        this.productName = item.getProduct().getName();
-        this.quantity = item.getQuantity();
-        this.unitPrice = item.getUnitPrice();
-        this.subtotal = item.getSubtotal();
-    }
-
     /** OrderItem 엔티티를 응답 DTO로 변환하는 정적 팩토리 메서드 */
     public static OrderItemResponse from(OrderItem item) {
-        return new OrderItemResponse(item);
+        return OrderItemResponse.builder()
+                .id(item.getId())
+                .productId(item.getProduct().getId())
+                .productName(item.getProduct().getName())
+                .quantity(item.getQuantity())
+                .unitPrice(item.getUnitPrice())
+                .subtotal(item.getSubtotal())
+                .build();
     }
 }
