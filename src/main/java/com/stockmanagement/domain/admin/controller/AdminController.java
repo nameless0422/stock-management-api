@@ -5,6 +5,8 @@ import com.stockmanagement.domain.admin.dto.AdminOrderResponse;
 import com.stockmanagement.domain.admin.dto.DashboardResponse;
 import com.stockmanagement.domain.admin.dto.RoleUpdateRequest;
 import com.stockmanagement.domain.admin.service.AdminService;
+import com.stockmanagement.domain.inventory.dto.DailyInventorySnapshotResponse;
+import com.stockmanagement.domain.order.dto.DailyOrderStatsResponse;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.user.dto.UserResponse;
@@ -16,7 +18,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+import java.util.List;
 
 /**
  * 관리자 전용 REST API 컨트롤러.
@@ -78,5 +84,20 @@ public class AdminController {
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
         return ApiResponse.ok(adminService.getAllProducts(pageable, search));
+    }
+
+    @Operation(summary = "기간별 일별 주문·매출 통계", description = "?from=YYYY-MM-DD&to=YYYY-MM-DD 로 기간 지정. 최신일 우선 정렬.")
+    @GetMapping("/stats/orders")
+    public ApiResponse<List<DailyOrderStatsResponse>> getOrderStats(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ApiResponse.ok(adminService.getOrderStats(from, to));
+    }
+
+    @Operation(summary = "특정 날짜 전체 재고 스냅샷", description = "?date=YYYY-MM-DD 로 날짜 지정. 상품명·재고 수량 포함.")
+    @GetMapping("/stats/inventory")
+    public ApiResponse<List<DailyInventorySnapshotResponse>> getInventorySnapshot(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ApiResponse.ok(adminService.getInventorySnapshot(date));
     }
 }

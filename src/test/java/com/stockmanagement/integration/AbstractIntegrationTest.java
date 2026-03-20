@@ -112,11 +112,16 @@ abstract class AbstractIntegrationTest {
             stmt.execute("DELETE FROM order_items");
             stmt.execute("DELETE FROM payments");
             stmt.execute("DELETE FROM order_status_history");
+            stmt.execute("DELETE FROM coupon_usages");   // orders 삭제 전 쿠폰 사용 이력 제거
             stmt.execute("DELETE FROM orders");          // delivery_address_id FK → delivery_addresses
             stmt.execute("DELETE FROM delivery_addresses");
+            stmt.execute("DELETE FROM coupons");
             stmt.execute("DELETE FROM inventory_transactions");
             stmt.execute("DELETE FROM inventory");
             stmt.execute("DELETE FROM products");
+            stmt.execute("DELETE FROM daily_order_stats");
+            stmt.execute("DELETE FROM daily_inventory_snapshots");
+            stmt.execute("DELETE FROM categories");
             stmt.execute("DELETE FROM users");
         }
         // Redis 전체 초기화 — 캐시·rate limit 카운터 테스트 간 격리
