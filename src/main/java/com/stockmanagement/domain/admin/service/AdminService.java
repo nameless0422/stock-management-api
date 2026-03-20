@@ -6,9 +6,13 @@ import com.stockmanagement.domain.admin.dto.AdminOrderResponse;
 import com.stockmanagement.domain.admin.dto.DashboardResponse;
 import com.stockmanagement.domain.admin.dto.LowStockItem;
 import com.stockmanagement.domain.admin.dto.RoleUpdateRequest;
+import com.stockmanagement.domain.inventory.dto.DailyInventorySnapshotResponse;
+import com.stockmanagement.domain.inventory.repository.DailyInventorySnapshotRepository;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
+import com.stockmanagement.domain.order.dto.DailyOrderStatsResponse;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderStatus;
+import com.stockmanagement.domain.order.repository.DailyOrderStatsRepository;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.repository.ProductRepository;
@@ -21,6 +25,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,8 +41,10 @@ public class AdminService {
     private static final int LOW_STOCK_THRESHOLD = 10;
 
     private final OrderRepository orderRepository;
+    private final DailyOrderStatsRepository dailyOrderStatsRepository;
     private final UserRepository userRepository;
     private final InventoryRepository inventoryRepository;
+    private final DailyInventorySnapshotRepository snapshotRepository;
     private final ProductRepository productRepository;
 
     /** 관리자 대시보드 — 주문 통계, 매출, 사용자 수, 저재고 목록 */
@@ -105,5 +112,18 @@ public class AdminService {
             return productRepository.searchAll(search, pageable).map(ProductResponse::from);
         }
         return productRepository.findAll(pageable).map(ProductResponse::from);
+    }
+
+    /** 기간별 일별 주문·매출 통계 조회 (최신일 우선) */
+    public List<DailyOrderStatsResponse> getOrderStats(LocalDate from, LocalDate to) {
+        return dailyOrderStatsRepository
+                .findByStatDateBetweenOrderByStatDateDesc(from, to)
+                .stream().map(DailyOrderStatsResponse::from).toList();
+    }
+
+    /** 특정 날짜의 전체 재고 스냅샷 조회 */
+    public List<DailyInventorySnapshotResponse> getInventorySnapshot(LocalDate date) {
+        return snapshotRepository.findBySnapshotDate(date)
+                .stream().map(DailyInventorySnapshotResponse::from).toList();
     }
 }

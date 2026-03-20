@@ -60,4 +60,22 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
      */
     @Query("SELECT o.id FROM Order o WHERE o.status = com.stockmanagement.domain.order.entity.OrderStatus.PENDING AND o.createdAt < :threshold")
     List<Long> findExpiredPendingOrderIds(@Param("threshold") LocalDateTime threshold);
+
+    // ===== 일별 통계 집계 (DailyOrderStatsScheduler) =====
+
+    /** 기간 내 전체 주문 수 */
+    long countByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
+
+    /** 기간 내 특정 상태 주문 수 */
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.status = :status AND o.createdAt >= :start AND o.createdAt < :end")
+    long countByStatusAndCreatedAtBetween(@Param("status") OrderStatus status,
+                                          @Param("start") LocalDateTime start,
+                                          @Param("end") LocalDateTime end);
+
+    /** 기간 내 CONFIRMED 주문의 매출액 합계 (totalAmount - discountAmount) */
+    @Query("SELECT COALESCE(SUM(o.totalAmount - o.discountAmount), 0) FROM Order o " +
+           "WHERE o.status = com.stockmanagement.domain.order.entity.OrderStatus.CONFIRMED " +
+           "AND o.createdAt >= :start AND o.createdAt < :end")
+    BigDecimal sumRevenueByCreatedAtBetween(@Param("start") LocalDateTime start,
+                                            @Param("end") LocalDateTime end);
 }
