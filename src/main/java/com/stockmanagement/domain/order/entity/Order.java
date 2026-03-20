@@ -71,6 +71,14 @@ public class Order {
     @Column(name = "delivery_address_id")
     private Long deliveryAddressId;
 
+    /** 적용된 쿠폰 ID — nullable (쿠폰 미사용 시 null) */
+    @Column(name = "coupon_id")
+    private Long couponId;
+
+    /** 쿠폰 할인 금액 (기본 0). */
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal discountAmount;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -81,12 +89,14 @@ public class Order {
 
     @Builder
     private Order(Long userId, BigDecimal totalAmount, String idempotencyKey,
-                  Long deliveryAddressId) {
+                  Long deliveryAddressId, Long couponId, BigDecimal discountAmount) {
         this.userId = userId;
         this.status = OrderStatus.PENDING;
         this.totalAmount = totalAmount;
         this.idempotencyKey = idempotencyKey;
         this.deliveryAddressId = deliveryAddressId;
+        this.couponId = couponId;
+        this.discountAmount = discountAmount != null ? discountAmount : BigDecimal.ZERO;
     }
 
     // ===== 비즈니스 메서드 =====
@@ -134,6 +144,15 @@ public class Order {
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
         }
         this.status = OrderStatus.CANCELLED;
+    }
+
+    /**
+     * 쿠폰 할인을 적용한다.
+     * 저장 후 couponService.applyCoupon() 결과를 받아 호출한다.
+     */
+    public void applyDiscount(Long couponId, BigDecimal discountAmount) {
+        this.couponId = couponId;
+        this.discountAmount = discountAmount;
     }
 
     /**

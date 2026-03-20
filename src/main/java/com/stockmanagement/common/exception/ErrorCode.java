@@ -52,6 +52,19 @@ public enum ErrorCode {
     SHIPMENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 배송이 생성된 주문입니다."),
     INVALID_SHIPMENT_STATUS(HttpStatus.CONFLICT, "현재 배송 상태에서 허용되지 않는 작업입니다."),
 
+    // ===== Category =====
+    CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "카테고리를 찾을 수 없습니다."),
+    CATEGORY_DUPLICATE(HttpStatus.CONFLICT, "이미 존재하는 카테고리 이름입니다."),
+    CATEGORY_HAS_CHILDREN(HttpStatus.CONFLICT, "하위 카테고리가 있는 카테고리는 삭제할 수 없습니다."),
+    CATEGORY_HAS_PRODUCTS(HttpStatus.CONFLICT, "상품이 등록된 카테고리는 삭제할 수 없습니다."),
+
+    // ===== Coupon =====
+    COUPON_NOT_FOUND(HttpStatus.NOT_FOUND, "쿠폰을 찾을 수 없습니다."),
+    COUPON_EXPIRED(HttpStatus.GONE, "만료된 쿠폰입니다."),
+    COUPON_EXHAUSTED(HttpStatus.CONFLICT, "쿠폰 사용 가능 횟수를 초과했습니다."),
+    COUPON_ALREADY_USED(HttpStatus.CONFLICT, "이미 사용한 쿠폰입니다."),
+    COUPON_MIN_ORDER_NOT_MET(HttpStatus.BAD_REQUEST, "쿠폰 적용을 위한 최소 주문 금액을 충족하지 않습니다."),
+
     // ===== User =====
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
     DUPLICATE_USERNAME(HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다."),

@@ -31,6 +31,12 @@ public class OrderResponse {
     /** 선택된 배송지 ID — null이면 배송지 미지정 */
     private final Long deliveryAddressId;
 
+    /** 적용된 쿠폰 ID — null이면 쿠폰 미사용 */
+    private final Long couponId;
+
+    /** 쿠폰 할인 금액 */
+    private final BigDecimal discountAmount;
+
     /** 주문 항목 목록 */
     private final List<OrderItemResponse> items;
 
@@ -46,6 +52,8 @@ public class OrderResponse {
                 .totalAmount(order.getTotalAmount())
                 .idempotencyKey(order.getIdempotencyKey())
                 .deliveryAddressId(order.getDeliveryAddressId())
+                .couponId(order.getCouponId())
+                .discountAmount(order.getDiscountAmount())
                 .items(order.getItems().stream()
                         .map(OrderItemResponse::from)
                         .toList())

@@ -44,6 +44,10 @@ public class OrderCreateRequest {
     @Valid
     private List<OrderItemRequest> items;
 
+    /** 쿠폰 코드 — 선택 항목. null이면 쿠폰 미적용 */
+    @Size(max = 50, message = "쿠폰 코드는 50자 이하여야 합니다.")
+    private String couponCode;
+
     /** 장바구니 결제 전환 등 내부 호출용 팩토리 메서드. */
     public static OrderCreateRequest of(Long userId, String idempotencyKey,
                                         List<OrderItemRequest> items) {

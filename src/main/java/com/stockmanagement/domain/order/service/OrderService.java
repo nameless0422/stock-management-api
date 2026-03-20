@@ -2,6 +2,7 @@ package com.stockmanagement.domain.order.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.coupon.service.CouponService;
 import com.stockmanagement.domain.inventory.service.InventoryService;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
@@ -60,6 +61,7 @@ public class OrderService {
     private final InventoryService inventoryService;
     private final OrderStatusHistoryRepository historyRepository;
     private final UserRepository userRepository;
+    private final CouponService couponService;
 
     /**
      * 주문을 생성한다.
@@ -126,12 +128,20 @@ public class OrderService {
         // 4. Order 저장 (cascade로 OrderItems도 함께 저장)
         Order savedOrder = orderRepository.save(order);
 
-        // 5. 재고 예약 — 예외 발생 시 전체 트랜잭션 롤백
+        // 5. 쿠폰 적용 — 쿠폰 코드가 있으면 할인 금액 계산 및 사용 기록
+        if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
+            var result = couponService.applyCoupon(
+                    request.getCouponCode(), request.getUserId(),
+                    savedOrder.getId(), totalAmount);
+            savedOrder.applyDiscount(result.getCouponId(), result.getDiscountAmount());
+        }
+
+        // 6. 재고 예약 — 예외 발생 시 전체 트랜잭션 롤백
         for (OrderItem item : savedOrder.getItems()) {
             inventoryService.reserve(item.getProduct().getId(), item.getQuantity());
         }
 
-        // 6. 상태 이력 기록 (최초 생성: fromStatus=null, toStatus=PENDING)
+        // 7. 상태 이력 기록 (최초 생성: fromStatus=null, toStatus=PENDING)
         recordHistory(savedOrder.getId(), null, OrderStatus.PENDING, null);
 
         return OrderResponse.from(savedOrder);
@@ -213,6 +223,9 @@ public class OrderService {
             inventoryService.releaseReservation(item.getProduct().getId(), item.getQuantity());
         }
 
+        // 쿠폰 사용 취소 (쿠폰 미사용 주문이면 no-op)
+        couponService.releaseCoupon(order.getId());
+
         recordHistory(order.getId(), OrderStatus.PENDING, OrderStatus.CANCELLED, null);
         return OrderResponse.from(order);
     }
@@ -262,6 +275,9 @@ public class OrderService {
         for (OrderItem item : order.getItems()) {
             inventoryService.releaseAllocation(item.getProduct().getId(), item.getQuantity());
         }
+
+        // 쿠폰 사용 취소 (쿠폰 미사용 주문이면 no-op)
+        couponService.releaseCoupon(order.getId());
 
         recordHistory(order.getId(), OrderStatus.CONFIRMED, OrderStatus.CANCELLED, null);
     }

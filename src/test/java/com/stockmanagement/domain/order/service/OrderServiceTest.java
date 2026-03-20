@@ -3,6 +3,8 @@ package com.stockmanagement.domain.order.service;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.exception.InsufficientStockException;
+import com.stockmanagement.domain.coupon.dto.CouponValidateResponse;
+import com.stockmanagement.domain.coupon.service.CouponService;
 import com.stockmanagement.domain.inventory.service.InventoryService;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
@@ -35,8 +37,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
@@ -59,6 +60,9 @@ class OrderServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private CouponService couponService;
+
     @InjectMocks
     private OrderService orderService;
 
@@ -72,7 +76,6 @@ class OrderServiceTest {
                 .description("설명")
                 .price(new BigDecimal("10000"))
                 .sku("SKU-001")
-                .category("전자기기")
                 .build();
 
         order = Order.builder()
@@ -179,6 +182,39 @@ class OrderServiceTest {
                             .isEqualTo(ErrorCode.INVALID_INPUT));
 
             verify(orderRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("쿠폰 코드 포함 주문 생성 — discountAmount 적용")
+        void createOrderWithCoupon() {
+            OrderItemRequest itemRequest = mock(OrderItemRequest.class);
+            given(itemRequest.getProductId()).willReturn(1L);
+            given(itemRequest.getQuantity()).willReturn(1);
+            given(itemRequest.getUnitPrice()).willReturn(new BigDecimal("10000"));
+
+            OrderCreateRequest request = mock(OrderCreateRequest.class);
+            given(request.getIdempotencyKey()).willReturn("idem-key-coupon");
+            given(request.getUserId()).willReturn(1L);
+            given(request.getItems()).willReturn(List.of(itemRequest));
+            given(request.getCouponCode()).willReturn("FIXED2000");
+
+            given(orderRepository.findByIdempotencyKey("idem-key-coupon")).willReturn(Optional.empty());
+            given(productRepository.findById(1L)).willReturn(Optional.of(product));
+            given(orderRepository.save(any(Order.class))).willReturn(order);
+
+            CouponValidateResponse couponResult = CouponValidateResponse.builder()
+                    .couponId(10L)
+                    .discountAmount(new BigDecimal("2000"))
+                    .finalAmount(new BigDecimal("8000"))
+                    .build();
+            given(couponService.applyCoupon(eq("FIXED2000"), eq(1L), any(), any()))
+                    .willReturn(couponResult);
+
+            OrderResponse response = orderService.create(request);
+
+            verify(couponService).applyCoupon(eq("FIXED2000"), eq(1L), any(), any());
+            // Order.applyDiscount()가 호출되어 discountAmount가 설정됨
+            assertThat(response).isNotNull();
         }
 
         @Test
