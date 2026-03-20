@@ -4,15 +4,18 @@ import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.inventory.dto.InventoryAdjustRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryReceiveRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryResponse;
+import com.stockmanagement.domain.inventory.dto.InventorySearchRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryTransactionResponse;
 import com.stockmanagement.domain.inventory.service.InventoryService;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 
 /**
  * 재고 REST API 컨트롤러.
@@ -20,9 +23,11 @@ import java.util.List;
  * <p>Base URL: {@code /api/inventory}
  *
  * <pre>
- * GET  /api/inventory/{productId}                재고 현황 조회  → 200 OK
- * GET  /api/inventory/{productId}/transactions   재고 이력 조회  → 200 OK
- * POST /api/inventory/{productId}/receive        입고 처리       → 200 OK
+ * GET  /api/inventory                            재고 목록 검색   → 200 OK (Page)
+ * GET  /api/inventory/{productId}                재고 현황 조회   → 200 OK
+ * GET  /api/inventory/{productId}/transactions   재고 이력 조회   → 200 OK
+ * POST /api/inventory/{productId}/receive        입고 처리        → 200 OK
+ * POST /api/inventory/{productId}/adjust         수동 조정        → 200 OK
  * </pre>
  *
  * <p>reserve / releaseReservation / confirmAllocation 은 Order·Payment 도메인에서
@@ -36,16 +41,36 @@ public class InventoryController {
 
     private final InventoryService inventoryService;
 
+    @Operation(
+        summary = "재고 목록 검색",
+        description = """
+            조건 필터링 + 페이지네이션으로 여러 재고를 조회한다. 모든 파라미터는 선택적.
+            - status: IN_STOCK(available≥10) / LOW_STOCK(0<available<10) / OUT_OF_STOCK(available≤0)
+            - minAvailable / maxAvailable: 가용 수량 범위 (포함)
+            - productName: 상품명 부분 검색 (대소문자 무시)
+            - category: 카테고리 부분 검색 (대소문자 무시)
+            - page / size / sort: 페이지네이션 (기본 page=0, size=20)
+            """
+    )
+    @GetMapping
+    public ApiResponse<Page<InventoryResponse>> search(
+            @ModelAttribute InventorySearchRequest request,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ApiResponse.ok(inventoryService.search(request, pageable));
+    }
+
     @Operation(summary = "재고 현황 조회", description = "onHand / reserved / allocated / available 반환.")
     @GetMapping("/{productId}")
     public ApiResponse<InventoryResponse> getByProductId(@PathVariable Long productId) {
         return ApiResponse.ok(inventoryService.getByProductId(productId));
     }
 
-    @Operation(summary = "재고 변동 이력 조회", description = "최신순 정렬.")
+    @Operation(summary = "재고 변동 이력 조회", description = "최신순 정렬. page/size 파라미터로 페이지네이션 가능.")
     @GetMapping("/{productId}/transactions")
-    public ApiResponse<List<InventoryTransactionResponse>> getTransactions(@PathVariable Long productId) {
-        return ApiResponse.ok(inventoryService.getTransactions(productId));
+    public ApiResponse<Page<InventoryTransactionResponse>> getTransactions(
+            @PathVariable Long productId,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ApiResponse.ok(inventoryService.getTransactions(productId, pageable));
     }
 
     @Operation(summary = "입고 처리", description = "ADMIN 전용. onHand 증가 → available 증가.")

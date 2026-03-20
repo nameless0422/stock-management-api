@@ -2,6 +2,7 @@ package com.stockmanagement.common.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * JPA 설정.
@@ -11,5 +12,6 @@ import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
  */
 @Configuration
 @EnableJpaAuditing
+@EnableScheduling
 public class JpaConfig {
 }

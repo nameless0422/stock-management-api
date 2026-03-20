@@ -17,6 +17,7 @@ import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmRequest;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmResponse;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
+import com.stockmanagement.domain.shipment.service.ShipmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -57,6 +58,7 @@ public class PaymentService {
     private final OrderService orderService;
     private final TossPaymentsClient tossPaymentsClient;
     private final PaymentIdempotencyManager idempotencyManager;
+    private final ShipmentService shipmentService;
 
     /**
      * Prepares a payment session for the given order.
@@ -189,6 +191,9 @@ public class PaymentService {
 
             // Confirm order: PENDING → CONFIRMED, and move inventory: reserved → allocated
             orderService.confirm(payment.getOrderId());
+
+            // 배송 레코드 자동 생성 (PREPARING 상태)
+            shipmentService.createForOrder(payment.getOrderId());
 
             // 6. 결과를 Redis에 캐싱 (24h TTL)
             PaymentResponse response = PaymentResponse.from(payment);

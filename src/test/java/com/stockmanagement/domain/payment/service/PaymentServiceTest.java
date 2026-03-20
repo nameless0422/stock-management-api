@@ -14,6 +14,7 @@ import com.stockmanagement.domain.payment.infrastructure.TossPaymentsClient;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmResponse;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
+import com.stockmanagement.domain.shipment.service.ShipmentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -53,6 +54,9 @@ class PaymentServiceTest {
 
     @Mock
     private PaymentIdempotencyManager idempotencyManager;
+
+    @Mock
+    private ShipmentService shipmentService;
 
     @InjectMocks
     private PaymentService paymentService;

@@ -13,11 +13,13 @@ Spring Boot 기반 쇼핑몰 재고 관리 API.
 | 언어 / 빌드 | Java 17, Gradle 8 |
 | DB / ORM | MySQL 8, Spring Data JPA (Hibernate 6), Flyway |
 | 캐시 / 락 | Redis 7, Redisson 3.27.2 (분산 락), Spring Cache |
-| 인증 | Spring Security 6 + JWT (jjwt 0.12.6) |
+| 검색 | Elasticsearch 8.18 (Spring Data Elasticsearch) |
+| 인증 | Spring Security 6 + JWT (jjwt 0.12.6), Refresh Token |
 | 결제 | TossPayments Core API v1 |
+| 회복탄력성 | Resilience4j (Circuit Breaker) |
 | API 문서 | springdoc-openapi 2.8.4 (Swagger UI) |
 | 관리자 | Spring Boot Admin 3.4.3 |
-| 테스트 | JUnit 5, Mockito, Testcontainers (MySQL + Redis) |
+| 테스트 | JUnit 5, Mockito, Testcontainers (MySQL + Redis + Elasticsearch) |
 | 인프라 | Docker Compose |
 
 ---
@@ -39,7 +41,7 @@ docker compose -f docker/docker-compose.yml up -d
 ./gradlew bootRun
 ```
 
-Flyway가 기동 시 V1~V8 마이그레이션을 자동 실행합니다.
+Flyway가 기동 시 V1~V12 마이그레이션을 자동 실행합니다.
 
 ### 환경 변수 (선택)
 
@@ -63,7 +65,7 @@ export ADMIN_PASSWORD=your-password  # Spring Boot Admin UI 비밀번호 (기본
 ## 🧪 테스트
 
 ```bash
-# 전체 테스트 (Docker 필요 — Testcontainers가 MySQL·Redis 컨테이너를 자동으로 띄움)
+# 전체 테스트 (Docker 필요 — Testcontainers가 MySQL·Redis·Elasticsearch 컨테이너를 자동으로 띄움)
 ./gradlew test
 
 # 커버리지 리포트
@@ -77,8 +79,10 @@ export ADMIN_PASSWORD=your-password  # Spring Boot Admin UI 비밀번호 (기본
 |---|---|---|
 | 단위 | `domain/*/service/`, `entity/`, `common/lock/`, `security/` | Mockito |
 | 컨트롤러 | `domain/*/controller/` | `@WebMvcTest` |
-| 통합 | `integration/` | Testcontainers MySQL+Redis, Flyway 실행 |
+| 통합 | `integration/` | Testcontainers MySQL+Redis+Elasticsearch, Flyway 실행 |
 | 동시성 | `integration/InventoryConcurrencyTest` | 동시 입고 lost update · 예약 overselling 검증 |
+
+현재 총 **318개** 테스트 전체 통과.
 
 ---
 
@@ -91,13 +95,19 @@ com.stockmanagement/
 │   │                    # JpaConfig, RedisConfig, CacheConfig, OpenApiConfig, TossPaymentsConfig
 │   ├── dto/             # ApiResponse<T> — 전 엔드포인트 통합 응답 래퍼
 │   ├── exception/       # BusinessException, InsufficientStockException, ErrorCode, GlobalExceptionHandler
-│   └── lock/            # @DistributedLock (어노테이션), DistributedLockAspect (AOP)
+│   ├── filter/          # RequestIdFilter (MDC requestId 주입)
+│   ├── lock/            # @DistributedLock (어노테이션), DistributedLockAspect (AOP)
+│   ├── ratelimit/       # @RateLimit (어노테이션), RateLimitAspect (AOP, Redis)
+│   └── security/        # LoginRateLimiter, JwtBlacklist, RefreshTokenStore
 ├── domain/
-│   ├── product/         # 상품 CRUD, ACTIVE/DISCONTINUED 상태
-│   ├── inventory/       # 재고 4-state 모델 + 변동 이력(InventoryTransaction)
-│   ├── order/           # 주문 생성·취소, 멱등성 키
-│   ├── payment/         # TossPayments 연동, 결제 준비·확인·취소
-│   ├── user/            # 회원가입·로그인, ADMIN/USER 역할
+│   ├── product/         # 상품 CRUD + Elasticsearch 검색 (document/, service/ProductSearchService)
+│   ├── inventory/       # 재고 4-state 모델 + 변동 이력(InventoryTransaction) + 필터 검색
+│   ├── order/           # 주문 생성·취소, 멱등성 키, 상태 이력, 만료 자동 취소, 필터 조회
+│   ├── payment/         # TossPayments 연동, 결제 준비·확인·취소, Circuit Breaker
+│   ├── cart/            # 장바구니 담기·수정·삭제·체크아웃
+│   ├── shipment/        # 배송 상태 관리 (PREPARING→SHIPPED→DELIVERED/RETURNED)
+│   ├── deliveryaddress/ # 배송지 관리 (기본 배송지, 주문 연동)
+│   ├── user/            # 회원가입·로그인, ADMIN/USER 역할, Refresh Token
 │   └── admin/           # 관리자 대시보드, 사용자 관리, 전체 주문 조회
 └── security/            # JwtTokenProvider, JwtAuthenticationFilter
 ```
@@ -144,6 +154,7 @@ available = onHand - reserved - allocated
 ```
 준비(/prepare) → [프론트에서 결제창] → 확인(/confirm)
                                               ├─ 성공: Payment DONE, Order CONFIRMED, reserved→allocated
+                                              │        Shipment 자동 생성 (PREPARING)
                                               └─ 실패: Payment FAILED
 
 결제 후 취소(/cancel): Payment CANCELLED, Order CANCELLED, allocated 해제
@@ -156,6 +167,23 @@ available = onHand - reserved - allocated
 | `prepare()` | `payments.order_id` DB UNIQUE 제약 — 동시 요청 시 하나만 저장 |
 | `confirm()` / `cancel()` | Redis SETNX로 PROCESSING 상태 원자적 선점, 완료 결과 24h 캐싱 |
 | Toss API 호출 | `Idempotency-Key: {tossOrderId}` 헤더 — 네트워크 재시도 시 Toss 측 중복 방지 |
+
+#### Circuit Breaker
+
+TossPayments API 호출에 Resilience4j Circuit Breaker 적용. 연속 실패 시 회로 차단 → 빠른 실패 응답.
+
+### Elasticsearch 상품 검색
+
+`GET /api/products` 쿼리 파라미터로 검색 조건을 조합합니다.
+
+| 파라미터 | 설명 |
+|---|---|
+| `q` | 키워드 (name · sku · category · description multi_match) |
+| `minPrice` / `maxPrice` | 가격 범위 필터 |
+| `category` | 카테고리 정확 일치 |
+| `sort` | `price_asc` / `price_desc` / `newest` / `relevance` (기본) |
+
+검색 조건이 없으면 MySQL 조회, ES 장애 시 MySQL fallback.
 
 ---
 
@@ -171,6 +199,10 @@ available = onHand - reserved - allocated
 | V6 | inventory_transactions |
 | V7 | inventory_transactions.note 컬럼 추가 |
 | V8 | payments.order_id UNIQUE 제약 추가 |
+| V9 | order_status_history |
+| V10 | cart_items |
+| V11 | shipments |
+| V12 | delivery_addresses, orders.delivery_address_id FK 추가 |
 
 ---
 
@@ -197,7 +229,7 @@ available = onHand - reserved - allocated
 | GET | `/api/admin/dashboard` | 주문 통계, 매출, 사용자 수, 저재고 목록 |
 | GET | `/api/admin/users` | 전체 사용자 목록 (페이징) |
 | PATCH | `/api/admin/users/{id}/role` | 사용자 권한 변경 (USER ↔ ADMIN) |
-| GET | `/api/admin/orders` | 전체 주문 목록 (`?status=PENDING` 필터 가능) |
+| GET | `/api/admin/orders` | 전체 주문 목록 (`?status=` 필터 가능) |
 
 ---
 
@@ -210,8 +242,9 @@ available = onHand - reserved - allocated
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
 | POST | `/api/auth/signup` | 회원가입 | 공개 |
-| POST | `/api/auth/login` | 로그인 → JWT | 공개 |
-| POST | `/api/auth/logout` | 로그아웃 (JWT 블랙리스트 등록) | 공개 |
+| POST | `/api/auth/login` | 로그인 → JWT + Refresh Token | 공개 |
+| POST | `/api/auth/logout` | 로그아웃 (JWT 블랙리스트 + Refresh Token revoke) | 공개 |
+| POST | `/api/auth/refresh` | Access Token 재발급 (Refresh Token rotation) | 공개 |
 | GET | `/api/users/me` | 내 정보 조회 | USER |
 | GET | `/api/users/me/orders` | 내 주문 목록 | USER |
 
@@ -220,8 +253,8 @@ available = onHand - reserved - allocated
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
 | POST | `/api/products` | 상품 등록 | ADMIN |
-| GET | `/api/products` | 상품 목록 (페이징) | USER |
-| GET | `/api/products/{id}` | 상품 단건 조회 | USER |
+| GET | `/api/products` | 상품 목록 (ES 검색 or MySQL, `?q=&minPrice=&maxPrice=&category=&sort=`) | 공개 |
+| GET | `/api/products/{id}` | 상품 단건 조회 | 공개 |
 | PUT | `/api/products/{id}` | 상품 수정 | ADMIN |
 | DELETE | `/api/products/{id}` | 상품 삭제 (soft delete) | ADMIN |
 
@@ -229,16 +262,20 @@ available = onHand - reserved - allocated
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
+| GET | `/api/inventory` | 재고 목록 (`?status=&productId=` 필터) | USER |
 | GET | `/api/inventory/{productId}` | 재고 현황 조회 | USER |
-| GET | `/api/inventory/{productId}/transactions` | 재고 변동 이력 (최신순) | USER |
+| GET | `/api/inventory/{productId}/transactions` | 재고 변동 이력 (페이징) | USER |
 | POST | `/api/inventory/{productId}/receive` | 입고 처리 | ADMIN |
+| POST | `/api/inventory/{productId}/adjust` | 재고 조정 | ADMIN |
 
 ### 주문
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
 | POST | `/api/orders` | 주문 생성 (재고 예약, 멱등성) | USER |
+| GET | `/api/orders` | 주문 목록 (USER=본인, ADMIN=전체, `?status=&userId=&startDate=&endDate=`) | USER |
 | GET | `/api/orders/{id}` | 주문 단건 조회 | USER |
+| GET | `/api/orders/{id}/history` | 주문 상태 변경 이력 | USER |
 | POST | `/api/orders/{id}/cancel` | 주문 취소 (재고 예약 해제) | USER |
 
 ### 결제
@@ -246,10 +283,41 @@ available = onHand - reserved - allocated
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
 | POST | `/api/payments/prepare` | 결제 준비 | USER |
-| POST | `/api/payments/confirm` | 결제 승인 | USER |
+| POST | `/api/payments/confirm` | 결제 승인 (배송 자동 생성) | USER |
 | POST | `/api/payments/{paymentKey}/cancel` | 결제 취소/환불 | USER |
 | GET | `/api/payments/{paymentKey}` | 결제 조회 | USER |
+| GET | `/api/payments/order/{orderId}` | 주문 ID로 결제 조회 | USER |
 | POST | `/api/payments/webhook` | TossPayments 웹훅 | 공개 |
+
+### 장바구니
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| GET | `/api/cart` | 장바구니 조회 | USER |
+| POST | `/api/cart/items` | 상품 담기 / 수량 변경 | USER |
+| DELETE | `/api/cart/items/{productId}` | 상품 제거 | USER |
+| DELETE | `/api/cart` | 장바구니 비우기 | USER |
+| POST | `/api/cart/checkout` | 장바구니 주문 전환 | USER |
+
+### 배송
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| GET | `/api/shipments/orders/{orderId}` | 주문 배송 조회 | USER |
+| PATCH | `/api/shipments/{id}/ship` | 배송 시작 (PREPARING → SHIPPED) | ADMIN |
+| PATCH | `/api/shipments/{id}/deliver` | 배송 완료 (SHIPPED → DELIVERED) | ADMIN |
+| PATCH | `/api/shipments/{id}/return` | 반품 처리 (SHIPPED → RETURNED) | ADMIN |
+
+### 배송지
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/delivery-addresses` | 배송지 등록 | USER |
+| GET | `/api/delivery-addresses` | 배송지 목록 | USER |
+| GET | `/api/delivery-addresses/{id}` | 배송지 단건 조회 | USER |
+| PUT | `/api/delivery-addresses/{id}` | 배송지 수정 | USER |
+| DELETE | `/api/delivery-addresses/{id}` | 배송지 삭제 | USER |
+| POST | `/api/delivery-addresses/{id}/default` | 기본 배송지 설정 | USER |
 
 ---
 
@@ -272,8 +340,19 @@ POST /api/auth/login
 ```json
 {
   "success": true,
-  "data": { "accessToken": "eyJ...", "tokenType": "Bearer", "expiresIn": 86400 }
+  "data": {
+    "accessToken": "eyJ...",
+    "tokenType": "Bearer",
+    "expiresIn": 86400,
+    "refreshToken": "uuid-..."
+  }
 }
+```
+
+### 상품 검색
+
+```http
+GET /api/products?q=노트북&minPrice=500000&maxPrice=2000000&category=전자&sort=price_asc
 ```
 
 ### 입고 처리
@@ -281,7 +360,7 @@ POST /api/auth/login
 ```http
 POST /api/inventory/1/receive
 Authorization: Bearer <token>
-{ "quantity": 100 }
+{ "quantity": 100, "note": "초도 입고" }
 ```
 
 ```json
@@ -320,8 +399,8 @@ Authorization: Bearer <token>
 | `SecurityConfig` | @Order(2) | 나머지 전체 | JWT (stateless) |
 
 - 미인증 → 403
-- 공개: `/api/auth/**`, `/actuator/health`, `/actuator/info`, `/api/payments/webhook`, `/swagger-ui/**`
-- ADMIN 전용: `/actuator/**` (health/info 제외)
+- 공개: `/api/auth/**`, `/api/products/**`, `/actuator/health`, `/actuator/info`, `/api/payments/webhook`, `/swagger-ui/**`
+- ADMIN 전용: `/actuator/**` (health/info 제외), 상품·재고 write, 배송 상태 변경
 - JWT Secret은 반드시 환경 변수(`JWT_SECRET`)로 교체
 
 ### 추가 보안 기능
@@ -329,12 +408,30 @@ Authorization: Bearer <token>
 | 기능 | 구현 |
 |---|---|
 | 로그인 Rate Limiting | Redis 기반, 15분 내 5회 초과 시 429 |
+| API Rate Limiting | 주문 생성 10회/분, 결제 확정 5회/분 (AOP, Redis) |
 | JWT 블랙리스트 | 로그아웃 시 jti로 Redis에 등록, 토큰 만료까지 유효 |
+| Refresh Token Rotation | 발급 시 이전 토큰 자동 revoke (Redis, TTL 30일) |
 | Toss 웹훅 서명 검증 | `Toss-Signature` 헤더 HMAC-SHA256 검증 |
 | CORS | `cors.allowed-origins` 환경 변수로 허용 도메인 제어 |
+| MDC Logging | 요청별 `requestId` 자동 주입 (RequestIdFilter) |
 
 ---
 
 ## 📝 라이선스
 
 MIT License
+
+---
+
+## 장기 과제
+
+| 항목 | 설명 |
+|---|---|
+| **이벤트 기반 통신 (Kafka)** | Order → Payment, Payment → Inventory 간 현재 동기 직접 호출 → 비동기 이벤트로 분리 |
+| **카테고리 엔티티 분리** | 현재 Product.category가 String — Category 테이블 분리 및 계층 구조 |
+| **쿠폰/프로모션 시스템** | 할인 코드, 기간 프로모션, 주문 금액 할인 |
+| **배치 처리** | 대량 재고 업데이트, 월별 정산, 판매 통계 집계 |
+| **마이크로서비스 분리** | 현재 모놀리식 → 도메인별 서비스 분리 (Service Mesh, API Gateway) |
+| **CQRS / Event Sourcing** | 재고 변동 이력을 이벤트 소싱으로 재구성, 읽기/쓰기 모델 분리 |
+| **멀티 테넌시** | 복수 쇼핑몰/판매자 지원 |
+| **글로벌 배포** | 멀티 리전 DB 복제, CDN 연동 |

@@ -1,8 +1,10 @@
 package com.stockmanagement.domain.order.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
+import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
 import com.stockmanagement.domain.order.service.OrderService;
 import jakarta.validation.Valid;
@@ -14,6 +16,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -45,6 +49,7 @@ public class OrderController {
     @Operation(summary = "주문 생성", description = "재고 예약(reserved++) 후 PENDING 주문 생성. 동일 idempotencyKey 재요청 시 기존 주문 반환.")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @RateLimit(limit = 10, windowSeconds = 60)
     public ApiResponse<OrderResponse> create(@RequestBody @Valid OrderCreateRequest request) {
         return ApiResponse.ok(orderService.create(request));
     }
@@ -55,12 +60,18 @@ public class OrderController {
         return ApiResponse.ok(orderService.getById(id));
     }
 
-    @Operation(summary = "주문 목록 조회 (페이징)", description = "기본: 최신순, 20건.")
+    @Operation(summary = "주문 목록 조회 (필터 + 페이징)",
+               description = "status / startDate / endDate 필터 지원. ADMIN은 userId 파라미터로 특정 사용자 주문 조회 가능. USER는 본인 주문만 조회된다.")
     @GetMapping
     public ApiResponse<Page<OrderResponse>> getList(
+            @AuthenticationPrincipal String username,
+            Authentication authentication,
+            @ModelAttribute OrderSearchRequest request,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        return ApiResponse.ok(orderService.getList(pageable));
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        return ApiResponse.ok(orderService.getList(username, isAdmin, request, pageable));
     }
 
     @Operation(summary = "주문 취소", description = "PENDING 상태만 취소 가능. 재고 예약 해제(reserved--).")

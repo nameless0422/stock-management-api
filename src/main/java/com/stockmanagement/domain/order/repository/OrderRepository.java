@@ -5,10 +5,13 @@ import com.stockmanagement.domain.order.entity.OrderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -16,7 +19,7 @@ import java.util.Optional;
  *
  * <p>멱등성 키 조회 및 항목을 fetch join한 단건 조회를 제공한다.
  */
-public interface OrderRepository extends JpaRepository<Order, Long> {
+public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecificationExecutor<Order> {
 
     /**
      * 멱등성 키로 기존 주문을 조회한다.
@@ -49,4 +52,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     /** 특정 상태의 주문 총 매출액 (대시보드용) */
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.status = :status")
     BigDecimal sumTotalAmountByStatus(@Param("status") OrderStatus status);
+
+    /**
+     * 기준 시각 이전에 생성된 PENDING 주문 ID 목록을 반환한다 (만료 주문 자동 취소용).
+     *
+     * @param threshold 기준 시각 (현재 시각 - 만료 시간)
+     */
+    @Query("SELECT o.id FROM Order o WHERE o.status = com.stockmanagement.domain.order.entity.OrderStatus.PENDING AND o.createdAt < :threshold")
+    List<Long> findExpiredPendingOrderIds(@Param("threshold") LocalDateTime threshold);
 }

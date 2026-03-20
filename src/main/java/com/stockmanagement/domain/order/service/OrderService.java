@@ -6,16 +6,21 @@ import com.stockmanagement.domain.inventory.service.InventoryService;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
+import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderItem;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.entity.OrderStatusHistory;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.order.repository.OrderSpecification;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
@@ -54,6 +59,7 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final InventoryService inventoryService;
     private final OrderStatusHistoryRepository historyRepository;
+    private final UserRepository userRepository;
 
     /**
      * 주문을 생성한다.
@@ -110,6 +116,7 @@ public class OrderService {
                 .userId(request.getUserId())
                 .totalAmount(totalAmount)
                 .idempotencyKey(request.getIdempotencyKey())
+                .deliveryAddressId(request.getDeliveryAddressId())
                 .build();
 
         for (OrderItem item : items) {
@@ -133,7 +140,9 @@ public class OrderService {
     /**
      * 주문 단건을 조회한다.
      * 항목(items)과 상품 정보를 fetch join으로 함께 로딩한다.
+     * 결과를 Redis에 캐싱한다 (TTL: 5분, 상태 변경 시 명시적 evict).
      */
+    @Cacheable(cacheNames = "orders", key = "#id")
     public OrderResponse getById(Long id) {
         Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
@@ -141,11 +150,30 @@ public class OrderService {
     }
 
     /**
-     * 주문 목록을 페이징 조회한다.
-     * 목록에서는 items를 로딩하지 않는다 (불필요한 쿼리 방지).
+     * 주문 목록을 동적 조건으로 페이징 조회한다.
+     *
+     * <p>권한별 동작:
+     * <ul>
+     *   <li>ADMIN: request.userId로 특정 사용자 주문 조회 가능, null이면 전체 조회
+     *   <li>USER: username으로 본인 userId를 조회해 강제 적용 (request.userId 무시)
+     * </ul>
+     *
+     * @param username    현재 인증 사용자명
+     * @param isAdmin     ADMIN 권한 여부
+     * @param request     검색 조건 (status, userId, startDate, endDate)
+     * @param pageable    페이징/정렬 정보
      */
-    public Page<OrderResponse> getList(Pageable pageable) {
-        return orderRepository.findAll(pageable).map(OrderResponse::from);
+    public Page<OrderResponse> getList(String username, boolean isAdmin,
+                                       OrderSearchRequest request, Pageable pageable) {
+        if (!isAdmin) {
+            // USER: 본인 주문만 조회
+            Long userId = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND))
+                    .getId();
+            request.setUserId(userId);
+        }
+        return orderRepository.findAll(OrderSpecification.of(request), pageable)
+                .map(OrderResponse::from);
     }
 
     /** 특정 주문의 상태 변경 이력을 시간순으로 조회한다. */
@@ -172,6 +200,7 @@ public class OrderService {
      * @throws BusinessException PENDING이 아닌 주문에 대해 취소 시도 시
      */
     @Transactional
+    @CacheEvict(cacheNames = "orders", key = "#id")
     public OrderResponse cancel(Long id) {
         Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
@@ -197,6 +226,7 @@ public class OrderService {
      * @param id order ID to confirm
      */
     @Transactional
+    @CacheEvict(cacheNames = "orders", key = "#id")
     public void confirm(Long id) {
         Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
@@ -222,6 +252,7 @@ public class OrderService {
      * @param id order ID to refund
      */
     @Transactional
+    @CacheEvict(cacheNames = "orders", key = "#id")
     public void refund(Long id) {
         Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));

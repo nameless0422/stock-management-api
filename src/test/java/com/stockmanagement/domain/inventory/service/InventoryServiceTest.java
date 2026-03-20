@@ -5,8 +5,10 @@ import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.exception.InsufficientStockException;
 import com.stockmanagement.domain.inventory.dto.InventoryReceiveRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryResponse;
+import com.stockmanagement.domain.inventory.dto.InventorySearchRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryTransactionResponse;
 import com.stockmanagement.domain.inventory.entity.Inventory;
+import com.stockmanagement.domain.inventory.entity.InventoryStatus;
 import com.stockmanagement.domain.inventory.entity.InventoryTransaction;
 import com.stockmanagement.domain.inventory.entity.InventoryTransactionType;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
@@ -21,6 +23,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -29,6 +36,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
@@ -119,12 +127,13 @@ class InventoryServiceTest {
             given(tx.getSnapshotReserved()).willReturn(0);
             given(tx.getSnapshotAllocated()).willReturn(0);
             given(tx.getCreatedAt()).willReturn(LocalDateTime.now());
-            given(transactionRepository.findByInventoryProductIdOrderByCreatedAtDesc(1L)).willReturn(List.of(tx));
+            given(transactionRepository.findByInventoryProductIdOrderByCreatedAtDesc(eq(1L), any(Pageable.class)))
+                    .willReturn(new PageImpl<>(List.of(tx)));
 
-            List<InventoryTransactionResponse> result = inventoryService.getTransactions(1L);
+            Page<InventoryTransactionResponse> result = inventoryService.getTransactions(1L, Pageable.unpaged());
 
-            assertThat(result).hasSize(1);
-            assertThat(result.get(0).getType()).isEqualTo("RECEIVE");
+            assertThat(result.getContent()).hasSize(1);
+            assertThat(result.getContent().get(0).getType()).isEqualTo("RECEIVE");
         }
 
         @Test
@@ -132,7 +141,7 @@ class InventoryServiceTest {
         void throwsWhenInventoryNotFound() {
             given(inventoryRepository.findByProductId(99L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> inventoryService.getTransactions(99L))
+            assertThatThrownBy(() -> inventoryService.getTransactions(99L, Pageable.unpaged()))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVENTORY_NOT_FOUND));
@@ -339,6 +348,69 @@ class InventoryServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVENTORY_NOT_FOUND));
+        }
+    }
+
+    // ===== search() =====
+
+    @Nested
+    @DisplayName("search()")
+    class Search {
+
+        @Test
+        @DisplayName("조건 없이 호출하면 레포지토리 결과를 Page<InventoryResponse>로 변환해 반환한다")
+        void returnsPagedResults() {
+            Inventory inventory = inventoryWithStock(); // onHand=10, reserved=3, available=7
+            Page<Inventory> page = new PageImpl<>(List.of(inventory));
+            given(inventoryRepository.findAll(any(Specification.class), any(Pageable.class))).willReturn(page);
+
+            Page<InventoryResponse> result = inventoryService.search(new InventorySearchRequest(), Pageable.unpaged());
+
+            assertThat(result.getContent()).hasSize(1);
+            assertThat(result.getContent().get(0).getOnHand()).isEqualTo(10);
+            assertThat(result.getContent().get(0).getAvailable()).isEqualTo(7);
+            verify(inventoryRepository).findAll(any(Specification.class), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("결과가 없으면 빈 Page를 반환한다")
+        void returnsEmptyPage() {
+            given(inventoryRepository.findAll(any(Specification.class), any(Pageable.class)))
+                    .willReturn(Page.empty());
+
+            Page<InventoryResponse> result = inventoryService.search(new InventorySearchRequest(), Pageable.unpaged());
+
+            assertThat(result.getContent()).isEmpty();
+            assertThat(result.getTotalElements()).isZero();
+        }
+
+        @Test
+        @DisplayName("페이지네이션 정보가 그대로 반환된다")
+        void preservesPaginationMeta() {
+            Inventory inv1 = inventoryWithStock();
+            Inventory inv2 = inventoryWithStock();
+            Pageable pageable = PageRequest.of(0, 2);
+            Page<Inventory> page = new PageImpl<>(List.of(inv1, inv2), pageable, 5);
+            given(inventoryRepository.findAll(any(Specification.class), any(Pageable.class))).willReturn(page);
+
+            Page<InventoryResponse> result = inventoryService.search(new InventorySearchRequest(), pageable);
+
+            assertThat(result.getContent()).hasSize(2);
+            assertThat(result.getTotalElements()).isEqualTo(5);
+            assertThat(result.getTotalPages()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("status 필터가 포함된 request로 호출해도 레포지토리에 Specification이 전달된다")
+        void withStatusFilter_passesSpecificationToRepository() {
+            given(inventoryRepository.findAll(any(Specification.class), any(Pageable.class)))
+                    .willReturn(Page.empty());
+
+            InventorySearchRequest request = new InventorySearchRequest();
+            request.setStatus(InventoryStatus.LOW_STOCK);
+            inventoryService.search(request, Pageable.unpaged());
+
+            verify(inventoryRepository).findAll(any(Specification.class), any(Pageable.class));
         }
     }
 }

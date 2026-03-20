@@ -2,7 +2,12 @@ package com.stockmanagement.domain.inventory.repository;
 
 import com.stockmanagement.domain.inventory.entity.Inventory;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,7 +24,7 @@ import java.util.Optional;
  *   <li>{@link #findByProductIdWithLock} — 비관적 락 조회 (입고 등 쓰기 전용)
  * </ul>
  */
-public interface InventoryRepository extends JpaRepository<Inventory, Long> {
+public interface InventoryRepository extends JpaRepository<Inventory, Long>, JpaSpecificationExecutor<Inventory> {
 
     /** 상품 ID로 재고를 조회한다 (읽기 전용) */
     Optional<Inventory> findByProductId(Long productId);
@@ -38,4 +43,12 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
     /** available(= onHand - reserved - allocated)이 threshold 미만인 저재고 목록 (대시보드용) */
     @Query("SELECT i FROM Inventory i JOIN FETCH i.product WHERE (i.onHand - i.reserved - i.allocated) < :threshold")
     List<Inventory> findLowStock(@Param("threshold") int threshold);
+
+    /**
+     * 동적 조건 검색 — product를 EntityGraph로 즉시 로딩해 N+1을 방지한다.
+     * {@link InventorySpecification}으로 생성한 Specification을 전달한다.
+     */
+    @EntityGraph(attributePaths = {"product"})
+    @Override
+    Page<Inventory> findAll(Specification<Inventory> spec, Pageable pageable);
 }

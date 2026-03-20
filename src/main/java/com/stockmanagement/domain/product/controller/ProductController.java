@@ -3,6 +3,7 @@ package com.stockmanagement.domain.product.controller;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
 import com.stockmanagement.domain.product.dto.ProductResponse;
+import com.stockmanagement.domain.product.dto.ProductSearchRequest;
 import com.stockmanagement.domain.product.dto.ProductStatusRequest;
 import com.stockmanagement.domain.product.dto.ProductUpdateRequest;
 import com.stockmanagement.domain.product.service.ProductService;
@@ -37,12 +38,17 @@ public class ProductController {
         return ApiResponse.ok(productService.getById(id));
     }
 
-    @Operation(summary = "상품 목록 조회 (페이징)", description = "?page=0&size=10&sort=name,asc&search=키워드")
+    @Operation(summary = "상품 목록 조회 (검색 + 페이징)",
+               description = "검색 조건이 있으면 Elasticsearch, 없으면 MySQL 조회.\n\n" +
+                       "- `q`: 키워드 (name, description, category, sku 검색)\n" +
+                       "- `minPrice` / `maxPrice`: 가격 범위\n" +
+                       "- `category`: 카테고리 정확 일치\n" +
+                       "- `sort`: relevance(기본) | price_asc | price_desc | newest")
     @GetMapping
     public ApiResponse<Page<ProductResponse>> getList(
-            @RequestParam(required = false) String search,
+            @ModelAttribute ProductSearchRequest request,
             @PageableDefault(size = 20, sort = "id") Pageable pageable) {
-        return ApiResponse.ok(productService.getList(pageable, search));
+        return ApiResponse.ok(productService.getList(pageable, request));
     }
 
     @Operation(summary = "상품 수정", description = "ADMIN 전용.")
