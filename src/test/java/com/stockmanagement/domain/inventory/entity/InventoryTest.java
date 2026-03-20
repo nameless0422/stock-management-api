@@ -23,7 +23,6 @@ class InventoryTest {
                 .description("설명")
                 .price(new BigDecimal("10000"))
                 .sku("SKU-001")
-                .category("전자기기")
                 .build();
     }
 

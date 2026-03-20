@@ -36,14 +36,40 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
 
     // ===== 공통 헬퍼 =====
 
+    /**
+     * 카테고리를 조회하여 없으면 생성하고 ID를 반환한다.
+     * 같은 테스트 내에서 동일 카테고리를 여러 번 사용해도 안전하다.
+     */
+    private long getOrCreateCategory(String name) throws Exception {
+        String listBody = mockMvc.perform(get("/api/categories"))
+                .andReturn().getResponse().getContentAsString();
+        com.fasterxml.jackson.databind.JsonNode categories = objectMapper.readTree(listBody).path("data");
+        for (com.fasterxml.jackson.databind.JsonNode cat : categories) {
+            if (name.equals(cat.path("name").asText())) {
+                return cat.path("id").asLong();
+            }
+        }
+        String body = mockMvc.perform(post("/api/categories")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format("{\"name\":\"%s\"}", name)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).path("data").path("id").asLong();
+    }
+
     /** 상품을 등록하고 ES 인덱스를 즉시 refresh한다. */
     private long createProduct(String name, String sku, int price, String category) throws Exception {
+        Long categoryId = category != null ? getOrCreateCategory(category) : null;
+        String productJson = categoryId != null
+                ? String.format("{\"name\":\"%s\",\"sku\":\"%s\",\"price\":%d,\"categoryId\":%d}",
+                        name, sku, price, categoryId)
+                : String.format("{\"name\":\"%s\",\"sku\":\"%s\",\"price\":%d}", name, sku, price);
+
         String body = mockMvc.perform(post("/api/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(String.format(
-                                "{\"name\":\"%s\",\"sku\":\"%s\",\"price\":%d,\"category\":\"%s\"}",
-                                name, sku, price, category)))
+                        .content(productJson))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long id = objectMapper.readTree(body).path("data").path("id").asLong();
@@ -81,7 +107,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("q=전자 → category 일치 상품 반환 (multi_match)")
+    @DisplayName("q=키보드 → name 일치 상품 반환 (multi_match)")
     void search_byKeyword_category() throws Exception {
         createProduct("키보드", "KB-001", 80000, "전자");
         createProduct("바지", "PT-001", 50000, "의류");
@@ -138,7 +164,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
     // ===== 복합 필터 =====
 
     @Test
-    @DisplayName("q=전자 + maxPrice=100000 복합 필터")
+    @DisplayName("q=USB + maxPrice=100000 복합 필터")
     void search_combined_keywordAndPrice() throws Exception {
         createProduct("USB 케이블", "UC-001", 8000, "전자");
         createProduct("외장 SSD", "SSD-001", 150000, "전자");

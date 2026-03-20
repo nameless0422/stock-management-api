@@ -21,7 +21,6 @@ class InventoryTransactionTest {
                 .description("설명")
                 .price(new BigDecimal("10000"))
                 .sku("SKU-001")
-                .category("전자기기")
                 .build();
         inventory = Inventory.builder().product(product).build();
         inventory.receive(10);

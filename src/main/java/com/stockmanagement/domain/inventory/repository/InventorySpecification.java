@@ -61,10 +61,11 @@ public class InventorySpecification {
                 ));
             }
 
-            // 카테고리 키워드 검색 (대소문자 무시 부분 일치)
+            // 카테고리 키워드 검색 — categories 테이블 JOIN 후 name 부분 일치
             if (request.getCategory() != null && !request.getCategory().isBlank()) {
+                Join<?, ?> categoryJoin = product.join("category", JoinType.LEFT);
                 predicates.add(cb.like(
-                    cb.lower(product.get("category")),
+                    cb.lower(categoryJoin.get("name")),
                     "%" + request.getCategory().toLowerCase() + "%"
                 ));
             }

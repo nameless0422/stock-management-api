@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.product.entity;
 
+import com.stockmanagement.domain.product.category.entity.Category;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -46,8 +47,10 @@ public class Product {
     @Column(nullable = false, unique = true, length = 100)
     private String sku;
 
-    @Column(length = 100)
-    private String category;
+    /** 카테고리 — null이면 미분류 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private Category category;
 
     /** 상품 판매 상태 — DB에 문자열로 저장 (예: "ACTIVE") */
     @Enumerated(EnumType.STRING)
@@ -70,7 +73,7 @@ public class Product {
      */
     @Builder
     private Product(String name, String description, BigDecimal price,
-                    String sku, String category) {
+                    String sku, Category category) {
         this.name = name;
         this.description = description;
         this.price = price;
@@ -79,11 +82,16 @@ public class Product {
         this.status = ProductStatus.ACTIVE;
     }
 
+    /** 카테고리 이름을 반환한다. 카테고리가 없으면 null. */
+    public String getCategoryName() {
+        return category != null ? category.getName() : null;
+    }
+
     /**
      * 상품 정보를 수정한다.
      * SKU는 변경 불가 — 다른 시스템과 연동된 식별자이므로 불변으로 유지한다.
      */
-    public void update(String name, String description, BigDecimal price, String category) {
+    public void update(String name, String description, BigDecimal price, Category category) {
         this.name = name;
         this.description = description;
         this.price = price;

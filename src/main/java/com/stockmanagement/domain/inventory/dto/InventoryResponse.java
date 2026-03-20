@@ -46,7 +46,7 @@ public class InventoryResponse {
                 .id(inventory.getId())
                 .productId(inventory.getProduct().getId())
                 .productName(inventory.getProduct().getName())
-                .category(inventory.getProduct().getCategory())
+                .category(inventory.getProduct().getCategoryName())
                 .onHand(inventory.getOnHand())
                 .reserved(inventory.getReserved())
                 .allocated(inventory.getAllocated())

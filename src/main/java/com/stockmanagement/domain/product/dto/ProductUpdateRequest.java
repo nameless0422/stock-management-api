@@ -29,7 +29,6 @@ public class ProductUpdateRequest {
     @DecimalMin(value = "0.0", inclusive = false, message = "가격은 0보다 커야 합니다.")
     private BigDecimal price;
 
-    /** 선택 입력 — null 허용 */
-    @Size(max = 100, message = "카테고리는 100자를 초과할 수 없습니다.")
-    private String category;
+    /** 카테고리 ID — null이면 미분류로 변경 */
+    private Long categoryId;
 }
