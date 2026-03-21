@@ -59,6 +59,8 @@ dependencies {
 	testImplementation 'org.testcontainers:junit-jupiter'
 	testImplementation 'org.testcontainers:mysql'
 	testImplementation 'org.testcontainers:elasticsearch'
+	// P6Spy — SQL 실행 시간 로깅 및 슬로우 쿼리 감지
+	implementation 'com.github.gavlyukovskiy:p6spy-spring-boot-starter:1.9.2'
 	testRuntimeOnly 'com.h2database:h2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

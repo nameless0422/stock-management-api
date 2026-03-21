@@ -82,7 +82,7 @@ public class CategoryService {
 
     /** 단건 조회 — children(하위 카테고리) 목록 포함 */
     public CategoryResponse getById(Long id) {
-        Category category = findById(id);
+        Category category = findByIdWithChildren(id);
         List<CategoryResponse> children = category.getChildren().stream()
                 .map(CategoryResponse::from)
                 .toList();
@@ -111,7 +111,7 @@ public class CategoryService {
 
     @Transactional
     public void delete(Long id) {
-        Category category = findById(id);
+        Category category = findByIdWithChildren(id);
 
         if (!category.getChildren().isEmpty()) {
             throw new BusinessException(ErrorCode.CATEGORY_HAS_CHILDREN);
@@ -127,6 +127,12 @@ public class CategoryService {
 
     private Category findById(Long id) {
         return categoryRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
+    }
+
+    /** children 컬렉션을 함께 로딩 — getById/delete 전용 */
+    private Category findByIdWithChildren(Long id) {
+        return categoryRepository.findByIdWithChildren(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
     }
 
