@@ -34,38 +34,54 @@ Spring Boot 기반 **쇼핑몰 백엔드 포트폴리오 프로젝트**.
 | API 문서 | springdoc-openapi 2.8.4 (Swagger UI) |
 | 관리자 | Spring Boot Admin 3.4.3 |
 | 테스트 | JUnit 5, Mockito, Testcontainers (MySQL + Redis + Elasticsearch) |
-| 인프라 | Docker Compose |
+| 인프라 | Docker (멀티스테이지 빌드), Docker Compose |
 
 ---
 
 ## 로컬 실행
 
-### 사전 요구사항
-JDK 17+, Docker
+### 방법 1 — Docker Compose 전체 스택 (권장)
 
-### 인프라 기동
+사전 요구사항: Docker
 
 ```bash
+# 환경변수 파일 준비 (필요 시 값 수정)
+cp .env.example .env
+
+# 인프라 + 앱 전체 기동 (최초 실행 시 앱 이미지 빌드 포함)
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-### 애플리케이션 실행
+앱 재빌드가 필요할 때:
 
 ```bash
+docker compose -f docker/docker-compose.yml up -d --build app
+```
+
+### 방법 2 — 인프라만 Docker, 앱은 로컬 실행 (개발 시)
+
+사전 요구사항: JDK 17+, Docker
+
+```bash
+# 인프라만 기동 (MySQL + Redis + Elasticsearch)
+docker compose -f docker/docker-compose.yml up -d mysql redis elasticsearch
+
+# 앱 실행
 ./gradlew bootRun
 ```
 
 Flyway가 기동 시 V1~V15 마이그레이션을 자동 실행합니다.
 
-### 환경 변수 (선택)
+### 환경 변수
 
-```bash
-export JWT_SECRET=your-secret-key-at-least-32-characters-long
-export TOSS_SECRET_KEY=test_sk_your_actual_key
-export TOSS_CLIENT_KEY=test_ck_your_actual_key
-export ADMIN_USERNAME=admin
-export ADMIN_PASSWORD=your-password
-```
+`.env.example`을 `.env`로 복사 후 필요한 값을 수정하세요. `docker-compose.yml`이 자동으로 `.env`를 로드합니다.
+
+| 변수 | 설명 | 기본값 |
+|---|---|---|
+| `JWT_SECRET` | JWT 서명 키 (운영 시 반드시 변경, 32자 이상) | 개발용 기본값 |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Spring Boot Admin 계정 | `admin` / `changeme` |
+| `TOSS_SECRET_KEY` / `TOSS_CLIENT_KEY` | 토스페이먼츠 API 키 | placeholder |
+| `CORS_ALLOWED_ORIGINS` | CORS 허용 출처 | `http://localhost:3000` |
 
 ### 접속 URL
 
@@ -501,18 +517,6 @@ Authorization: Bearer <token>
 | 로그 레벨 | 런타임에서 패키지별 레벨 즉시 변경 |
 | 빈 목록 | Spring 컨텍스트의 전체 빈 확인 |
 | 환경변수 | application.properties 설정값 조회 |
-
----
-
-## 장기 과제
-
-| 항목 | 설명 |
-|---|---|
-| **이벤트 기반 통신 (Kafka)** | Order → Payment, Payment → Inventory 간 현재 동기 직접 호출 → 비동기 이벤트로 분리 |
-| **마이크로서비스 분리** | 현재 모놀리식 → 도메인별 서비스 분리 (Service Mesh, API Gateway) |
-| **CQRS / Event Sourcing** | 재고 변동 이력을 이벤트 소싱으로 재구성, 읽기/쓰기 모델 분리 |
-| **멀티 테넌시** | 복수 쇼핑몰/판매자 지원 |
-| **글로벌 배포** | 멀티 리전 DB 복제, CDN 연동 |
 
 ---
 
