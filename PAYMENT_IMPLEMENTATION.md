@@ -30,45 +30,9 @@ TossPayments Core API v1을 이용한 결제 도메인 구현 내용 정리.
    │                               │  Payment: PENDING → DONE      │
    │                               │  Order:   PENDING → CONFIRMED │
    │                               │  Inventory: reserved → allocated
+   │                               │  Shipment: PREPARING 자동 생성 │
    │  ← 200 { PaymentResponse }    │                               │
 ```
-
----
-
-## 생성/수정 파일 목록
-
-### 신규 생성 (17개)
-
-| 파일 경로 | 설명 |
-|---|---|
-| `src/main/resources/db/migration/V4__create_payment_tables.sql` | payments 테이블 DDL |
-| `domain/payment/entity/PaymentStatus.java` | 결제 상태 enum |
-| `domain/payment/entity/Payment.java` | 결제 엔티티 |
-| `domain/payment/repository/PaymentRepository.java` | 결제 레포지토리 |
-| `domain/payment/service/PaymentService.java` | 결제 비즈니스 로직 |
-| `domain/payment/controller/PaymentController.java` | REST 컨트롤러 |
-| `domain/payment/dto/PaymentPrepareRequest.java` | 결제 준비 요청 DTO |
-| `domain/payment/dto/PaymentPrepareResponse.java` | 결제 준비 응답 DTO |
-| `domain/payment/dto/PaymentConfirmRequest.java` | 결제 승인 요청 DTO |
-| `domain/payment/dto/PaymentCancelRequest.java` | 결제 취소 요청 DTO |
-| `domain/payment/dto/PaymentResponse.java` | 결제 응답 DTO |
-| `domain/payment/infrastructure/TossPaymentsClient.java` | TossPayments HTTP 클라이언트 |
-| `domain/payment/infrastructure/dto/TossConfirmRequest.java` | Toss 승인 API 요청 DTO |
-| `domain/payment/infrastructure/dto/TossConfirmResponse.java` | Toss 승인 API 응답 DTO |
-| `domain/payment/infrastructure/dto/TossCancelRequest.java` | Toss 취소 API 요청 DTO |
-| `domain/payment/infrastructure/dto/TossWebhookEvent.java` | 웹훅 이벤트 DTO |
-| `common/config/TossPaymentsConfig.java` | API 키 설정 및 RestClient Bean |
-
-### 수정 (5개)
-
-| 파일 | 변경 내용 |
-|---|---|
-| `common/exception/ErrorCode.java` | Payment 관련 에러 코드 5개 추가 |
-| `domain/inventory/entity/Inventory.java` | `releaseAllocation()` 메서드 추가 |
-| `domain/inventory/service/InventoryService.java` | `releaseAllocation()` 메서드 추가 |
-| `domain/order/entity/Order.java` | `refund()` 메서드 추가 (CONFIRMED → CANCELLED) |
-| `domain/order/service/OrderService.java` | `refund()` 메서드 추가 |
-| `src/main/resources/application.properties` | `toss.*` 설정 추가 |
 
 ---
 
@@ -79,10 +43,7 @@ TossPayments Core API v1을 이용한 결제 도메인 구현 내용 정리.
 
 **Request:**
 ```json
-{
-  "orderId": 42,
-  "amount": 150000
-}
+{ "orderId": 42, "amount": 150000 }
 ```
 **Response:**
 ```json
@@ -99,7 +60,7 @@ TossPayments Core API v1을 이용한 결제 도메인 구현 내용 정리.
 ---
 
 ### POST `/api/payments/confirm`
-TossPayments 결제창 완료 후 서버 승인 처리.
+TossPayments 결제창 완료 후 서버 승인 처리. 성공 시 Shipment 자동 생성.
 
 **Request:**
 ```json
@@ -109,44 +70,17 @@ TossPayments 결제창 완료 후 서버 승인 처리.
   "amount": 150000
 }
 ```
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "orderId": 42,
-    "paymentKey": "tviva20240101...",
-    "tossOrderId": "order-42-a1b2c3d4",
-    "amount": 150000,
-    "status": "DONE",
-    "method": "카드",
-    "requestedAt": "2024-01-01T00:00:00",
-    "approvedAt": "2024-01-01T00:00:01"
-  }
-}
-```
 
 ---
 
 ### POST `/api/payments/{paymentKey}/cancel`
-전액 또는 부분 환불.
+전액 또는 부분 환불. 쿠폰이 적용된 주문이면 쿠폰도 자동 반환.
 
 **Request:**
 ```json
-{
-  "cancelReason": "고객 변심",
-  "cancelAmount": null
-}
+{ "cancelReason": "고객 변심", "cancelAmount": null }
 ```
 - `cancelAmount` 생략 시 전액 취소.
-
----
-
-### POST `/api/payments/webhook`
-TossPayments 웹훅 수신. **인증 불필요** (Security 설정에서 public으로 열어야 함).
-
-TossPayments는 10초 내 2xx 응답이 없으면 최대 7회 재전송.
 
 ---
 
@@ -155,45 +89,71 @@ TossPayments는 10초 내 2xx 응답이 없으면 최대 7회 재전송.
 
 ---
 
+### GET `/api/payments/order/{orderId}`
+주문 ID로 결제 조회. 결제 전이면 `data: null` 반환.
+
+---
+
+### POST `/api/payments/webhook`
+TossPayments 웹훅 수신. **인증 불필요** (Public 엔드포인트).
+`Toss-Signature` 헤더 HMAC-SHA256 서명 검증 후 처리.
+TossPayments는 10초 내 2xx 응답이 없으면 최대 7회 재전송.
+
+---
+
 ## 핵심 설계 결정사항
 
 ### 1. 금액 변조 방지 (Double Verification)
-- `prepare` 단계: 클라이언트가 보낸 `amount`를 DB의 `Order.totalAmount`와 비교
-- `confirm` 단계: 클라이언트가 보낸 `amount`를 DB의 `Payment.amount`와 재검증
+- `prepare`: 클라이언트 `amount` ↔ DB `Order.totalAmount` 비교
+- `confirm`: 클라이언트 `amount` ↔ DB `Payment.amount` 재검증
 - 클라이언트가 임의로 금액을 낮춰도 서버에서 차단
 
-### 2. 취소 시 재고 처리 구분
-| 취소 시점 | Order 상태 | 재고 처리 |
-|---|---|---|
-| 결제 전 (`OrderService.cancel`) | PENDING → CANCELLED | `reserved` 감소 |
-| 결제 후 (`OrderService.refund`) | CONFIRMED → CANCELLED | `allocated` 감소 |
+### 2. 결제 멱등성 3중 전략
 
-### 3. 멱등성 처리
-| 상황 | 처리 |
+| 레이어 | 전략 |
 |---|---|
-| 동일 `orderId`로 prepare 재요청 | 기존 PENDING Payment 반환 |
-| 이미 DONE인 결제에 confirm 재요청 | 기존 결과 그대로 반환 |
-| 이미 CANCELLED인 결제에 cancel 재요청 | 기존 결과 그대로 반환 |
+| `prepare()` | `payments.order_id` DB UNIQUE 제약 (V8) |
+| `confirm()` / `cancel()` | Redis SETNX (`PaymentIdempotencyManager`)로 PROCESSING 상태 원자적 선점, 결과 24h 캐싱 |
+| Toss API 호출 | `Idempotency-Key: {tossOrderId}` 헤더 |
 
-### 4. tossOrderId 생성 규칙
+### 3. 취소 시 재고 처리 구분
+
+| 취소 시점 | Order 상태 | 재고 처리 | 쿠폰 |
+|---|---|---|---|
+| 결제 전 (`OrderService.cancel`) | PENDING → CANCELLED | `reserved` 감소 | 반환 |
+| 결제 후 (`PaymentService.cancel`) | CONFIRMED → CANCELLED | `allocated` 감소 | 반환 |
+
+### 4. Circuit Breaker (Resilience4j)
+`TossPaymentsClient`에 `@CircuitBreaker(name="tossPayments")` 적용.
+- 10회 요청 중 50% 실패 시 회로 차단 → 빠른 실패 응답
+- 차단 후 30초 대기 → HALF_OPEN 전환 → 3회 테스트 후 복구
+
+### 5. 웹훅 서명 검증
+`Toss-Signature` 헤더를 HMAC-SHA256으로 검증 (secret: `TOSS_SECRET_KEY`).
+검증 실패 시 400 응답.
+
+### 6. tossOrderId 생성 규칙
 ```
 "order-" + {orderId} + "-" + {UUID 앞 8자리}
 예: "order-42-a1b2c3d4"
 ```
-TossPayments 규격: 영문/숫자/`-`/`_`, 6~64자
+TossPayments 규격: 영문/숫자/`-`/`_`, 6~64자.
 
-### 5. HTTP 클라이언트
-Spring Boot 3.5 (Spring 6.1+)의 `RestClient` 사용.
-`TossPaymentsConfig`에서 Bean 생성 시 Base64 인코딩된 `secretKey`를 `Authorization: Basic` 헤더에 주입.
+### 7. HTTP 클라이언트
+Spring 6.1+ `RestClient` 사용. `SimpleClientHttpRequestFactory`로 connect/read timeout 설정 (application.properties `toss.connect-timeout-ms`, `toss.read-timeout-ms`).
+`TossPaymentsConfig`에서 Base64 인코딩된 `secretKey`를 `Authorization: Basic` 헤더에 주입.
+
+### 8. Shipment 자동 생성
+`confirm()` 성공 시 `ShipmentService.createForOrder()` 호출 → Shipment PREPARING 상태로 자동 생성.
 
 ---
 
-## DB 스키마 (V4)
+## DB 스키마 (V4 + V8)
 
 ```sql
 CREATE TABLE payments (
     id              BIGINT         NOT NULL AUTO_INCREMENT,
-    order_id        BIGINT         NOT NULL,
+    order_id        BIGINT         NOT NULL UNIQUE,   -- V8에서 UNIQUE 추가
     payment_key     VARCHAR(200),
     toss_order_id   VARCHAR(64)    NOT NULL UNIQUE,
     amount          DECIMAL(12, 2) NOT NULL,
@@ -207,35 +167,28 @@ CREATE TABLE payments (
     created_at      DATETIME(6)    NOT NULL,
     updated_at      DATETIME(6)    NOT NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_payments_toss_order_id (toss_order_id),
     CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES orders (id)
 );
 ```
 
 ---
 
-## 설정 방법
+## 설정
 
-### 1. TossPayments 키 발급
-[TossPayments 개발자센터](https://developers.tosspayments.com)에서 상점 등록 후 발급.
-- 테스트 키: `test_sk_...` / `test_ck_...`
-- 실서비스 키: `live_sk_...` / `live_ck_...`
+### 환경 변수
 
-### 2. 환경 변수 설정
-```bash
-export TOSS_SECRET_KEY=test_sk_your_actual_key
-export TOSS_CLIENT_KEY=test_ck_your_actual_key
-```
+| 변수 | 설명 |
+|---|---|
+| `TOSS_SECRET_KEY` | 서버 시크릿 키 (`test_sk_...` / `live_sk_...`) |
+| `TOSS_CLIENT_KEY` | 클라이언트 키 (`test_ck_...` / `live_ck_...`) |
 
-### 3. 웹훅 URL 등록
+### 웹훅 URL 등록
 개발자센터 → 웹훅 설정 → URL: `https://your-domain.com/api/payments/webhook`
 > 로컬 개발 시 ngrok 등으로 외부 URL 노출 필요
 
----
-
-## 추후 구현 예정
-
-- [ ] 가상계좌 웹훅 기반 결제 완료 처리 (`handleWebhook` DONE 분기)
-- [ ] 결제 내역 목록 API (`GET /api/payments?orderId=42`)
-- [ ] Spring Security 연동 (webhook endpoint 제외 인증 적용)
-- [ ] 부분 취소 후 `PARTIAL_CANCELLED` 상태 처리
+### Circuit Breaker 설정 (`application.properties`)
+```properties
+resilience4j.circuitbreaker.instances.tossPayments.sliding-window-size=10
+resilience4j.circuitbreaker.instances.tossPayments.failure-rate-threshold=50
+resilience4j.circuitbreaker.instances.tossPayments.wait-duration-in-open-state=30s
+```
