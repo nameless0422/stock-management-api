@@ -61,6 +61,12 @@ dependencies {
 	testImplementation 'org.testcontainers:elasticsearch'
 	// P6Spy — SQL 실행 시간 로깅 및 슬로우 쿼리 감지
 	implementation 'com.github.gavlyukovskiy:p6spy-spring-boot-starter:1.9.2'
+	// Prometheus — Micrometer 메트릭 노출 (/actuator/prometheus)
+	implementation 'io.micrometer:micrometer-registry-prometheus'
+	// Micrometer Tracing — Brave 브리지 (traceId/spanId MDC 자동 주입)
+	implementation 'io.micrometer:micrometer-tracing-bridge-brave'
+	// Zipkin — 트레이스 데이터 전송 (Spring Boot BOM 관리)
+	implementation 'io.zipkin.reporter2:zipkin-reporter-brave'
 	testRuntimeOnly 'com.h2database:h2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
