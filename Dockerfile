@@ -22,4 +22,19 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# JVM 옵션 설명:
+#   UseContainerSupport      — Cgroup 메모리 제한 자동 인식
+#   MaxRAMPercentage=75.0    — 컨테이너 메모리의 75%를 힙 상한으로 사용 (-Xmx 대체)
+#   InitialRAMPercentage=50.0 — 초기 힙 50% (OOM 여유 확보)
+#   UseG1GC                  — 대용량 힙에서 안정적인 STW 시간
+#   Xlog:gc*                 — GC 로그 (5개 × 10MB 롤링)
+#   java.security.egd        — /dev/random 블로킹 방지 (컨테이너 엔트로피 부족 해결)
+RUN mkdir -p /app/logs
+ENTRYPOINT ["java", \
+  "-XX:+UseContainerSupport", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-XX:InitialRAMPercentage=50.0", \
+  "-XX:+UseG1GC", \
+  "-Xlog:gc*:file=/app/logs/gc.log:time,uptime:filecount=5,filesize=10m", \
+  "-Djava.security.egd=file:/dev/./urandom", \
+  "-jar", "app.jar"]
