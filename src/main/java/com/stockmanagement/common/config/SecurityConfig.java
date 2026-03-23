@@ -66,8 +66,8 @@ public class SecurityConfig {
                         // Public 엔드포인트
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/payments/webhook").permitAll()
-                        // Actuator — health/info만 공개, 나머지는 ADMIN 전용
-                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                        // Actuator — health/info/prometheus는 공개 (내부망 전용), 나머지는 ADMIN 전용
+                        .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/actuator/**").hasRole("ADMIN")
                         // Swagger UI
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
