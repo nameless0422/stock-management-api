@@ -297,4 +297,34 @@ class UserServiceTest {
             verifyNoInteractions(orderRepository);
         }
     }
+
+    // ===== deactivate() =====
+
+    @Nested
+    @DisplayName("deactivate()")
+    class Deactivate {
+
+        @Test
+        @DisplayName("존재하는 사용자 — userRepository.delete() 호출 (@SQLDelete가 논리 삭제 처리)")
+        void deletesUser() {
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+
+            userService.deactivate("testuser");
+
+            verify(userRepository).delete(user);
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 사용자 — USER_NOT_FOUND 예외 발생")
+        void throwsWhenUserNotFound() {
+            given(userRepository.findByUsername("ghost")).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> userService.deactivate("ghost"))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.USER_NOT_FOUND));
+
+            verify(userRepository, never()).delete(any(User.class));
+        }
+    }
 }

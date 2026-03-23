@@ -25,7 +25,9 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willDoNothing;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -82,6 +84,31 @@ class UserControllerTest {
         @DisplayName("인증 없음 → 403")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(get("/api/users/me"))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    // ===== DELETE /api/users/me =====
+
+    @Nested
+    @DisplayName("DELETE /api/users/me")
+    class Deactivate {
+
+        @Test
+        @DisplayName("인증된 사용자 — 회원 탈퇴 → 200")
+        void deactivatesAccount() throws Exception {
+            willDoNothing().given(userService).deactivate("testuser");
+
+            mockMvc.perform(delete("/api/users/me")
+                            .with(authentication(userAuth("testuser"))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @DisplayName("인증 없음 → 403")
+        void unauthorizedWithoutAuth() throws Exception {
+            mockMvc.perform(delete("/api/users/me"))
                     .andExpect(status().isForbidden());
         }
     }

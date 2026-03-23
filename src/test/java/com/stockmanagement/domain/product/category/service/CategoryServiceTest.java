@@ -127,7 +127,7 @@ class CategoryServiceTest {
         @DisplayName("하위 카테고리 있는 카테고리 삭제 → CATEGORY_HAS_CHILDREN 예외")
         void throwsWhenHasChildren() {
             parent.getChildren().add(child);
-            given(categoryRepository.findById(1L)).willReturn(Optional.of(parent));
+            given(categoryRepository.findByIdWithChildren(1L)).willReturn(Optional.of(parent));
 
             assertThatThrownBy(() -> categoryService.delete(1L))
                     .isInstanceOf(BusinessException.class)
@@ -140,7 +140,7 @@ class CategoryServiceTest {
         @Test
         @DisplayName("상품이 연결된 카테고리 삭제 → CATEGORY_HAS_PRODUCTS 예외")
         void throwsWhenHasProducts() {
-            given(categoryRepository.findById(1L)).willReturn(Optional.of(parent));
+            given(categoryRepository.findByIdWithChildren(1L)).willReturn(Optional.of(parent));
             given(productRepository.existsByCategory_Id(1L)).willReturn(true);
 
             assertThatThrownBy(() -> categoryService.delete(1L))
@@ -154,7 +154,7 @@ class CategoryServiceTest {
         @Test
         @DisplayName("삭제 조건 충족 시 정상 삭제")
         void deletesCategory() {
-            given(categoryRepository.findById(1L)).willReturn(Optional.of(parent));
+            given(categoryRepository.findByIdWithChildren(1L)).willReturn(Optional.of(parent));
             given(productRepository.existsByCategory_Id(1L)).willReturn(false);
 
             categoryService.delete(1L);

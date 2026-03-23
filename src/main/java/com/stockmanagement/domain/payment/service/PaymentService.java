@@ -17,9 +17,11 @@ import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmRequest;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmResponse;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
+import com.stockmanagement.common.event.PaymentConfirmedEvent;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,6 +61,7 @@ public class PaymentService {
     private final TossPaymentsClient tossPaymentsClient;
     private final PaymentIdempotencyManager idempotencyManager;
     private final ShipmentService shipmentService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * Prepares a payment session for the given order.
@@ -198,6 +201,10 @@ public class PaymentService {
             // 6. 결과를 Redis에 캐싱 (24h TTL)
             PaymentResponse response = PaymentResponse.from(payment);
             idempotencyManager.complete(idempotencyKey, response);
+
+            // 결제 완료 이벤트 발행 (트랜잭션 커밋 후 비동기 처리)
+            eventPublisher.publishEvent(new PaymentConfirmedEvent(
+                    payment.getId(), payment.getOrderId(), payment.getAmount()));
 
             log.info("Payment confirmed: paymentKey={}, orderId={}, amount={}",
                     payment.getPaymentKey(), payment.getOrderId(), payment.getAmount());
