@@ -18,10 +18,13 @@ import com.stockmanagement.domain.order.repository.OrderSpecification;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.common.event.OrderCancelledEvent;
+import com.stockmanagement.common.event.OrderCreatedEvent;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
@@ -62,6 +65,7 @@ public class OrderService {
     private final OrderStatusHistoryRepository historyRepository;
     private final UserRepository userRepository;
     private final CouponService couponService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 주문을 생성한다.
@@ -143,6 +147,10 @@ public class OrderService {
 
         // 7. 상태 이력 기록 (최초 생성: fromStatus=null, toStatus=PENDING)
         recordHistory(savedOrder.getId(), null, OrderStatus.PENDING, null);
+
+        // 8. 주문 생성 이벤트 발행 (트랜잭션 커밋 후 비동기 처리)
+        eventPublisher.publishEvent(new OrderCreatedEvent(
+                savedOrder.getId(), savedOrder.getUserId(), savedOrder.getTotalAmount()));
 
         return OrderResponse.from(savedOrder);
     }
@@ -227,6 +235,7 @@ public class OrderService {
         couponService.releaseCoupon(order.getId());
 
         recordHistory(order.getId(), OrderStatus.PENDING, OrderStatus.CANCELLED, null);
+        eventPublisher.publishEvent(new OrderCancelledEvent(order.getId(), order.getUserId(), "PENDING_CANCELLED"));
         return OrderResponse.from(order);
     }
 
@@ -280,6 +289,7 @@ public class OrderService {
         couponService.releaseCoupon(order.getId());
 
         recordHistory(order.getId(), OrderStatus.CONFIRMED, OrderStatus.CANCELLED, null);
+        eventPublisher.publishEvent(new OrderCancelledEvent(order.getId(), order.getUserId(), "PAYMENT_REFUNDED"));
     }
 
     // ===== 내부 헬퍼 =====

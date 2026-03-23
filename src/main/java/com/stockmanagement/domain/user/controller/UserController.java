@@ -12,6 +12,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,6 +39,13 @@ public class UserController {
     @GetMapping("/me")
     public ApiResponse<UserResponse> getMe(@AuthenticationPrincipal String username) {
         return ApiResponse.ok(userService.getMe(username));
+    }
+
+    @Operation(summary = "회원 탈퇴", description = "논리 삭제 처리. 탈퇴 후 동일 계정으로 로그인 불가.")
+    @DeleteMapping("/me")
+    public ApiResponse<Void> deactivate(@AuthenticationPrincipal String username) {
+        userService.deactivate(username);
+        return ApiResponse.ok(null);
     }
 
     @Operation(summary = "내 주문 목록 (페이징)", description = "기본: 최신순, 20건.")

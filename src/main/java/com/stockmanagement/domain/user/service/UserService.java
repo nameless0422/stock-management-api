@@ -99,6 +99,14 @@ public class UserService {
         return UserResponse.from(user);
     }
 
+    /** 회원 탈퇴 — 논리 삭제 처리. 이후 해당 username/email로 재가입 불가. */
+    @Transactional
+    public void deactivate(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        userRepository.delete(user); // @SQLDelete → UPDATE users SET deleted_at = NOW(6) WHERE id = ?
+    }
+
     /** 현재 인증된 사용자의 주문 목록 페이징 조회. */
     public Page<OrderResponse> getMyOrders(String username, Pageable pageable) {
         User user = userRepository.findByUsername(username)

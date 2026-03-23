@@ -14,11 +14,13 @@ import com.stockmanagement.domain.inventory.entity.InventoryTransactionType;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.inventory.repository.InventorySpecification;
 import com.stockmanagement.domain.inventory.repository.InventoryTransactionRepository;
+import com.stockmanagement.common.event.LowStockEvent;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -48,6 +50,7 @@ public class InventoryService {
     private final InventoryRepository inventoryRepository;
     private final InventoryTransactionRepository transactionRepository;
     private final ProductRepository productRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 재고 목록을 조건 필터링 + 페이지네이션으로 조회한다.
@@ -145,6 +148,14 @@ public class InventoryService {
         Inventory inventory = findByProductIdWithLock(productId);
         inventory.reserve(quantity);
         recordTransaction(inventory, InventoryTransactionType.RESERVE, quantity);
+
+        // 재고 부족 경보 — available이 임계값 미만이면 이벤트 발행
+        if (inventory.getAvailable() < LowStockEvent.THRESHOLD) {
+            eventPublisher.publishEvent(new LowStockEvent(
+                    productId,
+                    inventory.getProduct().getName(),
+                    inventory.getAvailable()));
+        }
     }
 
     /** 주문 취소 또는 결제 실패 시 예약을 해제한다. */

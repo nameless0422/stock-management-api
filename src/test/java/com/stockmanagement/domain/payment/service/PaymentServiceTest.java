@@ -58,6 +58,9 @@ class PaymentServiceTest {
     @Mock
     private ShipmentService shipmentService;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private PaymentService paymentService;
 
