@@ -1,7 +1,10 @@
 package com.stockmanagement.domain.shipment.service;
 
+import com.stockmanagement.common.event.ShipmentDeliveredEvent;
+import com.stockmanagement.common.event.ShipmentShippedEvent;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.OrderRepository;
@@ -34,6 +37,7 @@ class ShipmentServiceTest {
 
     @Mock ShipmentRepository shipmentRepository;
     @Mock OrderRepository orderRepository;
+    @Mock OutboxEventStore outboxEventStore;
 
     @InjectMocks ShipmentService shipmentService;
 
@@ -126,6 +130,19 @@ class ShipmentServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .hasMessage(ErrorCode.SHIPMENT_NOT_FOUND.getMessage());
         }
+
+        @Test
+        @DisplayName("출고 성공 시 ShipmentShippedEvent 발행")
+        void publishesShipmentShippedEvent() {
+            given(shipmentRepository.findByOrderId(1L)).willReturn(Optional.of(preparingShipment));
+            ShipmentUpdateRequest request = mock(ShipmentUpdateRequest.class);
+            given(request.getCarrier()).willReturn("한진택배");
+            given(request.getTrackingNumber()).willReturn("987654321");
+
+            shipmentService.startShipping(1L, request);
+
+            verify(outboxEventStore).save(any(ShipmentShippedEvent.class));
+        }
     }
 
     @Nested
@@ -151,6 +168,16 @@ class ShipmentServiceTest {
             assertThatThrownBy(() -> shipmentService.completeDelivery(1L))
                     .isInstanceOf(BusinessException.class)
                     .hasMessage(ErrorCode.INVALID_SHIPMENT_STATUS.getMessage());
+        }
+
+        @Test
+        @DisplayName("배송 완료 시 ShipmentDeliveredEvent 발행")
+        void publishesShipmentDeliveredEvent() {
+            given(shipmentRepository.findByOrderId(2L)).willReturn(Optional.of(shippedShipment));
+
+            shipmentService.completeDelivery(2L);
+
+            verify(outboxEventStore).save(any(ShipmentDeliveredEvent.class));
         }
     }
 
