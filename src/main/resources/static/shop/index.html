@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StockMall</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root {
+      --primary:  #FF470A;
+      --primary2: #e03d08;
+      --dark:     #111;
+      --gray:     #888;
+      --border:   #e8e8e8;
+      --surface:  #f4f6f8;
+      --card-bg:  #fff;
+    }
+
+    * { box-sizing: border-box; }
+    body { background: var(--surface); font-family: -apple-system, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; color: var(--dark); font-size: 13px; }
+
+    /* ══ 헤더 ══ */
+    .site-header {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    .header-inner {
+      max-width: 1200px; margin: 0 auto;
+      padding: .6rem 1rem;
+      display: flex; align-items: center; gap: 1rem;
+    }
+    .logo { font-size: 1.25rem; font-weight: 900; text-decoration: none; color: var(--dark); white-space: nowrap; letter-spacing: -.5px; }
+    .logo em { font-style: normal; color: var(--primary); }
+    .search-wrap { flex: 1; max-width: 520px; }
+    .search-box {
+      display: flex; border: 2px solid var(--primary); border-radius: 4px; overflow: hidden;
+      background: #fff;
+    }
+    .search-box input {
+      flex: 1; border: none; padding: .45rem .8rem; font-size: .88rem; outline: none;
+      background: transparent;
+    }
+    .search-box .btn-search {
+      background: var(--primary); color: #fff; border: none;
+      padding: 0 1rem; font-size: .95rem; cursor: pointer;
+    }
+    .search-box .btn-search:hover { background: var(--primary2); }
+    .header-actions { display: flex; align-items: center; gap: .25rem; margin-left: auto; }
+    .hdr-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: .2rem .5rem; border: none; background: transparent; cursor: pointer;
+      color: #333; font-size: .65rem; font-weight: 500; line-height: 1;
+    }
+    .hdr-btn i { font-size: 1.15rem; }
+    .hdr-btn:hover { color: var(--primary); }
+
+    /* ══ 카테고리 탭 ══ */
+    .cat-nav { background: #fff; border-bottom: 2px solid #eee; }
+    .cat-nav-inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 1rem;
+      display: flex; gap: 0; overflow-x: auto; scrollbar-width: none;
+    }
+    .cat-nav-inner::-webkit-scrollbar { display: none; }
+    .cat-tab {
+      padding: .6rem 1rem; font-size: .83rem; font-weight: 600; color: #444;
+      cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent;
+      margin-bottom: -2px; transition: color .15s; user-select: none;
+    }
+    .cat-tab:hover { color: var(--primary); }
+    .cat-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* ══ 서브 카테고리 ══ */
+    .subcat-bar { background: #fafafa; border-bottom: 1px solid var(--border); display: none; }
+    .subcat-bar.show { display: block; }
+    .subcat-inner {
+      max-width: 1200px; margin: 0 auto; padding: .5rem 1rem;
+      display: flex; gap: .35rem; flex-wrap: wrap;
+    }
+    .subcat-chip {
+      padding: .25rem .75rem; border-radius: 2px; font-size: .78rem;
+      cursor: pointer; border: 1px solid #ddd; background: #fff; color: #555;
+      transition: all .12s; white-space: nowrap; font-weight: 500;
+    }
+    .subcat-chip:hover { border-color: var(--primary); color: var(--primary); }
+    .subcat-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* ══ 필터 바 ══ */
+    .filter-bar { background: #fff; border-bottom: 1px solid var(--border); }
+    .filter-inner {
+      max-width: 1200px; margin: 0 auto; padding: .55rem 1rem;
+      display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+    }
+    .result-count { font-size: .8rem; color: #666; }
+    .result-count strong { color: var(--primary); }
+    .filter-sep { width: 1px; height: 14px; background: #ddd; flex-shrink: 0; }
+    .sort-tabs { display: flex; gap: 0; }
+    .sort-tab {
+      padding: .3rem .65rem; font-size: .78rem; color: #555; cursor: pointer;
+      border: 1px solid #ddd; background: #fff; margin-right: -1px;
+      transition: all .12s; font-weight: 500;
+    }
+    .sort-tab:first-child { border-radius: 2px 0 0 2px; }
+    .sort-tab:last-child  { border-radius: 0 2px 2px 0; }
+    .sort-tab:hover { color: var(--primary); border-color: var(--primary); z-index: 1; position: relative; }
+    .sort-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); z-index: 1; position: relative; }
+    .price-range-wrap { display: flex; align-items: center; gap: .3rem; margin-left: auto; }
+    .price-input {
+      width: 80px; padding: .28rem .5rem; border-radius: 2px;
+      border: 1px solid #ddd; font-size: .78rem; text-align: center; outline: none;
+    }
+    .price-input:focus { border-color: var(--primary); }
+    .price-apply {
+      padding: .28rem .65rem; border-radius: 2px; background: var(--primary);
+      color: #fff; border: none; font-size: .78rem; cursor: pointer;
+    }
+    .price-apply:hover { background: var(--primary2); }
+    .btn-filter-sm {
+      padding: .28rem .65rem; font-size: .78rem; border-radius: 2px;
+      border: 1px solid #ddd; background: #fff; color: #555; cursor: pointer;
+      display: flex; align-items: center; gap: .25rem; transition: all .12s;
+    }
+    .btn-filter-sm:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-filter-sm.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* ══ 메인 ══ */
+    .content-wrap { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+
+    /* ══ 상품 카드 ══ */
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+    }
+    @media (max-width: 1100px) { .product-grid { grid-template-columns: repeat(5, 1fr); } }
+    @media (max-width: 860px)  { .product-grid { grid-template-columns: repeat(4, 1fr); } }
+    @media (max-width: 640px)  { .product-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; } }
+    @media (max-width: 440px)  { .product-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .product-card {
+      background: var(--card-bg);
+      cursor: pointer;
+      transition: box-shadow .18s;
+      position: relative;
+    }
+    .product-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
+
+    .thumb-wrap {
+      position: relative; overflow: hidden;
+      aspect-ratio: 1; background: #f5f5f5;
+    }
+    .thumb-wrap img {
+      width: 100%; height: 100%; object-fit: cover;
+      transition: transform .3s;
+    }
+    .product-card:hover .thumb-wrap img { transform: scale(1.04); }
+    .thumb-placeholder {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 5px;
+      background: linear-gradient(145deg, #f2f3f5 0%, #e9eaec 100%);
+      color: #b8bcc4;
+    }
+    .thumb-placeholder i   { font-size: 1.6rem; }
+    .thumb-placeholder span { font-size: .62rem; letter-spacing: .02em; }
+    .card-status-badge {
+      position: absolute; top: 0; left: 0;
+      padding: 3px 6px; font-size: .65rem; font-weight: 700;
+    }
+    .badge-inactive-overlay { background: rgba(0,0,0,.45); color: #fff; }
+    .badge-disc-overlay     { background: rgba(80,80,80,.7); color: #fff; }
+
+    .card-info { padding: 7px 8px 10px; }
+    .card-mall  { font-size: .68rem; color: #888; margin-bottom: 2px; }
+    .card-name  {
+      font-size: .78rem; font-weight: 500; line-height: 1.35; color: #222;
+      overflow: hidden; display: -webkit-box;
+      -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      min-height: 2.1em; margin-bottom: 4px;
+    }
+    .card-price {
+      font-size: .95rem; font-weight: 800; color: #111;
+      letter-spacing: -.3px;
+    }
+    .card-price-won { font-size: .7rem; font-weight: 500; color: #888; margin-left: 1px; }
+    .card-delivery {
+      font-size: .68rem; color: #1a7f4b; font-weight: 600;
+      margin-top: 3px;
+    }
+    .card-rating {
+      display: flex; align-items: center; gap: 3px;
+      font-size: .68rem; color: #888; margin-top: 2px;
+    }
+    .stars { color: #ffc200; font-size: .72rem; letter-spacing: -.5px; }
+
+    /* ══ 로딩/빈 상태 ══ */
+    .loading-state, .empty-state { padding: 5rem 0; text-align: center; color: #bbb; }
+    .empty-state i { font-size: 3rem; display: block; margin-bottom: .75rem; }
+
+    /* ══ 페이지네이션 ══ */
+    .pagination-wrap { display: flex; justify-content: center; margin-top: 1.5rem; gap: 2px; }
+    .page-btn {
+      min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+      font-size: .82rem; border: 1px solid #ddd; background: #fff; color: #444;
+      cursor: pointer; border-radius: 2px; padding: 0 6px; transition: all .12s;
+    }
+    .page-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .page-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .page-btn.disabled { color: #ccc; cursor: default; pointer-events: none; }
+
+    /* ══ 모달 ══ */
+    .modal-content { border-radius: 4px; border: none; }
+    .modal-header  { border-bottom: 1px solid var(--border); padding: .85rem 1.2rem .75rem; }
+    .modal-header .modal-title { font-size: .95rem; font-weight: 700; }
+    .modal-body { padding: 1.2rem; }
+    .modal-main-img {
+      aspect-ratio: 1; background: #f5f5f5; border-radius: 4px; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-main-img img { width: 100%; height: 100%; object-fit: cover; }
+    .thumb-list { display: flex; gap: 6px; margin-top: 8px; overflow-x: auto; }
+    .thumb-item {
+      width: 54px; height: 54px; object-fit: cover; border-radius: 3px;
+      border: 2px solid var(--border); cursor: pointer; flex-shrink: 0;
+    }
+    .thumb-item.active { border-color: var(--primary); }
+    .modal-cat-badge {
+      display: block; font-size: .75rem; color: #aaa; margin-bottom: 4px;
+    }
+    .modal-name  { font-size: 1.05rem; font-weight: 700; line-height: 1.4; margin-bottom: .5rem; }
+    .modal-price { font-size: 1.7rem; font-weight: 900; color: var(--primary); letter-spacing: -.5px; }
+    .modal-price span { font-size: .85rem; font-weight: 500; color: #888; }
+    .modal-sku   { font-size: .72rem; color: #bbb; margin-bottom: .5rem; }
+    .modal-desc  { font-size: .83rem; color: #666; line-height: 1.6; }
+    .inv-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: .75rem; }
+    .inv-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 2px; font-size: .78rem; color: #444;
+    }
+    .inv-chip strong { color: #222; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 1.2rem; }
+    .btn-cart {
+      flex: 1; padding: .7rem; font-size: .88rem; font-weight: 700;
+      border: 2px solid var(--primary); background: #fff; color: var(--primary);
+      border-radius: 2px; cursor: pointer; transition: all .15s;
+    }
+    .btn-cart:hover { background: #fff5f2; }
+    .btn-buy {
+      flex: 1; padding: .7rem; font-size: .88rem; font-weight: 700;
+      background: var(--primary); color: #fff; border: none; border-radius: 2px; cursor: pointer;
+    }
+    .btn-buy:hover { background: var(--primary2); }
+
+    /* ══ 토스트 ══ */
+    #toast-container { position: fixed; bottom: 1.2rem; right: 1.2rem; z-index: 9999; }
+    .my-toast {
+      padding: .65rem 1rem; background: #333; color: #fff; border-radius: 4px;
+      font-size: .82rem; margin-top: .35rem; box-shadow: 0 4px 12px rgba(0,0,0,.2);
+      animation: fadeIn .2s;
+    }
+    .my-toast.danger { background: #d63031; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    mark { background: #fff176; padding: 0 1px; border-radius: 2px; }
+
+    @media (max-width: 640px) {
+      .search-wrap { max-width: none; }
+      .price-range-wrap { display: none; }
+      .hdr-btn span { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ 헤더 ═══ -->
+<header class="site-header">
+  <div class="header-inner">
+    <a class="logo" href="/shop/">Stock<em>Mall</em></a>
+    <div class="search-wrap">
+      <div class="search-box">
+        <input id="navSearch" type="text" placeholder="상품명, 카테고리 검색">
+        <button class="btn-search" onclick="doSearch()"><i class="bi bi-search"></i></button>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="hdr-btn" title="찜목록">
+        <i class="bi bi-heart"></i><span>찜</span>
+      </button>
+      <button class="hdr-btn" title="장바구니">
+        <i class="bi bi-cart3"></i><span>장바구니</span>
+      </button>
+      <button class="hdr-btn" title="마이페이지">
+        <i class="bi bi-person"></i><span>마이페이지</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ 카테고리 탭 ═══ -->
+<nav class="cat-nav">
+  <div class="cat-nav-inner" id="catTabs">
+    <div class="cat-tab active" data-id="" onclick="selectRootCat('','',null)">전체</div>
+  </div>
+</nav>
+
+<!-- ═══ 서브 카테고리 ═══ -->
+<div class="subcat-bar" id="subcatBar">
+  <div class="subcat-inner" id="subcatChips"></div>
+</div>
+
+<!-- ═══ 필터 바 ═══ -->
+<div class="filter-bar">
+  <div class="filter-inner">
+    <span class="result-count" id="resultCount"></span>
+    <div class="filter-sep"></div>
+    <div class="sort-tabs" id="sortTabs">
+      <div class="sort-tab active" data-val="" onclick="setSort(this,'')">관련도순</div>
+      <div class="sort-tab" data-val="price_asc"  onclick="setSort(this,'price_asc')">낮은가격</div>
+      <div class="sort-tab" data-val="price_desc" onclick="setSort(this,'price_desc')">높은가격</div>
+      <div class="sort-tab" data-val="newest"     onclick="setSort(this,'newest')">최신순</div>
+    </div>
+    <button class="btn-filter-sm" id="stockBtn" onclick="toggleStock()">
+      <i class="bi bi-check-circle-fill"></i> 재고있음
+    </button>
+    <div class="price-range-wrap">
+      <input id="priceMin" class="price-input" type="number" placeholder="최소가" min="0" step="1000">
+      <span style="color:#ccc;font-size:.8rem">~</span>
+      <input id="priceMax" class="price-input" type="number" placeholder="최대가" min="0" step="1000">
+      <button class="price-apply" onclick="applyPriceFilter()">적용</button>
+      <button class="btn-filter-sm" onclick="resetPriceFilter()">초기화</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 상품 그리드 ═══ -->
+<div class="content-wrap">
+  <div id="loadingState" class="loading-state d-none">
+    <div class="spinner-border" style="color:var(--primary);width:2rem;height:2rem" role="status"></div>
+    <p class="mt-2 small" style="color:#bbb">상품을 불러오는 중...</p>
+  </div>
+  <div id="emptyState" class="empty-state d-none">
+    <i class="bi bi-search"></i>
+    <p class="fw-semibold" style="color:#999;font-size:.9rem">검색 결과가 없습니다</p>
+    <p class="small" style="color:#bbb">다른 검색어나 필터를 사용해 보세요</p>
+  </div>
+  <div id="productGrid" class="product-grid"></div>
+  <div id="paginationWrap" class="pagination-wrap"></div>
+</div>
+
+<!-- ═══ 상품 상세 모달 ═══ -->
+<div class="modal fade" id="productModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-title" id="modalTitleHeader">상품 상세</span>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-5">
+            <div class="modal-main-img" id="modalMainImg">
+              <div style="font-size:3rem;color:#ddd"><i class="bi bi-image"></i></div>
+            </div>
+            <div class="thumb-list" id="modalThumbList"></div>
+          </div>
+          <div class="col-md-7 d-flex flex-column">
+            <div class="modal-sku" id="modalSku"></div>
+            <span id="modalBadge" class="mb-1 d-inline-block" style="width:fit-content"></span>
+            <span class="modal-cat-badge" id="modalCategory"></span>
+            <div class="modal-name" id="modalName"></div>
+            <div class="modal-price" id="modalPrice"><span>원</span></div>
+            <p class="modal-desc mt-2" id="modalDesc"></p>
+            <div id="modalInventory" class="inv-row"></div>
+            <div class="modal-actions mt-auto">
+              <button class="btn-cart" disabled><i class="bi bi-bag-plus me-1"></i>장바구니 (준비중)</button>
+              <button class="btn-buy" disabled><i class="bi bi-lightning-fill me-1"></i>바로구매</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const state = {
+  keyword: '', category: '', categoryId: null, rootId: null,
+  minPrice: null, maxPrice: null,
+  sort: '', page: 0, size: 30, inStockOnly: false,
+};
+let categoryTree = [];
+let productModal;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  productModal = new bootstrap.Modal(document.getElementById('productModal'));
+  await loadCategories();
+  loadProducts();
+  document.getElementById('navSearch').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch();
+  });
+});
+
+// ══ 카테고리 ══
+async function loadCategories() {
+  try {
+    const res  = await fetch('/api/categories/tree');
+    const json = await res.json();
+    if (!json.success) return;
+    categoryTree = json.data;
+    renderCatTabs();
+  } catch {}
+}
+
+function renderCatTabs() {
+  const tabs = document.getElementById('catTabs');
+  tabs.innerHTML = `<div class="cat-tab active" data-id="" onclick="selectRootCat('','',null)">전체</div>`;
+  for (const root of categoryTree) {
+    tabs.innerHTML += `
+      <div class="cat-tab" data-id="${root.id}"
+           onclick="selectRootCat('${root.name}','${root.id}',${JSON.stringify(root.children || [])})">
+        ${root.name}
+      </div>`;
+  }
+}
+
+function selectRootCat(name, id, children) {
+  state.rootId   = id || null;
+  state.category = name;
+  state.categoryId = id || null;
+  state.page = 0;
+
+  document.querySelectorAll('.cat-tab').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.cat-tab[data-id="${id}"]`)?.classList.add('active');
+
+  const bar   = document.getElementById('subcatBar');
+  const chips = document.getElementById('subcatChips');
+
+  if (children && children.length) {
+    chips.innerHTML = children.map(c =>
+      `<div class="subcat-chip" data-id="${c.id}" onclick="selectSubCat('${c.name}','${c.id}')">${c.name}</div>`
+    ).join('');
+    bar.classList.add('show');
+  } else {
+    bar.classList.remove('show');
+    chips.innerHTML = '';
+  }
+  loadProducts();
+}
+
+function selectSubCat(name, id) {
+  state.category   = name;
+  state.categoryId = id;
+  state.page       = 0;
+  document.querySelectorAll('.subcat-chip').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.subcat-chip[data-id="${id}"]`)?.classList.add('active');
+  loadProducts();
+}
+
+// ══ 정렬 ══
+function setSort(el, val) {
+  state.sort = val;
+  state.page = 0;
+  document.querySelectorAll('.sort-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  loadProducts();
+}
+
+// ══ 상품 목록 ══
+async function loadProducts() {
+  showLoading(true);
+
+  const params = new URLSearchParams({ page: state.page, size: state.size });
+  if (state.keyword)   params.set('q',        state.keyword);
+  if (state.category)  params.set('category', state.category);
+  if (state.minPrice != null) params.set('minPrice', state.minPrice);
+  if (state.maxPrice != null) params.set('maxPrice', state.maxPrice);
+  if (state.sort)      params.set('sort',     state.sort);
+
+  try {
+    const res  = await fetch(`/api/products?${params}`);
+    const json = await res.json();
+    showLoading(false);
+    if (!json.success) { showEmpty(); return; }
+
+    let products        = json.data.content ?? [];
+    const totalElements = json.data.totalElements ?? 0;
+    const totalPages    = json.data.totalPages ?? 1;
+
+    if (state.inStockOnly) products = products.filter(p => p.status === 'ACTIVE');
+    if (!products.length)  { showEmpty(); return; }
+
+    const countEl = document.getElementById('resultCount');
+    countEl.innerHTML = `총 <strong>${totalElements.toLocaleString()}</strong>개`;
+
+    renderProducts(products);
+    renderPagination(totalPages);
+  } catch {
+    showLoading(false);
+    showToast('상품을 불러오지 못했습니다.', 'danger');
+  }
+}
+
+function renderProducts(products) {
+  const grid = document.getElementById('productGrid');
+  grid.innerHTML = '';
+  document.getElementById('emptyState').classList.add('d-none');
+
+  for (const p of products) {
+    const isSoldOut = p.status === 'INACTIVE';
+    const isDisc    = p.status === 'DISCONTINUED';
+    const thumbHtml = p.thumbnailUrl
+      ? `<img src="${p.thumbnailUrl}" alt="${escapeHtml(p.name)}" loading="lazy">`
+      : `<div class="thumb-placeholder"><i class="bi bi-box-seam"></i><span>${escapeHtml((p.category || 'NO IMG').substring(0, 6))}</span></div>`;
+    const overlayBadge = isSoldOut
+      ? `<div class="card-status-badge badge-inactive-overlay">품절</div>`
+      : isDisc
+      ? `<div class="card-status-badge badge-disc-overlay">단종</div>`
+      : '';
+
+    grid.innerHTML += `
+      <div class="product-card" onclick="openDetail(${p.id})">
+        <div class="thumb-wrap">
+          ${thumbHtml}
+          ${overlayBadge}
+        </div>
+        <div class="card-info">
+          <div class="card-mall">${escapeHtml(p.category || 'StockMall')}</div>
+          <div class="card-name">${highlight(p.name, state.keyword)}</div>
+          <div class="card-price">
+            ${p.price.toLocaleString()}<span class="card-price-won">원</span>
+          </div>
+          <div class="card-delivery"><i class="bi bi-truck" style="font-size:.72rem"></i> 무료배송</div>
+        </div>
+      </div>`;
+  }
+}
+
+function renderPagination(totalPages) {
+  const wrap = document.getElementById('paginationWrap');
+  if (totalPages <= 1) { wrap.innerHTML = ''; return; }
+  const cur   = state.page;
+  const start = Math.max(0, cur - 4);
+  const end   = Math.min(totalPages - 1, cur + 4);
+  let html = `<button class="page-btn ${cur===0?'disabled':''}" onclick="goPage(${cur-1})"><i class="bi bi-chevron-left"></i></button>`;
+  for (let i = start; i <= end; i++) {
+    html += `<button class="page-btn ${i===cur?'active':''}" onclick="goPage(${i})">${i+1}</button>`;
+  }
+  html += `<button class="page-btn ${cur===totalPages-1?'disabled':''}" onclick="goPage(${cur+1})"><i class="bi bi-chevron-right"></i></button>`;
+  wrap.innerHTML = html;
+}
+
+function goPage(p) {
+  state.page = p;
+  loadProducts();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ══ 상품 상세 ══
+async function openDetail(id) {
+  try {
+    const [pRes, iRes, invRes] = await Promise.all([
+      fetch(`/api/products/${id}`),
+      fetch(`/api/products/${id}/images`),
+      fetch(`/api/inventory/${id}`),
+    ]);
+    const pJson   = await pRes.json();
+    const iJson   = await iRes.json();
+    const invJson = await invRes.json();
+    if (!pJson.success) return;
+
+    const p    = pJson.data;
+    const imgs = iJson.success ? iJson.data : [];
+    const inv  = invJson.success ? invJson.data : null;
+
+    document.getElementById('modalTitleHeader').textContent = p.name;
+    document.getElementById('modalName').textContent        = p.name;
+    document.getElementById('modalSku').textContent         = `SKU: ${p.sku}`;
+    document.getElementById('modalCategory').textContent    = p.category || '미분류';
+    document.getElementById('modalBadge').innerHTML         = statusBadge(p.status);
+
+    const priceEl = document.getElementById('modalPrice');
+    priceEl.innerHTML = `${p.price.toLocaleString()}<span>원</span>`;
+
+    document.getElementById('modalDesc').textContent = p.description || '상품 설명이 없습니다.';
+
+    if (inv) {
+      const available = inv.onHand - inv.reserved - inv.allocated;
+      document.getElementById('modalInventory').innerHTML = `
+        <span class="inv-chip"><i class="bi bi-box-seam"></i> 실재고 <strong>${inv.onHand.toLocaleString()}</strong></span>
+        <span class="inv-chip"><i class="bi bi-hourglass-split"></i> 예약 <strong>${inv.reserved}</strong></span>
+        <span class="inv-chip" style="color:#1a7f4b"><i class="bi bi-check-circle"></i> 가용 <strong>${available.toLocaleString()}</strong></span>`;
+    } else {
+      document.getElementById('modalInventory').innerHTML = '';
+    }
+
+    const mainEl  = document.getElementById('modalMainImg');
+    const thumbEl = document.getElementById('modalThumbList');
+    const mainImg = imgs.find(i => i.imageType === 'THUMBNAIL') || imgs[0];
+
+    if (mainImg) {
+      mainEl.innerHTML = `<img src="${mainImg.imageUrl}" alt="${escapeHtml(p.name)}">`;
+    } else if (p.thumbnailUrl) {
+      mainEl.innerHTML = `<img src="${p.thumbnailUrl}" alt="${escapeHtml(p.name)}">`;
+    } else {
+      mainEl.innerHTML = `<div style="font-size:3.5rem;color:#ddd"><i class="bi bi-image"></i></div>`;
+    }
+
+    thumbEl.innerHTML = '';
+    for (const img of imgs) {
+      const el = document.createElement('img');
+      el.src       = img.imageUrl;
+      el.className = 'thumb-item' + (img === mainImg ? ' active' : '');
+      el.onclick   = () => {
+        mainEl.innerHTML = `<img src="${img.imageUrl}" alt="">`;
+        document.querySelectorAll('.thumb-item').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+      };
+      thumbEl.appendChild(el);
+    }
+
+    productModal.show();
+  } catch {
+    showToast('상품 정보를 불러오지 못했습니다.', 'danger');
+  }
+}
+
+// ══ 검색 ══
+function doSearch() {
+  const kw = document.getElementById('navSearch').value.trim();
+  state.keyword    = kw;
+  state.category   = '';
+  state.categoryId = null;
+  state.rootId     = null;
+  state.page       = 0;
+  document.querySelectorAll('.cat-tab').forEach(el => el.classList.remove('active'));
+  document.querySelector('.cat-tab[data-id=""]')?.classList.add('active');
+  document.getElementById('subcatBar').classList.remove('show');
+  loadProducts();
+}
+
+// ══ 가격 필터 ══
+function applyPriceFilter() {
+  state.minPrice = parseInt(document.getElementById('priceMin').value) || null;
+  state.maxPrice = parseInt(document.getElementById('priceMax').value) || null;
+  state.page     = 0;
+  loadProducts();
+}
+function resetPriceFilter() {
+  document.getElementById('priceMin').value = '';
+  document.getElementById('priceMax').value = '';
+  state.minPrice = null;
+  state.maxPrice = null;
+  state.page     = 0;
+  loadProducts();
+}
+
+// ══ 재고 필터 ══
+function toggleStock() {
+  state.inStockOnly = !state.inStockOnly;
+  state.page = 0;
+  document.getElementById('stockBtn').classList.toggle('active', state.inStockOnly);
+  loadProducts();
+}
+
+// ══ 유틸 ══
+function statusBadge(status) {
+  if (status === 'ACTIVE')       return `<span style="font-size:.72rem;color:#1a7f4b;font-weight:700">● 판매중</span>`;
+  if (status === 'INACTIVE')     return `<span style="font-size:.72rem;color:#e65c00;font-weight:700">● 품절</span>`;
+  if (status === 'DISCONTINUED') return `<span style="font-size:.72rem;color:#888;font-weight:700">● 단종</span>`;
+  return '';
+}
+
+function showLoading(show) {
+  document.getElementById('loadingState').classList.toggle('d-none', !show);
+  document.getElementById('productGrid').classList.toggle('d-none', show);
+  document.getElementById('paginationWrap').classList.toggle('d-none', show);
+  if (show) document.getElementById('emptyState').classList.add('d-none');
+}
+function showEmpty() {
+  document.getElementById('productGrid').innerHTML = '';
+  document.getElementById('emptyState').classList.remove('d-none');
+  document.getElementById('paginationWrap').innerHTML = '';
+  document.getElementById('resultCount').innerHTML = '총 <strong>0</strong>개';
+}
+
+function highlight(text, keyword) {
+  if (!keyword) return escapeHtml(text);
+  const escaped = escapeHtml(text);
+  const kw = escapeHtml(keyword).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escaped.replace(new RegExp(`(${kw})`, 'gi'), '<mark>$1</mark>');
+}
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function showToast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `my-toast${type === 'danger' ? ' danger' : ''}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+</script>
+</body>
+</html>

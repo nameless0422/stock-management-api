@@ -46,6 +46,24 @@ services:
       timeout: 5s
       retries: 8
 
+  minio:
+    image: minio/minio:latest
+    container_name: stock-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web 콘솔
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     build:
       context: ..
@@ -69,12 +87,19 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
       # 분산 추적 — Zipkin 컨테이너로 트레이스 전송
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+      # 오브젝트 스토리지 — MinIO 컨테이너 연결
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_PUBLIC_URL: http://localhost:9000
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-minioadmin}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-minioadmin}
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
       elasticsearch:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     restart: on-failure
 
@@ -119,5 +144,6 @@ volumes:
   mysql_data:
   redis_data:
   es_data:
+  minio_data:
   prometheus_data:
   grafana_data:
