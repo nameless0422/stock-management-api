@@ -1,5 +1,7 @@
 package com.stockmanagement.domain.shipment.service;
 
+import com.stockmanagement.common.event.ShipmentDeliveredEvent;
+import com.stockmanagement.common.event.ShipmentShippedEvent;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.entity.Order;
@@ -8,6 +10,7 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.shipment.dto.ShipmentResponse;
 import com.stockmanagement.domain.shipment.dto.ShipmentUpdateRequest;
 import com.stockmanagement.domain.shipment.entity.Shipment;
+import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,6 +34,7 @@ public class ShipmentService {
 
     private final ShipmentRepository shipmentRepository;
     private final OrderRepository orderRepository;
+    private final OutboxEventStore outboxEventStore;
 
     /**
      * 결제 완료된 주문에 대해 배송을 생성한다.
@@ -76,6 +80,7 @@ public class ShipmentService {
     public ShipmentResponse startShipping(Long orderId, ShipmentUpdateRequest request) {
         Shipment shipment = findByOrderIdOrThrow(orderId);
         shipment.ship(request.getCarrier(), request.getTrackingNumber());
+        outboxEventStore.save(new ShipmentShippedEvent(orderId, request.getCarrier(), request.getTrackingNumber()));
         return ShipmentResponse.from(shipment);
     }
 
@@ -88,6 +93,7 @@ public class ShipmentService {
     public ShipmentResponse completeDelivery(Long orderId) {
         Shipment shipment = findByOrderIdOrThrow(orderId);
         shipment.deliver();
+        outboxEventStore.save(new ShipmentDeliveredEvent(orderId));
         return ShipmentResponse.from(shipment);
     }
 
