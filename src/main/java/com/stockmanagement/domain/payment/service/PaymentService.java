@@ -18,10 +18,11 @@ import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmResponse
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
 import com.stockmanagement.common.event.PaymentConfirmedEvent;
+import com.stockmanagement.common.outbox.OutboxEventStore;
+import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,7 +62,8 @@ public class PaymentService {
     private final TossPaymentsClient tossPaymentsClient;
     private final PaymentIdempotencyManager idempotencyManager;
     private final ShipmentService shipmentService;
-    private final ApplicationEventPublisher eventPublisher;
+    private final PointService pointService;
+    private final OutboxEventStore outboxEventStore;
 
     /**
      * Prepares a payment session for the given order.
@@ -198,12 +200,22 @@ public class PaymentService {
             // 배송 레코드 자동 생성 (PREPARING 상태)
             shipmentService.createForOrder(payment.getOrderId());
 
+            // 결제 완료 포인트 적립 (실 결제금액의 1%)
+            Order confirmedOrder = orderRepository.findById(payment.getOrderId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+            long paidAmount = confirmedOrder.getTotalAmount()
+                    .subtract(confirmedOrder.getDiscountAmount()).longValue()
+                    - confirmedOrder.getUsedPoints();
+            if (paidAmount > 0) {
+                pointService.earn(confirmedOrder.getUserId(), paidAmount, confirmedOrder.getId());
+            }
+
             // 6. 결과를 Redis에 캐싱 (24h TTL)
             PaymentResponse response = PaymentResponse.from(payment);
             idempotencyManager.complete(idempotencyKey, response);
 
-            // 결제 완료 이벤트 발행 (트랜잭션 커밋 후 비동기 처리)
-            eventPublisher.publishEvent(new PaymentConfirmedEvent(
+            // 결제 완료 이벤트 저장 (Outbox — 같은 트랜잭션 안에서 원자적 저장)
+            outboxEventStore.save(new PaymentConfirmedEvent(
                     payment.getId(), payment.getOrderId(), payment.getAmount()));
 
             log.info("Payment confirmed: paymentKey={}, orderId={}, amount={}",

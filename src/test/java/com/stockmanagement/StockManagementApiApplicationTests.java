@@ -1,5 +1,6 @@
 package com.stockmanagement;
 
+import com.stockmanagement.common.storage.StorageService;
 import com.stockmanagement.domain.product.service.ProductSearchService;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RedissonClient;
@@ -22,6 +23,9 @@ class StockManagementApiApplicationTests {
 
     @MockBean
     ProductSearchService productSearchService;
+
+    @MockBean
+    StorageService storageService;
 
     @Test
     void contextLoads() {

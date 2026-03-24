@@ -14,6 +14,8 @@ import com.stockmanagement.domain.payment.infrastructure.TossPaymentsClient;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmResponse;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
+import com.stockmanagement.common.outbox.OutboxEventStore;
+import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -59,7 +61,10 @@ class PaymentServiceTest {
     private ShipmentService shipmentService;
 
     @Mock
-    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private OutboxEventStore outboxEventStore;
+
+    @Mock
+    private PointService pointService;
 
     @InjectMocks
     private PaymentService paymentService;
@@ -208,6 +213,7 @@ class PaymentServiceTest {
             given(paymentRepository.findByTossOrderId("toss-order-001"))
                     .willReturn(Optional.of(pendingPayment));
             given(tossPaymentsClient.confirm(any())).willReturn(successResponse);
+            given(orderRepository.findById(1L)).willReturn(Optional.of(pendingOrder));
 
             PaymentResponse response = paymentService.confirm(request);
 

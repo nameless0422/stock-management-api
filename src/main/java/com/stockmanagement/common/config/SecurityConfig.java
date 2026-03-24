@@ -75,10 +75,16 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                         // 관리자 랜딩 페이지 (정적 파일 — API 인증은 JS에서 JWT로 처리)
                         .requestMatchers("/admin-page/**").permitAll()
+                        // 쇼핑몰 페이지 (정적 파일 — 비로그인 접근 허용)
+                        .requestMatchers("/shop/**").permitAll()
                         // 결제 테스트 페이지
                         .requestMatchers("/payment-test.html").permitAll()
                         // 상품 조회 — 비로그인 허용 (쇼핑몰 특성상 누구나 열람 가능)
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
+                        // 상품 이미지 — Presigned URL 발급·저장·삭제는 ADMIN 전용
+                        .requestMatchers(HttpMethod.POST, "/api/products/*/images/presigned").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/products/*/images").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/products/*/images/**").hasRole("ADMIN")
                         // ADMIN 전용
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/products").hasRole("ADMIN")
@@ -95,6 +101,9 @@ public class SecurityConfig {
                         // 쿠폰 관리 (생성/비활성화)는 ADMIN 전용
                         .requestMatchers(HttpMethod.POST, "/api/coupons").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/coupons/**").hasRole("ADMIN")
+                        // 리뷰 조회는 공개, 작성/삭제는 인증 필요 (authenticated() 로 처리)
+                        .requestMatchers(HttpMethod.GET, "/api/products/*/reviews").permitAll()
+                        // 포인트/위시리스트/환불은 인증 필요 (authenticated() 로 처리)
                         // 나머지는 인증 필요
                         .anyRequest().authenticated()
                 )
