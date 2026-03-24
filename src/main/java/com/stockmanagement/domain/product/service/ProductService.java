@@ -18,7 +18,9 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -85,8 +87,29 @@ public class ProductService {
                 log.warn("Elasticsearch 검색 실패, MySQL fallback 사용. query={}", request.getQ(), e);
             }
         }
-        return productRepository.findByStatus(ProductStatus.ACTIVE, pageable)
+        // ES 미사용 또는 fallback: sort/keyword를 MySQL에서 처리
+        Pageable effectivePageable = toSortedPageable(pageable, request);
+        String keyword = request != null ? request.getQ() : null;
+        if (keyword != null && !keyword.isBlank()) {
+            return productRepository.searchByStatus(ProductStatus.ACTIVE, keyword, effectivePageable)
+                    .map(ProductResponse::from);
+        }
+        return productRepository.findByStatus(ProductStatus.ACTIVE, effectivePageable)
                 .map(ProductResponse::from);
+    }
+
+    /** sort 파라미터를 Pageable의 Sort로 변환 (MySQL fallback용) */
+    private Pageable toSortedPageable(Pageable pageable, ProductSearchRequest request) {
+        if (request == null || request.getSort() == null || request.getSort().isBlank()) {
+            return pageable;
+        }
+        Sort sort = switch (request.getSort()) {
+            case "price_asc"  -> Sort.by(Sort.Direction.ASC,  "price");
+            case "price_desc" -> Sort.by(Sort.Direction.DESC, "price");
+            case "newest"     -> Sort.by(Sort.Direction.DESC, "createdAt");
+            default           -> pageable.getSort();
+        };
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
     }
 
     /** 전체 상품 페이징 조회 (ACTIVE + DISCONTINUED, 관리자 전용). search가 있으면 상품명/SKU로 필터링 */

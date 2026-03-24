@@ -32,6 +32,8 @@ public class ProductResponse {
     private final Long categoryId;
     /** 카테고리 이름 — ES 검색 호환성 및 UI 표시용 */
     private final String category;
+    /** 대표 썸네일 URL — null이면 이미지 미등록 */
+    private final String thumbnailUrl;
     private final ProductStatus status;
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
@@ -46,6 +48,7 @@ public class ProductResponse {
                 .sku(product.getSku())
                 .categoryId(product.getCategory() != null ? product.getCategory().getId() : null)
                 .category(product.getCategoryName())
+                .thumbnailUrl(product.getThumbnailUrl())
                 .status(product.getStatus())
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())

@@ -52,6 +52,10 @@ public class Product {
     @JoinColumn(name = "category_id")
     private Category category;
 
+    /** 대표 썸네일 URL — ProductImage(THUMBNAIL) 저장 시 자동 갱신 */
+    @Column(length = 500)
+    private String thumbnailUrl;
+
     /** 상품 판매 상태 — DB에 문자열로 저장 (예: "ACTIVE") */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -104,5 +108,10 @@ public class Product {
      */
     public void changeStatus(ProductStatus status) {
         this.status = status;
+    }
+
+    /** 대표 썸네일 URL을 갱신한다. */
+    public void updateThumbnail(String thumbnailUrl) {
+        this.thumbnailUrl = thumbnailUrl;
     }
 }
