@@ -27,4 +27,11 @@ public class PaymentCancelRequest {
      */
     @DecimalMin(value = "1", message = "cancelAmount must be at least 1")
     private BigDecimal cancelAmount;
+
+    /** 내부 호출용 팩토리 메서드 (전액 취소). */
+    public static PaymentCancelRequest of(String cancelReason) {
+        PaymentCancelRequest req = new PaymentCancelRequest();
+        req.cancelReason = cancelReason;
+        return req;
+    }
 }

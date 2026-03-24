@@ -1,6 +1,7 @@
 package com.stockmanagement.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stockmanagement.common.storage.StorageService;
 import com.stockmanagement.domain.product.document.ProductDocument;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
@@ -10,6 +11,7 @@ import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -92,6 +94,9 @@ abstract class AbstractIntegrationTest {
 
     // ===== Spring Beans =====
 
+    /** MinIO 연결 없이 통합 테스트 실행 — storage.enabled=false로 S3StorageService 미생성 */
+    @MockBean StorageService storageService;
+
     @Autowired protected MockMvc mockMvc;
     @Autowired protected ObjectMapper objectMapper;
     @Autowired protected UserRepository userRepository;
@@ -109,19 +114,25 @@ abstract class AbstractIntegrationTest {
             // order_status_history → orders (ON DELETE CASCADE로 자동 삭제되지만 명시적으로 먼저 삭제)
             stmt.execute("DELETE FROM cart_items");
             stmt.execute("DELETE FROM shipments");
+            stmt.execute("DELETE FROM reviews");
+            stmt.execute("DELETE FROM wishlist_items");
+            stmt.execute("DELETE FROM refunds");
             stmt.execute("DELETE FROM order_items");
             stmt.execute("DELETE FROM payments");
             stmt.execute("DELETE FROM order_status_history");
             stmt.execute("DELETE FROM coupon_usages");   // orders 삭제 전 쿠폰 사용 이력 제거
+            stmt.execute("DELETE FROM point_transactions");
             stmt.execute("DELETE FROM orders");          // delivery_address_id FK → delivery_addresses
             stmt.execute("DELETE FROM delivery_addresses");
             stmt.execute("DELETE FROM coupons");
             stmt.execute("DELETE FROM inventory_transactions");
             stmt.execute("DELETE FROM inventory");
+            stmt.execute("DELETE FROM product_images");
             stmt.execute("DELETE FROM products");
             stmt.execute("DELETE FROM daily_order_stats");
             stmt.execute("DELETE FROM daily_inventory_snapshots");
             stmt.execute("DELETE FROM categories");
+            stmt.execute("DELETE FROM user_points");
             stmt.execute("DELETE FROM users");
         }
         // Redis 전체 초기화 — 캐시·rate limit 카운터 테스트 간 격리

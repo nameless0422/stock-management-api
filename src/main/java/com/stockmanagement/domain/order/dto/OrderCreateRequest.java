@@ -48,6 +48,9 @@ public class OrderCreateRequest {
     @Size(max = 50, message = "쿠폰 코드는 50자 이하여야 합니다.")
     private String couponCode;
 
+    /** 사용할 포인트 — 선택 항목. null 또는 0이면 포인트 미사용 */
+    private Long usePoints;
+
     /** 장바구니 결제 전환 등 내부 호출용 팩토리 메서드. */
     public static OrderCreateRequest of(Long userId, String idempotencyKey,
                                         List<OrderItemRequest> items) {

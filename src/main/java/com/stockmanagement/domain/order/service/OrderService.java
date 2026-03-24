@@ -4,6 +4,7 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.coupon.service.CouponService;
 import com.stockmanagement.domain.inventory.service.InventoryService;
+import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
@@ -20,11 +21,11 @@ import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.common.event.OrderCancelledEvent;
 import com.stockmanagement.common.event.OrderCreatedEvent;
+import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
@@ -65,7 +66,8 @@ public class OrderService {
     private final OrderStatusHistoryRepository historyRepository;
     private final UserRepository userRepository;
     private final CouponService couponService;
-    private final ApplicationEventPublisher eventPublisher;
+    private final PointService pointService;
+    private final OutboxEventStore outboxEventStore;
 
     /**
      * 주문을 생성한다.
@@ -118,11 +120,13 @@ public class OrderService {
         }
 
         // 3. Order 생성 (확정된 totalAmount 사용)
+        long usePointsLong = request.getUsePoints() != null ? request.getUsePoints() : 0L;
         Order order = Order.builder()
                 .userId(request.getUserId())
                 .totalAmount(totalAmount)
                 .idempotencyKey(request.getIdempotencyKey())
                 .deliveryAddressId(request.getDeliveryAddressId())
+                .usedPoints(usePointsLong)
                 .build();
 
         for (OrderItem item : items) {
@@ -140,16 +144,21 @@ public class OrderService {
             savedOrder.applyDiscount(result.getCouponId(), result.getDiscountAmount());
         }
 
-        // 6. 재고 예약 — 예외 발생 시 전체 트랜잭션 롤백
+        // 6. 포인트 차감 (사용 포인트가 있으면)
+        if (usePointsLong > 0) {
+            pointService.use(savedOrder.getUserId(), usePointsLong, savedOrder.getId());
+        }
+
+        // 7. 재고 예약 — 예외 발생 시 전체 트랜잭션 롤백
         for (OrderItem item : savedOrder.getItems()) {
             inventoryService.reserve(item.getProduct().getId(), item.getQuantity());
         }
 
-        // 7. 상태 이력 기록 (최초 생성: fromStatus=null, toStatus=PENDING)
+        // 8. 상태 이력 기록 (최초 생성: fromStatus=null, toStatus=PENDING)
         recordHistory(savedOrder.getId(), null, OrderStatus.PENDING, null);
 
-        // 8. 주문 생성 이벤트 발행 (트랜잭션 커밋 후 비동기 처리)
-        eventPublisher.publishEvent(new OrderCreatedEvent(
+        // 9. 주문 생성 이벤트 저장 (Outbox — 같은 트랜잭션 안에서 원자적 저장)
+        outboxEventStore.save(new OrderCreatedEvent(
                 savedOrder.getId(), savedOrder.getUserId(), savedOrder.getTotalAmount()));
 
         return OrderResponse.from(savedOrder);
@@ -234,8 +243,11 @@ public class OrderService {
         // 쿠폰 사용 취소 (쿠폰 미사용 주문이면 no-op)
         couponService.releaseCoupon(order.getId());
 
+        // 포인트 환불 (사용된 포인트 반환 + 적립금 회수)
+        pointService.refundByOrder(order.getUserId(), order.getId());
+
         recordHistory(order.getId(), OrderStatus.PENDING, OrderStatus.CANCELLED, null);
-        eventPublisher.publishEvent(new OrderCancelledEvent(order.getId(), order.getUserId(), "PENDING_CANCELLED"));
+        outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "PENDING_CANCELLED"));
         return OrderResponse.from(order);
     }
 
@@ -288,8 +300,11 @@ public class OrderService {
         // 쿠폰 사용 취소 (쿠폰 미사용 주문이면 no-op)
         couponService.releaseCoupon(order.getId());
 
+        // 포인트 환불 (사용된 포인트 반환 + 적립금 회수)
+        pointService.refundByOrder(order.getUserId(), order.getId());
+
         recordHistory(order.getId(), OrderStatus.CONFIRMED, OrderStatus.CANCELLED, null);
-        eventPublisher.publishEvent(new OrderCancelledEvent(order.getId(), order.getUserId(), "PAYMENT_REFUNDED"));
+        outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "PAYMENT_REFUNDED"));
     }
 
     // ===== 내부 헬퍼 =====

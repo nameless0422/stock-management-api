@@ -6,6 +6,7 @@ import com.stockmanagement.common.exception.InsufficientStockException;
 import com.stockmanagement.domain.coupon.dto.CouponValidateResponse;
 import com.stockmanagement.domain.coupon.service.CouponService;
 import com.stockmanagement.domain.inventory.service.InventoryService;
+import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
@@ -17,6 +18,7 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,7 +66,10 @@ class OrderServiceTest {
     private CouponService couponService;
 
     @Mock
-    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private OutboxEventStore outboxEventStore;
+
+    @Mock
+    private PointService pointService;
 
     @InjectMocks
     private OrderService orderService;

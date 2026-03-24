@@ -79,6 +79,10 @@ public class Order {
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal discountAmount;
 
+    /** 주문 시 사용한 포인트 (기본 0). */
+    @Column(nullable = false)
+    private long usedPoints;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -89,7 +93,7 @@ public class Order {
 
     @Builder
     private Order(Long userId, BigDecimal totalAmount, String idempotencyKey,
-                  Long deliveryAddressId, Long couponId, BigDecimal discountAmount) {
+                  Long deliveryAddressId, Long couponId, BigDecimal discountAmount, long usedPoints) {
         this.userId = userId;
         this.status = OrderStatus.PENDING;
         this.totalAmount = totalAmount;
@@ -97,6 +101,7 @@ public class Order {
         this.deliveryAddressId = deliveryAddressId;
         this.couponId = couponId;
         this.discountAmount = discountAmount != null ? discountAmount : BigDecimal.ZERO;
+        this.usedPoints = usedPoints;
     }
 
     // ===== 비즈니스 메서드 =====

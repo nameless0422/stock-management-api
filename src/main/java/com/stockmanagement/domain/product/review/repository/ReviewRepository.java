@@ -1,0 +1,29 @@
+package com.stockmanagement.domain.product.review.repository;
+
+import com.stockmanagement.domain.product.review.entity.Review;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.Optional;
+
+public interface ReviewRepository extends JpaRepository<Review, Long> {
+
+    /** 상품의 리뷰 목록을 최신순으로 페이징 조회한다. */
+    Page<Review> findByProductIdOrderByCreatedAtDesc(Long productId, Pageable pageable);
+
+    /** 특정 상품에 대한 사용자의 리뷰가 이미 존재하는지 확인한다 (1인 1리뷰 검증). */
+    boolean existsByProductIdAndUserId(Long productId, Long userId);
+
+    /** 특정 상품·사용자의 리뷰를 단건 조회한다 (삭제 권한 확인용). */
+    Optional<Review> findByIdAndUserId(Long id, Long userId);
+
+    /** 상품 평균 별점 계산용 */
+    @Query("SELECT COALESCE(AVG(r.rating), 0.0) FROM Review r WHERE r.productId = :productId")
+    double avgRatingByProductId(@Param("productId") Long productId);
+
+    /** 상품 리뷰 수 */
+    long countByProductId(Long productId);
+}

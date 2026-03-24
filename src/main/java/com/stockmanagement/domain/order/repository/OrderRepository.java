@@ -61,6 +61,15 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     @Query("SELECT o.id FROM Order o WHERE o.status = com.stockmanagement.domain.order.entity.OrderStatus.PENDING AND o.createdAt < :threshold")
     List<Long> findExpiredPendingOrderIds(@Param("threshold") LocalDateTime threshold);
 
+    /**
+     * 사용자가 특정 상품을 구매(CONFIRMED 주문 보유)했는지 확인한다 (리뷰 작성 자격 검증).
+     */
+    @Query("SELECT COUNT(o) > 0 FROM Order o JOIN o.items i " +
+           "WHERE o.userId = :userId AND i.product.id = :productId " +
+           "AND o.status = com.stockmanagement.domain.order.entity.OrderStatus.CONFIRMED")
+    boolean existsPurchaseByUserIdAndProductId(@Param("userId") Long userId,
+                                               @Param("productId") Long productId);
+
     // ===== 일별 통계 집계 (DailyOrderStatsScheduler) =====
 
     /** 기간 내 전체 주문 수 */

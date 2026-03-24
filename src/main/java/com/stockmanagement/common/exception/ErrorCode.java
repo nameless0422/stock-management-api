@@ -58,12 +58,34 @@ public enum ErrorCode {
     CATEGORY_HAS_CHILDREN(HttpStatus.CONFLICT, "하위 카테고리가 있는 카테고리는 삭제할 수 없습니다."),
     CATEGORY_HAS_PRODUCTS(HttpStatus.CONFLICT, "상품이 등록된 카테고리는 삭제할 수 없습니다."),
 
+    // ===== ProductImage =====
+    PRODUCT_IMAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "상품 이미지를 찾을 수 없습니다."),
+
     // ===== Coupon =====
     COUPON_NOT_FOUND(HttpStatus.NOT_FOUND, "쿠폰을 찾을 수 없습니다."),
     COUPON_EXPIRED(HttpStatus.GONE, "만료된 쿠폰입니다."),
     COUPON_EXHAUSTED(HttpStatus.CONFLICT, "쿠폰 사용 가능 횟수를 초과했습니다."),
     COUPON_ALREADY_USED(HttpStatus.CONFLICT, "이미 사용한 쿠폰입니다."),
     COUPON_MIN_ORDER_NOT_MET(HttpStatus.BAD_REQUEST, "쿠폰 적용을 위한 최소 주문 금액을 충족하지 않습니다."),
+
+    // ===== Review =====
+    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "리뷰를 찾을 수 없습니다."),
+    REVIEW_NOT_PURCHASED(HttpStatus.FORBIDDEN, "구매한 상품에만 리뷰를 작성할 수 있습니다."),
+    REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 리뷰를 작성한 상품입니다."),
+    REVIEW_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 리뷰만 삭제할 수 있습니다."),
+
+    // ===== Wishlist =====
+    WISHLIST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 위시리스트에 추가된 상품입니다."),
+    WISHLIST_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "위시리스트에서 해당 상품을 찾을 수 없습니다."),
+
+    // ===== Point =====
+    INSUFFICIENT_POINTS(HttpStatus.BAD_REQUEST, "포인트 잔액이 부족합니다."),
+    INVALID_POINT_AMOUNT(HttpStatus.BAD_REQUEST, "포인트 사용 금액이 올바르지 않습니다."),
+
+    // ===== Refund =====
+    REFUND_NOT_FOUND(HttpStatus.NOT_FOUND, "환불 정보를 찾을 수 없습니다."),
+    REFUND_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 환불 정보만 조회할 수 있습니다."),
+    REFUND_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 환불 요청이 존재합니다."),
 
     // ===== User =====
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
