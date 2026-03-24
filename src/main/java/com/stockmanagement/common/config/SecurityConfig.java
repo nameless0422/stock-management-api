@@ -85,6 +85,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/products/*/images/presigned").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/products/*/images").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/products/*/images/**").hasRole("ADMIN")
+                        // 리뷰 작성/삭제 — 일반 사용자 인증 필요 (ADMIN 패턴보다 먼저 선언)
+                        .requestMatchers(HttpMethod.POST, "/api/products/*/reviews").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/products/*/reviews/**").authenticated()
                         // ADMIN 전용
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/products").hasRole("ADMIN")

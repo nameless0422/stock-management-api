@@ -37,6 +37,9 @@ public class OrderResponse {
     /** 쿠폰 할인 금액 */
     private final BigDecimal discountAmount;
 
+    /** 사용한 포인트 */
+    private final long usedPoints;
+
     /** 주문 항목 목록 */
     private final List<OrderItemResponse> items;
 
@@ -54,6 +57,7 @@ public class OrderResponse {
                 .deliveryAddressId(order.getDeliveryAddressId())
                 .couponId(order.getCouponId())
                 .discountAmount(order.getDiscountAmount())
+                .usedPoints(order.getUsedPoints())
                 .items(order.getItems().stream()
                         .map(OrderItemResponse::from)
                         .toList())
