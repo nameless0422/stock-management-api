@@ -92,6 +92,13 @@ public class UserService {
         return LoginResponse.of(newAccessToken, jwtTokenProvider.getTokenValidityInSeconds(), newRefreshToken);
     }
 
+    /** username으로 사용자 ID를 반환한다. */
+    public Long resolveUserId(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND))
+                .getId();
+    }
+
     /** 현재 인증된 사용자 정보 조회. */
     public UserResponse getMe(String username) {
         User user = userRepository.findByUsername(username)

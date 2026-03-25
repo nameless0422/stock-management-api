@@ -159,12 +159,12 @@ class CartServiceTest {
         @DisplayName("주문 전환 성공 → 장바구니 비워짐")
         void checkoutClearsCart() {
             given(cartRepository.findByUserId(1L)).willReturn(List.of(cartItem));
-            given(orderService.create(any())).willReturn(mock(OrderResponse.class));
+            given(orderService.create(any(), anyLong())).willReturn(mock(OrderResponse.class));
 
             CartCheckoutRequest request = mockCheckoutRequest("key-1");
             cartService.checkout(1L, request);
 
-            verify(orderService).create(any());
+            verify(orderService).create(any(), anyLong());
             verify(cartRepository).deleteByUserId(1L);
         }
 

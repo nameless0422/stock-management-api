@@ -7,6 +7,7 @@ import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
 import com.stockmanagement.domain.order.service.OrderService;
+import com.stockmanagement.domain.user.service.UserService;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -45,13 +46,17 @@ import java.util.List;
 public class OrderController {
 
     private final OrderService orderService;
+    private final UserService userService;
 
     @Operation(summary = "주문 생성", description = "재고 예약(reserved++) 후 PENDING 주문 생성. 동일 idempotencyKey 재요청 시 기존 주문 반환.")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @RateLimit(limit = 10, windowSeconds = 60)
-    public ApiResponse<OrderResponse> create(@RequestBody @Valid OrderCreateRequest request) {
-        return ApiResponse.ok(orderService.create(request));
+    public ApiResponse<OrderResponse> create(
+            @RequestBody @Valid OrderCreateRequest request,
+            @AuthenticationPrincipal String username) {
+        Long userId = userService.resolveUserId(username);
+        return ApiResponse.ok(orderService.create(request, userId));
     }
 
     @Operation(summary = "주문 단건 조회", description = "주문 항목(items) 포함.")
