@@ -7,8 +7,7 @@ import com.stockmanagement.domain.coupon.dto.CouponResponse;
 import com.stockmanagement.domain.coupon.dto.CouponValidateResponse;
 import com.stockmanagement.domain.coupon.entity.DiscountType;
 import com.stockmanagement.domain.coupon.service.CouponService;
-import com.stockmanagement.domain.user.entity.User;
-import com.stockmanagement.domain.user.repository.UserRepository;
+import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -28,7 +27,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -47,7 +45,7 @@ class CouponControllerTest {
     private MockMvc mockMvc;
 
     @MockBean private CouponService couponService;
-    @MockBean private UserRepository userRepository;
+    @MockBean private UserService userService;
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtBlacklist jwtBlacklist;
     @MockBean private RefreshTokenStore refreshTokenStore;
@@ -157,9 +155,7 @@ class CouponControllerTest {
         @Test
         @DisplayName("인증 사용자 유효성 확인 → 200 + 할인 금액 포함")
         void userValidates() throws Exception {
-            User mockUser = mock(User.class);
-            given(mockUser.getId()).willReturn(1L);
-            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(mockUser));
+            given(userService.resolveUserId("testuser")).willReturn(1L);
 
             CouponValidateResponse response = CouponValidateResponse.builder()
                     .couponId(1L)

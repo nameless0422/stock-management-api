@@ -2,6 +2,8 @@ package com.stockmanagement.common.exception;
 
 import com.stockmanagement.common.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -52,6 +54,42 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .badRequest()
                 .body(ApiResponse.error(message));
+    }
+
+    /**
+     * 잘못된 인자 처리 — 도메인 규칙에 맞지 않는 입력값 (예: 입고 수량 0 이하).
+     * 400 Bad Request를 반환한다.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException e) {
+        log.warn("IllegalArgumentException: {}", e.getMessage());
+        return ResponseEntity
+                .badRequest()
+                .body(ApiResponse.error(e.getMessage()));
+    }
+
+    /**
+     * DB 유니크/FK 제약 위반 처리.
+     * 클라이언트에게는 중립적인 409 Conflict 메시지를 반환하고,
+     * 실제 원인은 로그로만 남긴다 (DB 구조 노출 방지).
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException e) {
+        log.warn("DataIntegrityViolationException: {}", e.getMostSpecificCause().getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("데이터 무결성 제약 조건을 위반했습니다."));
+    }
+
+    /**
+     * 낙관적 락 충돌 처리 — 동시 수정 충돌 시 클라이언트에게 재시도를 안내한다.
+     */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLocking(OptimisticLockingFailureException e) {
+        log.warn("OptimisticLockingFailureException: {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ErrorCode.LOCK_ACQUISITION_FAILED.getMessage()));
     }
 
     /**

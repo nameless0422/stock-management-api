@@ -5,8 +5,7 @@ import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.order.cart.dto.CartResponse;
 import com.stockmanagement.domain.order.cart.service.CartService;
 import com.stockmanagement.domain.order.dto.OrderResponse;
-import com.stockmanagement.domain.user.entity.User;
-import com.stockmanagement.domain.user.repository.UserRepository;
+import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,7 +21,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -41,7 +39,7 @@ class CartControllerTest {
     private MockMvc mockMvc;
 
     @MockBean private CartService cartService;
-    @MockBean private UserRepository userRepository;
+    @MockBean private UserService userService;
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtBlacklist jwtBlacklist;
 
@@ -51,9 +49,7 @@ class CartControllerTest {
 
     @BeforeEach
     void setUp() {
-        User mockUser = mock(User.class);
-        given(mockUser.getId()).willReturn(1L);
-        given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser));
+        given(userService.resolveUserId("user1")).willReturn(1L);
     }
 
     // ===== GET /api/cart =====

@@ -6,9 +6,7 @@ import com.stockmanagement.domain.coupon.dto.CouponResponse;
 import com.stockmanagement.domain.coupon.dto.CouponValidateRequest;
 import com.stockmanagement.domain.coupon.dto.CouponValidateResponse;
 import com.stockmanagement.domain.coupon.service.CouponService;
-import com.stockmanagement.domain.user.repository.UserRepository;
-import com.stockmanagement.common.exception.BusinessException;
-import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -27,7 +25,7 @@ import org.springframework.web.bind.annotation.*;
 public class CouponController {
 
     private final CouponService couponService;
-    private final UserRepository userRepository;
+    private final UserService userService;
 
     @Operation(summary = "쿠폰 생성 [ADMIN]")
     @PostMapping
@@ -60,9 +58,7 @@ public class CouponController {
     public ApiResponse<CouponValidateResponse> validate(
             @AuthenticationPrincipal String username,
             @Valid @RequestBody CouponValidateRequest request) {
-        Long userId = userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND))
-                .getId();
+        Long userId = userService.resolveUserId(username);
         return ApiResponse.ok(couponService.validate(userId, request));
     }
 }
