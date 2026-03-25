@@ -423,40 +423,53 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
-    autonumber
-    participant C as Client
-    participant S as Server
-    participant R as Redis
+    participant C as Client (Browser)
+    participant S as Server (API)
     participant T as TossPayments
 
-    %% 1단계: 결제 준비
-    C->>S: POST /api/payments/prepare {orderId, amount}
-    S->>S: 주문 소유자 검증 & 금액 검증
-    S->>S: Payment(PENDING) 생성 & tossOrderId 발급
-    S-->>C: 200 {tossOrderId, amount}
+    rect rgb(30, 80, 160)
+        Note over C,T: 1단계 — 결제 준비 (prepare)
+        C->>S: POST /api/payments/prepare {orderId, amount}
+        S->>S: 주문 소유자 검증
+        S->>S: 서버측 금액 검증 (amount == order.totalAmount)
+        S->>S: Payment(PENDING) 생성, tossOrderId 발급
+        S-->>C: {tossOrderId, amount}
+    end
 
-    %% 2단계: TossPayments 결제창
-    C->>T: 결제창 렌더링 (tossOrderId, amount, clientKey)
-    T-->>C: 결제 완료 콜백 {paymentKey, orderId, amount}
+    rect rgb(160, 100, 0)
+        Note over C,T: 2단계 — TossPayments 결제창
+        C->>T: 결제창 렌더링 (tossOrderId, amount, clientKey)
+        Note right of T: 사용자가 카드·계좌이체 등으로 결제
+        T-->>C: 성공 콜백 {paymentKey, orderId, amount}
+    end
 
-    %% 3단계: 결제 승인
-    C->>S: POST /api/payments/confirm {paymentKey, tossOrderId, amount}
-    S->>R: SETNX 선점 (중복 confirm 방지)
-    S->>S: 주문 소유자 재검증 & 금액 재검증
-    S->>T: POST /v1/payments/confirm (Idempotency-Key 헤더)
-    T-->>S: 200 status=DONE
-    S->>S: Payment → DONE, Order → CONFIRMED
-    S->>S: Shipment(PREPARING) 생성 & Point 1% 적립
-    S->>R: 결과 캐싱 (24h, 재요청 멱등성)
-    S-->>C: 200 PaymentResponse
+    rect rgb(20, 120, 40)
+        Note over C,T: 3단계 — 결제 승인 (confirm)
+        C->>S: POST /api/payments/confirm {paymentKey, tossOrderId, amount}
+        S->>S: Redis SETNX 선점 (중복 confirm 방지)
+        S->>S: 주문 소유자 재검증
+        S->>S: 금액 재검증 (server-side)
+        S->>T: POST confirmations API (Idempotency-Key 헤더 포함)
+        T-->>S: status: DONE
+        S->>S: Payment → DONE
+        S->>S: Order → CONFIRMED (reserved → allocated)
+        S->>S: Shipment(PREPARING) 자동 생성
+        S->>S: PointService.earn() 1% 적립
+        S->>S: Redis 결과 캐싱 (24h, 재요청 멱등성)
+        S-->>C: PaymentResponse
+    end
 
-    %% 취소/환불
-    C->>S: POST /api/payments/{paymentKey}/cancel
-    S->>T: POST /v1/payments/{paymentKey}/cancel
-    T-->>S: 200 status=CANCELLED
-    S->>S: Payment → CANCELLED, Order → CANCELLED
-    S->>S: 쿠폰 반환 & 포인트 환불 & 적립 회수
-    S-->>C: 200 PaymentResponse
+    rect rgb(160, 20, 20)
+        Note over C,T: 취소 / 환불
+        C->>S: POST /api/payments/{paymentKey}/cancel
+        S->>T: POST cancels API
+        T-->>S: CANCELLED
+        S->>S: Payment → CANCELLED
+        S->>S: Order → CANCELLED (allocated--)
+        S->>S: 쿠폰 반환 (usageCount--)
+        S->>S: 포인트 반환 + 적립 회수
+        S-->>C: PaymentResponse
+    end
 ```
 
 ---
