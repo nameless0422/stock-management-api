@@ -22,8 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -63,7 +62,7 @@ class PaymentControllerTest {
         void preparesPayment() throws Exception {
             PaymentPrepareResponse response =
                     new PaymentPrepareResponse("toss-order-001", BigDecimal.valueOf(10000), "상품명");
-            given(paymentService.prepare(any())).willReturn(response);
+            given(paymentService.prepare(any(), any())).willReturn(response);
 
             mockMvc.perform(post("/api/payments/prepare")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -105,7 +104,7 @@ class PaymentControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 결제 승인 성공 → 200")
         void confirmsPayment() throws Exception {
-            given(paymentService.confirm(any())).willReturn(mock(PaymentResponse.class));
+            given(paymentService.confirm(any(), any())).willReturn(mock(PaymentResponse.class));
 
             mockMvc.perform(post("/api/payments/confirm")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -127,7 +126,7 @@ class PaymentControllerTest {
         @WithMockUser
         @DisplayName("결제 금액 불일치 → 400")
         void amountMismatch() throws Exception {
-            given(paymentService.confirm(any()))
+            given(paymentService.confirm(any(), any()))
                     .willThrow(new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH));
 
             mockMvc.perform(post("/api/payments/confirm")
@@ -196,6 +195,44 @@ class PaymentControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(WEBHOOK_JSON))
                     .andExpect(status().isOk());
+        }
+    }
+
+    // ===== GET /api/payments/order/{orderId} =====
+
+    @Nested
+    @DisplayName("GET /api/payments/order/{orderId}")
+    class GetByOrderId {
+
+        @Test
+        @WithMockUser
+        @DisplayName("본인 주문 결제 조회 → 200")
+        void returnsPayment() throws Exception {
+            given(paymentService.getByOrderId(anyLong(), any(), anyBoolean()))
+                    .willReturn(java.util.Optional.of(mock(PaymentResponse.class)));
+
+            mockMvc.perform(get("/api/payments/order/1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @WithMockUser
+        @DisplayName("결제 없는 주문 → 200, data null")
+        void returnsNullWhenNoPayment() throws Exception {
+            given(paymentService.getByOrderId(anyLong(), any(), anyBoolean()))
+                    .willReturn(java.util.Optional.empty());
+
+            mockMvc.perform(get("/api/payments/order/1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @DisplayName("인증 없음 → 403")
+        void unauthorizedWithoutAuth() throws Exception {
+            mockMvc.perform(get("/api/payments/order/1"))
+                    .andExpect(status().isForbidden());
         }
     }
 

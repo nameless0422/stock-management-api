@@ -12,6 +12,7 @@ import com.stockmanagement.domain.shipment.dto.ShipmentUpdateRequest;
 import com.stockmanagement.domain.shipment.entity.Shipment;
 import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
+import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,7 @@ public class ShipmentService {
 
     private final ShipmentRepository shipmentRepository;
     private final OrderRepository orderRepository;
+    private final UserRepository userRepository;
     private final OutboxEventStore outboxEventStore;
 
     /**
@@ -60,13 +62,24 @@ public class ShipmentService {
     }
 
     /**
-     * 주문 ID로 배송 정보를 조회한다.
+     * 주문 ID로 배송 정보를 조회한다. ADMIN은 전체 조회 가능, USER는 본인 주문만 가능.
      *
-     * @throws BusinessException 배송 정보가 없는 경우
+     * @throws BusinessException 배송 정보가 없는 경우, 또는 소유자가 아닌 경우
      */
-    public ShipmentResponse getByOrderId(Long orderId) {
+    public ShipmentResponse getByOrderId(Long orderId, String username, boolean isAdmin) {
         Shipment shipment = shipmentRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND));
+
+        if (!isAdmin) {
+            Order order = orderRepository.findById(orderId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+            Long userId = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
+            if (!order.getUserId().equals(userId)) {
+                throw new BusinessException(ErrorCode.SHIPMENT_ACCESS_DENIED);
+            }
+        }
+
         return ShipmentResponse.from(shipment);
     }
 

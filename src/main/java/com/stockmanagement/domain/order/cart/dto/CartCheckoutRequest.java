@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.order.cart.dto;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
@@ -17,4 +18,15 @@ public class CartCheckoutRequest {
     @NotBlank(message = "멱등성 키는 필수입니다.")
     @Size(max = 100, message = "멱등성 키는 100자 이하여야 합니다.")
     private String idempotencyKey;
+
+    /** 쿠폰 코드 — 선택 항목. null이면 쿠폰 미적용 */
+    @Size(max = 50, message = "쿠폰 코드는 50자 이하여야 합니다.")
+    private String couponCode;
+
+    /** 사용할 포인트 — 선택 항목. null 또는 0이면 포인트 미사용 */
+    @Min(value = 0, message = "사용 포인트는 0 이상이어야 합니다.")
+    private Long usePoints;
+
+    /** 배송지 ID — 선택 항목. null이면 배송지 미지정 */
+    private Long deliveryAddressId;
 }

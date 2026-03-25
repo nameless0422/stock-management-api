@@ -53,13 +53,25 @@ public class OrderCreateRequest {
     /** 사용할 포인트 — 선택 항목. null 또는 0이면 포인트 미사용 */
     private Long usePoints;
 
-    /** 장바구니 결제 전환 등 내부 호출용 팩토리 메서드. */
+    /** 장바구니 결제 전환 등 내부 호출용 팩토리 메서드 (쿠폰/포인트/배송지 미적용). */
     public static OrderCreateRequest of(Long userId, String idempotencyKey,
                                         List<OrderItemRequest> items) {
         OrderCreateRequest req = new OrderCreateRequest();
         req.userId = userId;
         req.idempotencyKey = idempotencyKey;
         req.items = items;
+        return req;
+    }
+
+    /** 쿠폰·포인트·배송지를 포함한 장바구니 결제 전환용 팩토리 메서드. */
+    public static OrderCreateRequest of(Long userId, String idempotencyKey,
+                                        List<OrderItemRequest> items,
+                                        String couponCode, Long usePoints,
+                                        Long deliveryAddressId) {
+        OrderCreateRequest req = of(userId, idempotencyKey, items);
+        req.couponCode = couponCode;
+        req.usePoints = usePoints;
+        req.deliveryAddressId = deliveryAddressId;
         return req;
     }
 }

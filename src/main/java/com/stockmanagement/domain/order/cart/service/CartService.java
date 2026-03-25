@@ -12,6 +12,7 @@ import com.stockmanagement.domain.order.dto.OrderItemRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.service.OrderService;
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductStatus;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -57,6 +58,11 @@ public class CartService {
     public CartResponse addOrUpdate(Long userId, CartItemRequest request) {
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+
+        // 판매 중인 상품만 장바구니에 담을 수 있다
+        if (product.getStatus() != ProductStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_AVAILABLE);
+        }
 
         Optional<CartItem> existing =
                 cartRepository.findByUserIdAndProductId(userId, product.getId());
@@ -123,7 +129,9 @@ public class CartService {
                 .toList();
 
         OrderCreateRequest orderRequest = OrderCreateRequest.of(
-                userId, checkoutRequest.getIdempotencyKey(), orderItems);
+                userId, checkoutRequest.getIdempotencyKey(), orderItems,
+                checkoutRequest.getCouponCode(), checkoutRequest.getUsePoints(),
+                checkoutRequest.getDeliveryAddressId());
 
         OrderResponse orderResponse = orderService.create(orderRequest, userId);
 

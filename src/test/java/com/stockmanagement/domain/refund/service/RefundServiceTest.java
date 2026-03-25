@@ -75,12 +75,19 @@ class RefundServiceTest {
     @DisplayName("requestRefund() — 환불 요청")
     class RequestRefund {
 
+        private Order mockOrder(Long orderId, Long userId) {
+            Order o = Order.builder().userId(userId).idempotencyKey("k").build();
+            ReflectionTestUtils.setField(o, "id", orderId);
+            return o;
+        }
+
         @Test
         @DisplayName("정상 환불 → COMPLETED 상태")
         void success() {
             given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L)));
             Payment payment = mockPayment(10L, 100L);
             given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
+            given(orderRepository.findById(100L)).willReturn(Optional.of(mockOrder(100L, 1L)));
             given(refundRepository.existsByPaymentId(10L)).willReturn(false);
 
             Refund saved = Refund.builder()
@@ -102,6 +109,7 @@ class RefundServiceTest {
         void duplicate() {
             given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L)));
             given(paymentRepository.findById(10L)).willReturn(Optional.of(mockPayment(10L, 100L)));
+            given(orderRepository.findById(100L)).willReturn(Optional.of(mockOrder(100L, 1L)));
             given(refundRepository.existsByPaymentId(10L)).willReturn(true);
 
             assertThatThrownBy(() -> refundService.requestRefund(mockRequest(10L), "user1"))
@@ -115,6 +123,7 @@ class RefundServiceTest {
             given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L)));
             Payment payment = mockPayment(10L, 100L);
             given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
+            given(orderRepository.findById(100L)).willReturn(Optional.of(mockOrder(100L, 1L)));
             given(refundRepository.existsByPaymentId(10L)).willReturn(false);
 
             Refund saved = Refund.builder()

@@ -8,6 +8,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -31,10 +33,15 @@ public class ShipmentController {
 
     private final ShipmentService shipmentService;
 
-    @Operation(summary = "주문별 배송 조회")
+    @Operation(summary = "주문별 배송 조회", description = "본인 주문의 배송 정보만 조회 가능. ADMIN은 전체 조회 가능.")
     @GetMapping("/orders/{orderId}")
-    public ApiResponse<ShipmentResponse> getByOrderId(@PathVariable Long orderId) {
-        return ApiResponse.ok(shipmentService.getByOrderId(orderId));
+    public ApiResponse<ShipmentResponse> getByOrderId(
+            @PathVariable Long orderId,
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        return ApiResponse.ok(shipmentService.getByOrderId(orderId, username, isAdmin));
     }
 
     @Operation(summary = "배송 출고 처리 (ADMIN)",

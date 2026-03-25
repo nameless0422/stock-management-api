@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -37,19 +38,21 @@ public class PaymentController {
     private final TossWebhookVerifier webhookVerifier;
     private final ObjectMapper objectMapper;
 
-    @Operation(summary = "결제 준비", description = "TossPayments 결제창 렌더링 전 호출. tossOrderId와 amount 반환.")
+    @Operation(summary = "결제 준비", description = "TossPayments 결제창 렌더링 전 호출. tossOrderId와 amount 반환. 본인 주문만 가능.")
     @PostMapping("/prepare")
     public ApiResponse<PaymentPrepareResponse> prepare(
-            @RequestBody @Valid PaymentPrepareRequest request) {
-        return ApiResponse.ok(paymentService.prepare(request));
+            @RequestBody @Valid PaymentPrepareRequest request,
+            @AuthenticationPrincipal String username) {
+        return ApiResponse.ok(paymentService.prepare(request, username));
     }
 
-    @Operation(summary = "결제 승인", description = "결제창 완료 후 paymentKey로 호출. Order → CONFIRMED, reserved→allocated.")
+    @Operation(summary = "결제 승인", description = "결제창 완료 후 paymentKey로 호출. Order → CONFIRMED, reserved→allocated. 본인 주문만 가능.")
     @PostMapping("/confirm")
     @RateLimit(limit = 5, windowSeconds = 60)
     public ApiResponse<PaymentResponse> confirm(
-            @RequestBody @Valid PaymentConfirmRequest request) {
-        return ApiResponse.ok(paymentService.confirm(request));
+            @RequestBody @Valid PaymentConfirmRequest request,
+            @AuthenticationPrincipal String username) {
+        return ApiResponse.ok(paymentService.confirm(request, username));
     }
 
     @Operation(summary = "결제 취소/환불", description = "Order → CANCELLED, allocated 해제.")
@@ -78,10 +81,14 @@ public class PaymentController {
         return ApiResponse.ok(paymentService.getByPaymentKey(paymentKey));
     }
 
-    @Operation(summary = "주문별 결제 조회", description = "주문 ID로 결제 정보 조회. 결제 전이면 data: null 반환.")
+    @Operation(summary = "주문별 결제 조회", description = "주문 ID로 결제 정보 조회. 결제 전이면 data: null 반환. 본인 주문만 가능.")
     @GetMapping("/order/{orderId}")
     public ApiResponse<PaymentResponse> getByOrderId(
-            @PathVariable Long orderId) {
-        return ApiResponse.ok(paymentService.getByOrderId(orderId).orElse(null));
+            @PathVariable Long orderId,
+            @AuthenticationPrincipal String username,
+            org.springframework.security.core.Authentication authentication) {
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        return ApiResponse.ok(paymentService.getByOrderId(orderId, username, isAdmin).orElse(null));
     }
 }

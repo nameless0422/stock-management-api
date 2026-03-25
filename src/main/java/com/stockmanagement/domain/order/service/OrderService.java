@@ -5,6 +5,7 @@ import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.coupon.service.CouponService;
 import com.stockmanagement.domain.inventory.service.InventoryService;
 import com.stockmanagement.domain.point.service.PointService;
+import com.stockmanagement.domain.user.address.service.DeliveryAddressService;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
@@ -18,6 +19,7 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderSpecification;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductStatus;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.common.event.OrderCancelledEvent;
 import com.stockmanagement.common.event.OrderCreatedEvent;
@@ -68,6 +70,7 @@ public class OrderService {
     private final CouponService couponService;
     private final PointService pointService;
     private final OutboxEventStore outboxEventStore;
+    private final DeliveryAddressService deliveryAddressService;
 
     /**
      * 주문을 생성한다.
@@ -118,6 +121,11 @@ public class OrderService {
             Product product = productRepository.findById(itemRequest.getProductId())
                     .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
+            // 상품 판매 상태 검증 — INACTIVE/DISCONTINUED 상품은 주문 불가
+            if (product.getStatus() != ProductStatus.ACTIVE) {
+                throw new BusinessException(ErrorCode.PRODUCT_NOT_AVAILABLE);
+            }
+
             // 단가 검증 — 요청값이 현재 상품 가격과 일치해야 한다
             if (product.getPrice().compareTo(itemRequest.getUnitPrice()) != 0) {
                 throw new BusinessException(ErrorCode.INVALID_INPUT,
@@ -135,7 +143,12 @@ public class OrderService {
             totalAmount = totalAmount.add(item.getSubtotal());
         }
 
-        // 3. Order 생성 (확정된 totalAmount 사용)
+        // 3. 배송지 소유권 검증 — 타인의 배송지로 주문 생성 방지
+        if (request.getDeliveryAddressId() != null) {
+            deliveryAddressService.getById(request.getDeliveryAddressId(), userId);
+        }
+
+        // 4. Order 생성 (확정된 totalAmount 사용)
         long usePointsLong = request.getUsePoints() != null ? request.getUsePoints() : 0L;
         Order order = Order.builder()
                 .userId(userId)
@@ -149,10 +162,10 @@ public class OrderService {
             order.addItem(item);
         }
 
-        // 4. Order 저장 (cascade로 OrderItems도 함께 저장)
+        // 5. Order 저장 (cascade로 OrderItems도 함께 저장)
         Order savedOrder = orderRepository.save(order);
 
-        // 5. 쿠폰 적용 — 쿠폰 코드가 있으면 할인 금액 계산 및 사용 기록
+        // 6. 쿠폰 적용 — 쿠폰 코드가 있으면 할인 금액 계산 및 사용 기록
         if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
             var result = couponService.applyCoupon(
                     request.getCouponCode(), userId,
@@ -160,20 +173,20 @@ public class OrderService {
             savedOrder.applyDiscount(result.getCouponId(), result.getDiscountAmount());
         }
 
-        // 6. 포인트 차감 (사용 포인트가 있으면)
+        // 7. 포인트 차감 (사용 포인트가 있으면)
         if (usePointsLong > 0) {
             pointService.use(savedOrder.getUserId(), usePointsLong, savedOrder.getId());
         }
 
-        // 7. 재고 예약 — 예외 발생 시 전체 트랜잭션 롤백
+        // 8. 재고 예약 — 예외 발생 시 전체 트랜잭션 롤백
         for (OrderItem item : savedOrder.getItems()) {
             inventoryService.reserve(item.getProduct().getId(), item.getQuantity());
         }
 
-        // 8. 상태 이력 기록 (최초 생성: fromStatus=null, toStatus=PENDING)
+        // 9. 상태 이력 기록 (최초 생성: fromStatus=null, toStatus=PENDING)
         recordHistory(savedOrder.getId(), null, OrderStatus.PENDING, null);
 
-        // 9. 주문 생성 이벤트 저장 (Outbox — 같은 트랜잭션 안에서 원자적 저장)
+        // 10. 주문 생성 이벤트 저장 (Outbox — 같은 트랜잭션 안에서 원자적 저장)
         outboxEventStore.save(new OrderCreatedEvent(
                 savedOrder.getId(), savedOrder.getUserId(), savedOrder.getTotalAmount()));
 
@@ -189,6 +202,26 @@ public class OrderService {
     public OrderResponse getById(Long id) {
         Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        return OrderResponse.from(order);
+    }
+
+    /**
+     * 주문 단건을 소유권 검증 후 조회한다 (외부 API 전용).
+     *
+     * <p>캐시를 우회하여 DB에서 직접 조회하므로,
+     * 캐시 히트로 인한 소유권 검증 누락 위험이 없다.
+     * ADMIN은 모든 주문에 접근 가능하고, USER는 본인 주문만 조회할 수 있다.
+     */
+    public OrderResponse getByIdForUser(Long id, String username, boolean isAdmin) {
+        Order order = orderRepository.findByIdWithItems(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!isAdmin) {
+            Long userId = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
+            if (!order.getUserId().equals(userId)) {
+                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
+            }
+        }
         return OrderResponse.from(order);
     }
 
@@ -219,10 +252,20 @@ public class OrderService {
                 .map(OrderResponse::from);
     }
 
-    /** 특정 주문의 상태 변경 이력을 시간순으로 조회한다. */
-    public List<OrderStatusHistoryResponse> getHistory(Long orderId) {
-        if (!orderRepository.existsById(orderId)) {
-            throw new BusinessException(ErrorCode.ORDER_NOT_FOUND);
+    /**
+     * 특정 주문의 상태 변경 이력을 시간순으로 조회한다.
+     *
+     * <p>ADMIN은 모든 주문 이력에 접근 가능하고, USER는 본인 주문 이력만 조회할 수 있다.
+     */
+    public List<OrderStatusHistoryResponse> getHistory(Long orderId, String username, boolean isAdmin) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!isAdmin) {
+            Long userId = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
+            if (!order.getUserId().equals(userId)) {
+                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
+            }
         }
         return historyRepository.findByOrderIdOrderByCreatedAtAsc(orderId)
                 .stream().map(OrderStatusHistoryResponse::from).toList();
@@ -244,9 +287,18 @@ public class OrderService {
      */
     @Transactional
     @CacheEvict(cacheNames = "orders", key = "#id")
-    public OrderResponse cancel(Long id) {
+    public OrderResponse cancel(Long id, String username, boolean isAdmin) {
         Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        // 요청자가 주문 소유자인지 검증 (ADMIN은 모든 주문 취소 가능)
+        if (!isAdmin) {
+            Long userId = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
+            if (!order.getUserId().equals(userId)) {
+                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
+            }
+        }
 
         // 상태 검증 + CANCELLED 전환 (PENDING이 아니면 INVALID_ORDER_STATUS 예외)
         order.cancel();

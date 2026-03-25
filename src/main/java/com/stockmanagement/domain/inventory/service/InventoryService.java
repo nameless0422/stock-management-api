@@ -146,11 +146,12 @@ public class InventoryService {
     @CacheEvict(cacheNames = "inventory", key = "#productId")
     public void reserve(Long productId, int quantity) {
         Inventory inventory = findByProductIdWithLock(productId);
+        int availableBefore = inventory.getAvailable() + quantity; // reserve 전 가용 재고
         inventory.reserve(quantity);
         recordTransaction(inventory, InventoryTransactionType.RESERVE, quantity);
 
-        // 재고 부족 경보 — available이 임계값 미만이면 이벤트 발행
-        if (inventory.getAvailable() < LowStockEvent.THRESHOLD) {
+        // 저재고 경보 — 임계값을 처음 하향 돌파하는 순간에만 발행 (중복 이메일 방지)
+        if (availableBefore >= LowStockEvent.THRESHOLD && inventory.getAvailable() < LowStockEvent.THRESHOLD) {
             eventPublisher.publishEvent(new LowStockEvent(
                     productId,
                     inventory.getProduct().getName(),

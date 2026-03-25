@@ -125,8 +125,9 @@ class WishlistServiceTest {
         void success() {
             given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L)));
             WishlistItem item = mockItem(5L, 1L, 10L);
+            Product product = mockProduct(10L);
             given(wishlistRepository.findByUserIdOrderByCreatedAtDesc(1L)).willReturn(List.of(item));
-            given(productRepository.findById(10L)).willReturn(Optional.of(mockProduct(10L)));
+            given(productRepository.findAllById(List.of(10L))).willReturn(List.of(product));
 
             List<WishlistResponse> list = wishlistService.getList("user1");
 

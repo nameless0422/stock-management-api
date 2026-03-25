@@ -17,6 +17,8 @@ import com.stockmanagement.domain.payment.repository.PaymentRepository;
 import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
+import com.stockmanagement.domain.user.entity.User;
+import com.stockmanagement.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -29,6 +31,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
+
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -66,6 +70,9 @@ class PaymentServiceTest {
     @Mock
     private PointService pointService;
 
+    @Mock
+    private UserRepository userRepository;
+
     @InjectMocks
     private PaymentService paymentService;
 
@@ -92,6 +99,12 @@ class PaymentServiceTest {
         // 기본: Redis에 캐시 없음, 선점 항상 성공
         lenient().when(idempotencyManager.getIfCompleted(anyString())).thenReturn(Optional.empty());
         lenient().when(idempotencyManager.tryAcquire(anyString())).thenReturn(true);
+
+        // confirm() 소유권 검증용 기본 스텁 (pendingOrder.userId == 1L)
+        User mockUser = User.builder().username("user").password("pw").email("e@test.com").build();
+        ReflectionTestUtils.setField(mockUser, "id", 1L);
+        lenient().when(userRepository.findByUsername("user")).thenReturn(Optional.of(mockUser));
+        lenient().when(orderRepository.findById(1L)).thenReturn(Optional.of(pendingOrder));
     }
 
     // ===== prepare() =====
@@ -100,6 +113,12 @@ class PaymentServiceTest {
     @DisplayName("prepare()")
     class Prepare {
 
+        private User mockUser() {
+            User u = User.builder().username("user1").password("pw").email("e@e.com").build();
+            ReflectionTestUtils.setField(u, "id", 1L); // pendingOrder.userId == 1L
+            return u;
+        }
+
         @Test
         @DisplayName("정상 준비 — Payment 저장 후 tossOrderId와 금액 반환")
         void savesPaymentAndReturnsPrepareResponse() {
@@ -107,11 +126,12 @@ class PaymentServiceTest {
             given(request.getOrderId()).willReturn(1L);
             given(request.getAmount()).willReturn(new BigDecimal("10000"));
 
+            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser()));
             given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(pendingOrder));
             given(paymentRepository.findByOrderId(pendingOrder.getId())).willReturn(Optional.empty());
             given(paymentRepository.save(any(Payment.class))).willReturn(pendingPayment);
 
-            PaymentPrepareResponse response = paymentService.prepare(request);
+            PaymentPrepareResponse response = paymentService.prepare(request, "user1");
 
             verify(paymentRepository).save(any(Payment.class));
             assertThat(response.getTossOrderId()).isEqualTo("toss-order-001");
@@ -125,7 +145,7 @@ class PaymentServiceTest {
             given(request.getOrderId()).willReturn(99L);
             given(orderRepository.findByIdWithItems(99L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> paymentService.prepare(request))
+            assertThatThrownBy(() -> paymentService.prepare(request, "user1"))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.ORDER_NOT_FOUND));
@@ -136,14 +156,14 @@ class PaymentServiceTest {
         @Test
         @DisplayName("PENDING이 아닌 주문은 INVALID_ORDER_STATUS 예외 발생")
         void throwsWhenOrderNotPending() {
-            // getAmount()는 상태 검증 실패 시 호출되지 않음
             PaymentPrepareRequest request = mock(PaymentPrepareRequest.class);
             given(request.getOrderId()).willReturn(1L);
 
             pendingOrder.confirm(); // PENDING → CONFIRMED
+            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser()));
             given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(pendingOrder));
 
-            assertThatThrownBy(() -> paymentService.prepare(request))
+            assertThatThrownBy(() -> paymentService.prepare(request, "user1"))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_ORDER_STATUS));
@@ -156,9 +176,10 @@ class PaymentServiceTest {
             given(request.getOrderId()).willReturn(1L);
             given(request.getAmount()).willReturn(new BigDecimal("9999")); // 불일치
 
+            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser()));
             given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(pendingOrder));
 
-            assertThatThrownBy(() -> paymentService.prepare(request))
+            assertThatThrownBy(() -> paymentService.prepare(request, "user1"))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH));
@@ -171,11 +192,12 @@ class PaymentServiceTest {
             given(request.getOrderId()).willReturn(1L);
             given(request.getAmount()).willReturn(new BigDecimal("10000"));
 
+            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser()));
             given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(pendingOrder));
             given(paymentRepository.findByOrderId(pendingOrder.getId()))
                     .willReturn(Optional.of(pendingPayment)); // 기존 PENDING Payment
 
-            PaymentPrepareResponse response = paymentService.prepare(request);
+            PaymentPrepareResponse response = paymentService.prepare(request, "user1");
 
             verify(paymentRepository, never()).save(any());
             assertThat(response.getTossOrderId()).isEqualTo("toss-order-001");
@@ -215,7 +237,7 @@ class PaymentServiceTest {
             given(tossPaymentsClient.confirm(any())).willReturn(successResponse);
             given(orderRepository.findById(1L)).willReturn(Optional.of(pendingOrder));
 
-            PaymentResponse response = paymentService.confirm(request);
+            PaymentResponse response = paymentService.confirm(request, "user");
 
             assertThat(pendingPayment.getStatus()).isEqualTo(PaymentStatus.DONE);
             verify(orderService).confirm(1L);
@@ -233,7 +255,7 @@ class PaymentServiceTest {
             given(paymentRepository.findByTossOrderId("toss-order-001"))
                     .willReturn(Optional.of(pendingPayment));
 
-            PaymentResponse response = paymentService.confirm(request);
+            PaymentResponse response = paymentService.confirm(request, "user");
 
             verifyNoInteractions(tossPaymentsClient);
             verifyNoInteractions(orderService);
@@ -251,7 +273,7 @@ class PaymentServiceTest {
             given(paymentRepository.findByTossOrderId("toss-order-001"))
                     .willReturn(Optional.of(pendingPayment));
 
-            assertThatThrownBy(() -> paymentService.confirm(request))
+            assertThatThrownBy(() -> paymentService.confirm(request, "user"))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_ALREADY_PROCESSED));
@@ -270,7 +292,7 @@ class PaymentServiceTest {
             given(paymentRepository.findByTossOrderId("toss-order-001"))
                     .willReturn(Optional.of(pendingPayment));
 
-            assertThatThrownBy(() -> paymentService.confirm(request))
+            assertThatThrownBy(() -> paymentService.confirm(request, "user"))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH));
@@ -288,7 +310,7 @@ class PaymentServiceTest {
             given(idempotencyManager.getIfCompleted("confirm:toss-order-001"))
                     .willReturn(Optional.of(cached));
 
-            PaymentResponse response = paymentService.confirm(request);
+            PaymentResponse response = paymentService.confirm(request, "user");
 
             assertThat(response).isSameAs(cached);
             verifyNoInteractions(paymentRepository, tossPaymentsClient, orderService);
@@ -302,7 +324,7 @@ class PaymentServiceTest {
 
             given(idempotencyManager.tryAcquire("confirm:toss-order-001")).willReturn(false);
 
-            assertThatThrownBy(() -> paymentService.confirm(request))
+            assertThatThrownBy(() -> paymentService.confirm(request, "user"))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_PROCESSING_IN_PROGRESS));
@@ -326,7 +348,7 @@ class PaymentServiceTest {
                     .willReturn(Optional.of(pendingPayment));
             given(tossPaymentsClient.confirm(any())).willReturn(failResponse);
 
-            assertThatThrownBy(() -> paymentService.confirm(request))
+            assertThatThrownBy(() -> paymentService.confirm(request, "user"))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.TOSS_PAYMENTS_ERROR));
@@ -462,6 +484,63 @@ class PaymentServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND));
+        }
+    }
+
+    // ===== getByOrderId() =====
+
+    @Nested
+    @DisplayName("getByOrderId()")
+    class GetByOrderId {
+
+        @Test
+        @DisplayName("본인 주문이면 결제 정보를 반환한다")
+        void returnsPaymentForOwner() {
+            given(orderRepository.findById(10L)).willReturn(Optional.of(confirmedOrder(10L, 1L)));
+            given(userRepository.findByUsername("user1")).willReturn(Optional.of(stubUser(1L)));
+            given(paymentRepository.findByOrderId(10L)).willReturn(Optional.of(pendingPayment));
+
+            Optional<PaymentResponse> result = paymentService.getByOrderId(10L, "user1", false);
+
+            assertThat(result).isPresent();
+        }
+
+        @Test
+        @DisplayName("타인 주문 접근 시 ORDER_ACCESS_DENIED 예외 발생")
+        void throwsForNonOwner() {
+            given(orderRepository.findById(10L)).willReturn(Optional.of(confirmedOrder(10L, 99L)));
+            given(userRepository.findByUsername("user1")).willReturn(Optional.of(stubUser(1L)));
+
+            assertThatThrownBy(() -> paymentService.getByOrderId(10L, "user1", false))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.ORDER_ACCESS_DENIED));
+        }
+
+        @Test
+        @DisplayName("ADMIN은 소유권 검증 없이 조회 가능")
+        void adminCanAccessAnyOrder() {
+            given(paymentRepository.findByOrderId(10L)).willReturn(Optional.of(pendingPayment));
+
+            Optional<PaymentResponse> result = paymentService.getByOrderId(10L, "admin", true);
+
+            assertThat(result).isPresent();
+        }
+
+        private Order confirmedOrder(Long orderId, Long userId) {
+            Order o = Order.builder()
+                    .userId(userId)
+                    .totalAmount(BigDecimal.valueOf(10_000))
+                    .build();
+            ReflectionTestUtils.setField(o, "id", orderId);
+            ReflectionTestUtils.setField(o, "status", OrderStatus.CONFIRMED);
+            return o;
+        }
+
+        private User stubUser(Long userId) {
+            User u = User.builder().username("user1").password("pw").email("u@test.com").build();
+            ReflectionTestUtils.setField(u, "id", userId);
+            return u;
         }
     }
 

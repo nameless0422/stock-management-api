@@ -7,6 +7,7 @@ import com.stockmanagement.domain.coupon.dto.CouponValidateResponse;
 import com.stockmanagement.domain.coupon.service.CouponService;
 import com.stockmanagement.domain.inventory.service.InventoryService;
 import com.stockmanagement.domain.point.service.PointService;
+import com.stockmanagement.domain.user.address.service.DeliveryAddressService;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
@@ -33,6 +34,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -70,6 +73,9 @@ class OrderServiceTest {
 
     @Mock
     private PointService pointService;
+
+    @Mock
+    private DeliveryAddressService deliveryAddressService;
 
     @InjectMocks
     private OrderService orderService;
@@ -319,12 +325,19 @@ class OrderServiceTest {
     @DisplayName("cancel()")
     class Cancel {
 
+        private User mockUser(Long id) {
+            User u = User.builder().username("user1").password("pw").email("e@e.com").build();
+            ReflectionTestUtils.setField(u, "id", id);
+            return u;
+        }
+
         @Test
         @DisplayName("PENDING 주문 취소 — CANCELLED 전환 및 재고 예약 해제 호출")
         void cancelsPendingOrder() {
+            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L)));
             given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(order));
 
-            OrderResponse response = orderService.cancel(1L);
+            OrderResponse response = orderService.cancel(1L, "user1", false);
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
             verify(inventoryService).releaseReservation(any(), eq(1));
@@ -335,9 +348,10 @@ class OrderServiceTest {
         @DisplayName("CONFIRMED 주문 취소 시도 — INVALID_ORDER_STATUS 예외 발생")
         void throwsWhenCancellingConfirmedOrder() {
             order.confirm(); // PENDING → CONFIRMED
+            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L)));
             given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(order));
 
-            assertThatThrownBy(() -> orderService.cancel(1L))
+            assertThatThrownBy(() -> orderService.cancel(1L, "user1", false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_ORDER_STATUS));
@@ -350,7 +364,7 @@ class OrderServiceTest {
         void throwsWhenNotFound() {
             given(orderRepository.findByIdWithItems(99L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> orderService.cancel(99L))
+            assertThatThrownBy(() -> orderService.cancel(99L, "user1", false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.ORDER_NOT_FOUND));
