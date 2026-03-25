@@ -16,7 +16,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -65,7 +64,7 @@ public class PointService {
      * @param paidAmount 실 결제 금액 (포인트/쿠폰 차감 후)
      * @param orderId   연관 주문 ID
      */
-    @Transactional(propagation = Propagation.MANDATORY)
+    @Transactional
     public void earn(Long userId, long paidAmount, Long orderId) {
         long earnAmount = Math.max(1L, Math.round(paidAmount * EARN_RATE));
         UserPoint userPoint = getOrCreate(userId);
@@ -88,7 +87,7 @@ public class PointService {
      * @param orderId     연관 주문 ID
      * @throws BusinessException 잔액 부족 시
      */
-    @Transactional(propagation = Propagation.MANDATORY)
+    @Transactional
     public void use(Long userId, long usePoints, Long orderId) {
         if (usePoints <= 0) {
             throw new BusinessException(ErrorCode.INVALID_POINT_AMOUNT);
@@ -114,7 +113,7 @@ public class PointService {
      * @param userId  사용자 ID
      * @param orderId 취소된 주문 ID
      */
-    @Transactional(propagation = Propagation.MANDATORY)
+    @Transactional
     public void refundByOrder(Long userId, Long orderId) {
         UserPoint userPoint = getOrCreate(userId);
 
