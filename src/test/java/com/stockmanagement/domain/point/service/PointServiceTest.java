@@ -123,9 +123,10 @@ class PointServiceTest {
         }
 
         @Test
-        @DisplayName("포인트 계정 없음 → INSUFFICIENT_POINTS")
+        @DisplayName("포인트 계정 없음 → 잔액 0으로 생성 후 INSUFFICIENT_POINTS")
         void noAccount() {
             given(userPointRepository.findByUserIdWithLock(1L)).willReturn(Optional.empty());
+            given(userPointRepository.save(any(UserPoint.class))).willAnswer(inv -> inv.getArgument(0));
 
             assertThatThrownBy(() -> pointService.use(1L, 1000L, 100L))
                     .isInstanceOf(BusinessException.class)

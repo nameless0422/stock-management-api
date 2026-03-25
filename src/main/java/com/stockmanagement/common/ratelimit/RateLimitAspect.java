@@ -75,16 +75,30 @@ public class RateLimitAspect {
         return "ip:" + resolveClientIp();
     }
 
-    /** X-Forwarded-For 헤더를 우선 확인하고, 없으면 RemoteAddr을 반환한다. */
+    /**
+     * 클라이언트 IP 추출.
+     * X-Real-IP (신뢰할 수 있는 프록시가 설정) → X-Forwarded-For 마지막 IP (가장 가까운 프록시) → RemoteAddr 순으로 사용.
+     * X-Forwarded-For 첫 번째 값은 클라이언트가 임의로 조작 가능하므로 사용하지 않는다.
+     */
     private String resolveClientIp() {
         ServletRequestAttributes attrs =
                 (ServletRequestAttributes) RequestContextHolder.currentRequestAttributes();
         HttpServletRequest request = attrs.getRequest();
 
+        // X-Real-IP: nginx 등 리버스 프록시가 설정한 단일 IP (스푸핑 불가)
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+
+        // X-Forwarded-For: 프록시 체인에서 마지막(가장 가까운) 프록시가 추가한 IP 사용
+        // 첫 번째 값은 클라이언트가 위조 가능하므로 마지막 값 사용
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
+            String[] ips = forwarded.split(",");
+            return ips[ips.length - 1].trim();
         }
+
         return request.getRemoteAddr();
     }
 }

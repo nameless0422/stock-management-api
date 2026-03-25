@@ -106,11 +106,15 @@ public class UserService {
         return UserResponse.from(user);
     }
 
-    /** 회원 탈퇴 — 논리 삭제 처리. 이후 해당 username/email로 재가입 불가. */
+    /** 회원 탈퇴 — 논리 삭제 처리. username/email을 익명화하여 동일 정보로 재가입 가능. */
     @Transactional
     public void deactivate(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        // unique 슬롯 해방: 탈퇴 계정이 email/username UNIQUE KEY를 점유하지 않도록 익명화
+        user.anonymize(user.getId());
+
         userRepository.delete(user); // @SQLDelete → UPDATE users SET deleted_at = NOW(6) WHERE id = ?
 
         // 탈퇴 시 해당 사용자의 모든 Refresh Token 즉시 폐기 (보안)
