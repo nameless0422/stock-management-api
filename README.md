@@ -424,6 +424,7 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     participant C as Client (Browser)
+    participant R as Redis
     participant S as Server (API)
     participant T as TossPayments
 
@@ -446,29 +447,47 @@ sequenceDiagram
     rect rgb(20, 120, 40)
         Note over C,T: 3단계 — 결제 승인 (confirm)
         C->>S: POST /api/payments/confirm {paymentKey, tossOrderId, amount}
-        S->>S: Redis SETNX 선점 (중복 confirm 방지)
-        S->>S: 주문 소유자 재검증
-        S->>S: 금액 재검증 (server-side)
-        S->>T: POST confirmations API (Idempotency-Key 헤더 포함)
-        T-->>S: status: DONE
-        S->>S: Payment → DONE
-        S->>S: Order → CONFIRMED (reserved → allocated)
-        S->>S: Shipment(PREPARING) 자동 생성
-        S->>S: PointService.earn() 1% 적립
-        S->>S: Redis 결과 캐싱 (24h, 재요청 멱등성)
-        S-->>C: PaymentResponse
+        S->>R: getIfCompleted("confirm:tossOrderId")
+        alt 완료 캐시 HIT (재시도·중복 요청)
+            R-->>S: cached PaymentResponse
+            S-->>C: PaymentResponse (Toss API·DB 생략)
+        else 캐시 MISS
+            S->>R: SETNX tryAcquire("confirm:tossOrderId")
+            alt 선점 실패 (동시 처리 중)
+                S-->>C: 409 PAYMENT_PROCESSING_IN_PROGRESS
+            else 선점 성공
+                S->>S: DB 상태 재확인 (이중 안전장치)
+                S->>S: 주문 소유자 재검증 & 금액 재검증
+                S->>T: POST confirmations API (Idempotency-Key 헤더)
+                T-->>S: status: DONE
+                S->>S: Payment → DONE
+                S->>S: Order → CONFIRMED (reserved → allocated)
+                S->>S: Shipment(PREPARING) 자동 생성
+                S->>S: PointService.earn() 1% 적립
+                S->>R: complete (결과 캐싱 24h TTL)
+                S-->>C: PaymentResponse
+            end
+        end
     end
 
     rect rgb(160, 20, 20)
         Note over C,T: 취소 / 환불
         C->>S: POST /api/payments/{paymentKey}/cancel
-        S->>T: POST cancels API
-        T-->>S: CANCELLED
-        S->>S: Payment → CANCELLED
-        S->>S: Order → CANCELLED (allocated--)
-        S->>S: 쿠폰 반환 (usageCount--)
-        S->>S: 포인트 반환 + 적립 회수
-        S-->>C: PaymentResponse
+        S->>R: getIfCompleted("cancel:paymentKey")
+        alt 완료 캐시 HIT
+            R-->>S: cached PaymentResponse
+            S-->>C: PaymentResponse
+        else 캐시 MISS
+            S->>R: SETNX tryAcquire("cancel:paymentKey")
+            S->>S: DB 상태 재확인
+            S->>T: POST cancels API
+            T-->>S: CANCELLED
+            S->>S: Payment → CANCELLED
+            S->>S: Order → CANCELLED (allocated--)
+            S->>S: 쿠폰 반환 & 포인트 반환 + 적립 회수
+            S->>R: complete (결과 캐싱 24h TTL)
+            S-->>C: PaymentResponse
+        end
     end
 ```
 
