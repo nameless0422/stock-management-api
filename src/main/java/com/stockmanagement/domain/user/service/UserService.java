@@ -112,6 +112,10 @@ public class UserService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         userRepository.delete(user); // @SQLDelete → UPDATE users SET deleted_at = NOW(6) WHERE id = ?
+
+        // 탈퇴 시 해당 사용자의 모든 Refresh Token 즉시 폐기 (보안)
+        // Access Token은 JWT 만료 시까지 유효하나, 재발급 경로인 Refresh Token을 차단한다
+        refreshTokenStore.revokeAll(username);
     }
 
     /** 현재 인증된 사용자의 주문 목록 페이징 조회. */

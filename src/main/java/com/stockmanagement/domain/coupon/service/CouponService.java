@@ -152,7 +152,7 @@ public class CouponService {
 
     private void validateActive(Coupon coupon) {
         if (!coupon.isActive()) {
-            throw new BusinessException(ErrorCode.COUPON_NOT_FOUND);
+            throw new BusinessException(ErrorCode.COUPON_INACTIVE);
         }
     }
 

@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
@@ -58,9 +58,9 @@ class OrderExpirySchedulerTest {
 
         scheduler.cancelExpiredOrders();
 
-        verify(orderService).cancel(1L);
-        verify(orderService).cancel(2L);
-        verify(orderService).cancel(3L);
+        verify(orderService).cancel(eq(1L), isNull(), eq(true));
+        verify(orderService).cancel(eq(2L), isNull(), eq(true));
+        verify(orderService).cancel(eq(3L), isNull(), eq(true));
         verifyNoMoreInteractions(orderService);
     }
 
@@ -69,13 +69,13 @@ class OrderExpirySchedulerTest {
     void partialFailure_continuesWithOthers() {
         given(orderRepository.findExpiredPendingOrderIds(any(LocalDateTime.class)))
                 .willReturn(List.of(1L, 2L, 3L));
-        doThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND)).when(orderService).cancel(2L);
+        doThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND)).when(orderService).cancel(eq(2L), isNull(), eq(true));
 
         scheduler.cancelExpiredOrders();
 
-        verify(orderService).cancel(1L);
-        verify(orderService).cancel(2L);
-        verify(orderService).cancel(3L);
+        verify(orderService).cancel(eq(1L), isNull(), eq(true));
+        verify(orderService).cancel(eq(2L), isNull(), eq(true));
+        verify(orderService).cancel(eq(3L), isNull(), eq(true));
     }
 
     @Test

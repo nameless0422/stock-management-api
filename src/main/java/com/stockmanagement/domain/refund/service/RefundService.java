@@ -61,9 +61,12 @@ public class RefundService {
         Payment payment = paymentRepository.findById(request.getPaymentId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
-        // 요청자 본인 주문 여부 확인은 OrderService.refund() 내부에서 처리 가능하나,
-        // 단순화를 위해 payment.orderId 기준으로 판단하지 않고 서비스 계층에서 이력만 관리한다.
-        // 실무에서는 order.userId == user.id 검증을 추가한다.
+        // 요청자가 해당 주문의 소유자인지 검증
+        Order paymentOrder = orderRepository.findById(payment.getOrderId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!paymentOrder.getUserId().equals(user.getId())) {
+            throw new BusinessException(ErrorCode.REFUND_ACCESS_DENIED);
+        }
 
         if (refundRepository.existsByPaymentId(payment.getId())) {
             throw new BusinessException(ErrorCode.REFUND_ALREADY_EXISTS);

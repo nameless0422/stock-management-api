@@ -21,8 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 포인트 적립/사용/환불을 처리하는 서비스.
  *
- * <p>모든 잔액 변경 메서드는 호출 측 트랜잭션에 참여({@link Propagation#MANDATORY})하여
- * 비즈니스 로직과 원자적으로 처리된다.
+ * <p>잔액 변경 메서드({@code earn}, {@code use}, {@code refundByOrder})는
+ * {@code @Transactional}(REQUIRED)로 선언되어 있으므로,
+ * 호출 측 트랜잭션이 있으면 참여하고 없으면 새 트랜잭션을 시작한다.
  */
 @Slf4j
 @Service

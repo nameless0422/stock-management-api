@@ -59,10 +59,15 @@ public class OrderController {
         return ApiResponse.ok(orderService.create(request, userId));
     }
 
-    @Operation(summary = "주문 단건 조회", description = "주문 항목(items) 포함.")
+    @Operation(summary = "주문 단건 조회", description = "주문 항목(items) 포함. ADMIN은 모든 주문, USER는 본인 주문만 가능.")
     @GetMapping("/{id}")
-    public ApiResponse<OrderResponse> getById(@PathVariable Long id) {
-        return ApiResponse.ok(orderService.getById(id));
+    public ApiResponse<OrderResponse> getById(
+            @PathVariable Long id,
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        return ApiResponse.ok(orderService.getByIdForUser(id, username, isAdmin));
     }
 
     @Operation(summary = "주문 목록 조회 (필터 + 페이징)",
@@ -79,15 +84,25 @@ public class OrderController {
         return ApiResponse.ok(orderService.getList(username, isAdmin, request, pageable));
     }
 
-    @Operation(summary = "주문 취소", description = "PENDING 상태만 취소 가능. 재고 예약 해제(reserved--).")
+    @Operation(summary = "주문 취소", description = "PENDING 상태만 취소 가능. 재고 예약 해제(reserved--). ADMIN은 모든 주문 취소 가능.")
     @PostMapping("/{id}/cancel")
-    public ApiResponse<OrderResponse> cancel(@PathVariable Long id) {
-        return ApiResponse.ok(orderService.cancel(id));
+    public ApiResponse<OrderResponse> cancel(
+            @PathVariable Long id,
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        return ApiResponse.ok(orderService.cancel(id, username, isAdmin));
     }
 
-    @Operation(summary = "주문 상태 변경 이력 조회", description = "생성·취소·확정·환불 등 모든 상태 전이를 시간순으로 반환.")
+    @Operation(summary = "주문 상태 변경 이력 조회", description = "생성·취소·확정·환불 등 모든 상태 전이를 시간순으로 반환. ADMIN은 모든 주문, USER는 본인 주문만 가능.")
     @GetMapping("/{id}/history")
-    public ApiResponse<List<OrderStatusHistoryResponse>> getHistory(@PathVariable Long id) {
-        return ApiResponse.ok(orderService.getHistory(id));
+    public ApiResponse<List<OrderStatusHistoryResponse>> getHistory(
+            @PathVariable Long id,
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        return ApiResponse.ok(orderService.getHistory(id, username, isAdmin));
     }
 }

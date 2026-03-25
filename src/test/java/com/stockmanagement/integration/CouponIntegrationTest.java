@@ -227,7 +227,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("ADMIN — 쿠폰 비활성화 → 비활성화 쿠폰 사용 시 404")
+    @DisplayName("ADMIN — 쿠폰 비활성화 → 비활성화 쿠폰 사용 시 409")
     void deactivateCoupon() throws Exception {
         String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP6", 10000, 10);
@@ -239,7 +239,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.active").value(false));
 
-        // 비활성화된 쿠폰 사용 → 404
+        // 비활성화된 쿠폰 사용 → 409 COUPON_INACTIVE
         String userToken = signupAndLogin("buyer", "password1", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
         mockMvc.perform(post("/api/orders")
@@ -249,7 +249,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\",\"couponCode\":\"DEACT\"," +
                                 "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
                                 userId, UUID.randomUUID(), productId)))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isConflict());
     }
 
     @Test

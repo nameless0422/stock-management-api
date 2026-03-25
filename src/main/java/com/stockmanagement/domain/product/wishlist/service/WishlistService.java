@@ -14,6 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -55,12 +58,20 @@ public class WishlistService {
     /** 사용자의 위시리스트 목록을 조회한다. */
     public List<WishlistResponse> getList(String username) {
         User user = findUser(username);
-        return wishlistRepository.findByUserIdOrderByCreatedAtDesc(user.getId()).stream()
-                .map(item -> {
-                    Product product = productRepository.findById(item.getProductId())
-                            .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
-                    return toResponse(item, product);
-                })
+        List<WishlistItem> items = wishlistRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
+        if (items.isEmpty()) {
+            return List.of();
+        }
+
+        // N+1 방지: 상품 ID 목록을 한 번에 조회
+        List<Long> productIds = items.stream().map(WishlistItem::getProductId).toList();
+        Map<Long, Product> productMap = productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, Function.identity()));
+
+        // 상품이 삭제(soft delete)된 경우 위시리스트 항목을 건너뛴다 — 전체 조회 실패 방지
+        return items.stream()
+                .filter(item -> productMap.containsKey(item.getProductId()))
+                .map(item -> toResponse(item, productMap.get(item.getProductId())))
                 .toList();
     }
 

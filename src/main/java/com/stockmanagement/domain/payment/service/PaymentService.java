@@ -21,6 +21,7 @@ import com.stockmanagement.common.event.PaymentConfirmedEvent;
 import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
+import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -64,6 +65,7 @@ public class PaymentService {
     private final ShipmentService shipmentService;
     private final PointService pointService;
     private final OutboxEventStore outboxEventStore;
+    private final UserRepository userRepository;
 
     /**
      * Prepares a payment session for the given order.
@@ -80,9 +82,16 @@ public class PaymentService {
      * @return tossOrderId and verified amount to pass to the TossPayments checkout widget
      */
     @Transactional
-    public PaymentPrepareResponse prepare(PaymentPrepareRequest request) {
+    public PaymentPrepareResponse prepare(PaymentPrepareRequest request, String username) {
         Order order = orderRepository.findByIdWithItems(request.getOrderId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        // 요청자가 주문 소유자인지 검증
+        Long userId = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
+        }
 
         // Only PENDING orders can initiate a new payment
         if (order.getStatus() != OrderStatus.PENDING) {
@@ -131,7 +140,7 @@ public class PaymentService {
      * @return updated payment details
      */
     @Transactional
-    public PaymentResponse confirm(PaymentConfirmRequest request) {
+    public PaymentResponse confirm(PaymentConfirmRequest request, String username) {
         String idempotencyKey = "confirm:" + request.getTossOrderId();
 
         // 1. Redis 완료 캐시 확인 (이전 성공 요청의 결과가 있으면 즉시 반환)
@@ -148,6 +157,15 @@ public class PaymentService {
         try {
             Payment payment = paymentRepository.findByTossOrderId(request.getTossOrderId())
                     .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+
+            // 요청자가 해당 결제의 주문 소유자인지 검증
+            Long userId = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
+            Order paymentOrder = orderRepository.findById(payment.getOrderId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+            if (!paymentOrder.getUserId().equals(userId)) {
+                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
+            }
 
             // 3. DB 상태 재확인 (Redis TTL 만료 후 재요청 시 이중 안전장치)
             if (payment.getStatus() == PaymentStatus.DONE) {
@@ -358,12 +376,23 @@ public class PaymentService {
 
     /**
      * 주문 ID로 결제 정보를 조회한다. 결제 레코드가 없으면 빈 Optional을 반환한다.
-     * (관리자 주문 상세 조회용 — 결제 전 PENDING 주문은 null 반환)
+     * ADMIN은 전체 조회 가능, USER는 본인 주문만 조회 가능.
      *
-     * @param orderId 조회할 주문 ID
+     * @param orderId  조회할 주문 ID
+     * @param username 요청자 username
+     * @param isAdmin  ADMIN 여부
      * @return 결제 정보 (없으면 Optional.empty())
      */
-    public Optional<PaymentResponse> getByOrderId(Long orderId) {
+    public Optional<PaymentResponse> getByOrderId(Long orderId, String username, boolean isAdmin) {
+        if (!isAdmin) {
+            Order order = orderRepository.findById(orderId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+            Long userId = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
+            if (!order.getUserId().equals(userId)) {
+                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
+            }
+        }
         return paymentRepository.findByOrderId(orderId).map(PaymentResponse::from);
     }
 
