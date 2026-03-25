@@ -1,1240 +1,966 @@
 # stock-management-api
-재고관리 시스템 구현 
-Spring Boot + MySQL 
 
-쇼핑몰 환경을 가정하여 **재고 → 주문 → 결제 → 유저 관리** 순으로 확장하며, 추후 Redis, Docker를 통한 운영 환경까지 포함할 예정입니다.
-
----
-
-## 🎯 프로젝트 목표
-- 안정적인 **재고 관리 API** 구현 (재고 예약, 출고, 롤백)
-- 쇼핑몰 워크플로우(주문/결제/회원) 반영
-- **동시성 제어** 및 **재고 초과 판매 방지**
-- Docker, Redis 등 운영 환경 반영
-- 확장 가능한 아키텍처 설계
+Spring Boot 기반 **쇼핑몰 백엔드 포트폴리오 프로젝트**.
+재고 → 장바구니 → 주문 → 결제 → 배송 → 환불까지 쇼핑몰 핵심 플로우를 end-to-end로 구현합니다.
 
 ---
 
-## 🗂 주요 도메인
+## 구현 하이라이트
 
-### 1. **재고(Inventory)**
-- 상품 SKU, 창고 단위 관리
-- `onHand`, `reserved`, `allocated` 수량 관리
-- 예약/출고/취소 트랜잭션 보장
-
-### 2. **주문(Order)**
-- 주문 생성 시 재고 예약
-- 결제 대기/성공/실패 상태 전이
-- 중복 주문 방지 (idempotency key)
-
-### 3. **결제(Payment)**
-- 결제 요청 → 승인/실패 → 웹훅 처리
-- 재고 확정(할당) 또는 예약 해제
-
-### 4. **유저(User)**
-- 회원가입/로그인 (JWT 인증)
-- 주문/결제 이력 조회
+| 주제 | 내용 |
+|---|---|
+| **동시성 제어** | 재고 뮤테이션에 분산 락(Redisson) + 비관적 락(DB) 2중 적용 — 멀티 인스턴스 환경의 overselling 원천 차단 |
+| **결제 멱등성** | `prepare`·`confirm`·`cancel` 3단계에 레이어별 멱등 전략 — DB UNIQUE, Redis SETNX, Toss `Idempotency-Key` 헤더 |
+| **쿠폰 동시성** | 한정 수량 쿠폰 차감 시 `PESSIMISTIC_WRITE` + TOCTOU 재검증 — 이중 사용 및 초과 발급 방지 |
+| **ES 검색 + Fallback** | 상품 키워드·가격·카테고리 복합 검색(Elasticsearch), 장애 시 자동 MySQL fallback |
+| **Circuit Breaker** | TossPayments HTTP 호출 실패 누적 시 회로 차단 → 빠른 실패 응답 |
+| **배치 처리** | 쿠폰 만료 비활성화·일별 재고 스냅샷·일별 주문 통계 스케줄러 (`@Scheduled`, `@ConditionalOnProperty`, 멱등성 보장) |
+| **IDOR 방어** | 주문·결제·배송·환불 전 엔드포인트에 소유자 검증 (username + isAdmin 파라미터 패턴) |
+| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **580개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
 
 ---
 
-## ⚙️ 기술 스택
+## 기술 스택
 
-### Backend
-- **Framework**: Spring Boot 3.x
-- **Language**: Java 17+
-- **Build Tool**: Gradle 8.x
-
-### Database & Cache
-- **Database**: MySQL 8.x (InnoDB)
-- **ORM**: Spring Data JPA (Hibernate)
-- **Migration**: Flyway
-- **Cache/Queue**: Redis
-
-### Security & Auth
-- **Security**: Spring Security 6.x
-- **Auth**: JWT (jjwt 라이브러리)
-
-### Container & DevOps
-- **Container**: Docker, Docker Compose
-- **Monitoring**: Spring Actuator + Prometheus
-
-### Testing
-- **Unit Test**: JUnit 5, Mockito
-- **Integration Test**: Testcontainers (MySQL, Redis)
+| 분류 | 기술 |
+|---|---|
+| 프레임워크 | Spring Boot 3.5.11, Spring Security 6 |
+| 언어 / 빌드 | Java 17, Gradle 8 |
+| DB / ORM | MySQL 8, Spring Data JPA (Hibernate 6), Flyway |
+| 캐시 / 락 | Redis 7, Redisson 3.27.2 (분산 락), Spring Cache |
+| 검색 | Elasticsearch 8.18 (Spring Data Elasticsearch) |
+| 인증 | Spring Security 6 + JWT (jjwt 0.12.6), Refresh Token Rotation |
+| 결제 | TossPayments Core API v1 |
+| 회복탄력성 | Resilience4j Circuit Breaker |
+| API 문서 | springdoc-openapi 2.8.4 (Swagger UI) |
+| 관리자 | Spring Boot Admin 3.4.3 |
+| 테스트 | JUnit 5, Mockito, Testcontainers (MySQL + Redis + Elasticsearch) |
+| 인프라 | Docker (멀티스테이지 빌드), Docker Compose |
 
 ---
 
-## 📁 프로젝트 구조
+## 로컬 실행
 
+### 방법 1 — Docker Compose 전체 스택 (권장)
+
+사전 요구사항: Docker
+
+```bash
+# 환경변수 파일 준비 (필요 시 값 수정)
+cp .env.example .env
+
+# 인프라 + 앱 전체 기동 (최초 실행 시 앱 이미지 빌드 포함)
+docker compose -f docker/docker-compose.yml up -d
 ```
-stock-management-api/
-├── src/
-│   ├── main/
-│   │   ├── java/
-│   │   │   └── com/
-│   │   │       └── stockmanagement/
-│   │   │           ├── StockManagementApplication.java
-│   │   │           ├── domain/
-│   │   │           │   ├── inventory/
-│   │   │           │   │   ├── entity/
-│   │   │           │   │   │   ├── Product.java
-│   │   │           │   │   │   ├── Inventory.java
-│   │   │           │   │   │   └── InventoryTransaction.java
-│   │   │           │   │   ├── repository/
-│   │   │           │   │   │   ├── ProductRepository.java
-│   │   │           │   │   │   └── InventoryRepository.java
-│   │   │           │   │   ├── service/
-│   │   │           │   │   │   └── InventoryService.java
-│   │   │           │   │   ├── controller/
-│   │   │           │   │   │   └── InventoryController.java
-│   │   │           │   │   └── dto/
-│   │   │           │   │       ├── InventoryResponse.java
-│   │   │           │   │       └── ReserveStockRequest.java
-│   │   │           │   ├── order/
-│   │   │           │   │   ├── entity/
-│   │   │           │   │   │   ├── Order.java
-│   │   │           │   │   │   └── OrderItem.java
-│   │   │           │   │   ├── repository/
-│   │   │           │   │   ├── service/
-│   │   │           │   │   ├── controller/
-│   │   │           │   │   └── dto/
-│   │   │           │   ├── payment/
-│   │   │           │   │   ├── entity/
-│   │   │           │   │   │   └── Payment.java
-│   │   │           │   │   ├── repository/
-│   │   │           │   │   ├── service/
-│   │   │           │   │   ├── controller/
-│   │   │           │   │   └── dto/
-│   │   │           │   └── user/
-│   │   │           │       ├── entity/
-│   │   │           │       │   └── User.java
-│   │   │           │       ├── repository/
-│   │   │           │       ├── service/
-│   │   │           │       ├── controller/
-│   │   │           │       └── dto/
-│   │   │           ├── common/
-│   │   │           │   ├── config/
-│   │   │           │   │   ├── JpaConfig.java
-│   │   │           │   │   ├── RedisConfig.java
-│   │   │           │   │   └── SecurityConfig.java
-│   │   │           │   ├── exception/
-│   │   │           │   │   ├── GlobalExceptionHandler.java
-│   │   │           │   │   ├── InsufficientStockException.java
-│   │   │           │   │   └── BusinessException.java
-│   │   │           │   └── dto/
-│   │   │           │       └── ApiResponse.java
-│   │   │           └── security/
-│   │   │               ├── JwtTokenProvider.java
-│   │   │               └── JwtAuthenticationFilter.java
-│   │   └── resources/
-│   │       ├── application.yml
-│   │       ├── application-dev.yml
-│   │       ├── application-prod.yml
-│   │       └── db/
-│   │           └── migration/
-│   │               ├── V1__init_schema.sql
-│   │               ├── V2__create_order_tables.sql
-│   │               └── V3__create_payment_tables.sql
-│   └── test/
-│       └── java/
-│           └── com/
-│               └── stockmanagement/
-│                   ├── inventory/
-│                   │   └── InventoryServiceTest.java
-│                   └── integration/
-│                       └── InventoryIntegrationTest.java
-├── docker/
-│   ├── Dockerfile
-│   └── docker-compose.yml
-├── build.gradle
-└── README.md
+
+앱 재빌드가 필요할 때:
+
+```bash
+docker compose -f docker/docker-compose.yml up -d --build app
 ```
+
+### 방법 2 — 인프라만 Docker, 앱은 로컬 실행 (개발 시)
+
+사전 요구사항: JDK 17+, Docker
+
+```bash
+# 인프라만 기동 (MySQL + Redis + Elasticsearch)
+docker compose -f docker/docker-compose.yml up -d mysql redis elasticsearch
+
+# 앱 실행
+./gradlew bootRun
+```
+
+Flyway가 기동 시 V1~V21 마이그레이션을 자동 실행합니다.
+
+### 환경 변수
+
+`.env.example`을 `.env`로 복사 후 필요한 값을 수정하세요. `docker-compose.yml`이 자동으로 `.env`를 로드합니다.
+
+| 변수 | 설명 | 기본값 |
+|---|---|---|
+| `JWT_SECRET` | JWT 서명 키 (운영 시 반드시 변경, 32자 이상) | 개발용 기본값 |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Spring Boot Admin 계정 | `admin` / `changeme` |
+| `TOSS_SECRET_KEY` / `TOSS_CLIENT_KEY` | 토스페이먼츠 API 키 | placeholder |
+| `CORS_ALLOWED_ORIGINS` | CORS 허용 출처 | `http://localhost:3000` |
+
+### 접속 URL
+
+| URL | 설명 |
+|---|---|
+| `http://localhost:8080/swagger-ui/index.html` | Swagger API 문서 |
+| `http://localhost:8080/admin-ui` | Spring Boot Admin (인프라 모니터링) |
 
 ---
 
-## 📌 개발 단계별 로드맵
+## 테스트
 
-### 1단계: 기본 뼈대 ✅
-**목표**: Spring Boot 프로젝트 초기 설정 및 기본 도메인 모델 구현
+```bash
+# 전체 테스트 (Docker 필요 — Testcontainers가 MySQL·Redis·Elasticsearch 컨테이너를 자동으로 띄움)
+./gradlew test
 
-#### 작업 내용
-- [x] Spring Initializer로 프로젝트 생성
-  - Dependencies: Spring Web, Spring Data JPA, MySQL Driver, Lombok, Validation
-- [x] MySQL 연동 및 Flyway 설정
-- [x] 도메인 모델 설계
-  - `Product` Entity 생성
-  - `Inventory` Entity 생성
-  - Repository, Service, Controller 기본 구조
-- [x] 기본 CRUD API 구현
-  - 상품 등록/조회/수정/삭제
-  - 재고 조회
-
-#### 주요 파일
-```
-src/main/resources/db/migration/
-└── V1__init_schema.sql
-
-src/main/java/.../inventory/
-├── entity/
-│   ├── Product.java
-│   └── Inventory.java
-├── repository/
-│   ├── ProductRepository.java
-│   └── InventoryRepository.java
-├── service/
-│   └── InventoryService.java
-└── controller/
-    └── InventoryController.java
+# 커버리지 리포트
+./gradlew jacocoTestReport
+# build/reports/jacoco/test/html/index.html
 ```
 
-#### API 예시
-```
-GET    /api/products          # 상품 목록 조회
-POST   /api/products          # 상품 등록
-GET    /api/products/{id}     # 상품 상세 조회
-PUT    /api/products/{id}     # 상품 수정
-DELETE /api/products/{id}     # 상품 삭제
+### 테스트 구조
 
-GET    /api/inventory/products/{productId}/warehouses/{warehouseId}  # 재고 조회
-```
+| 종류 | 위치 | 설명 |
+|---|---|---|
+| 단위 | `domain/*/service/`, `entity/`, `common/lock/`, `security/` | Mockito, 외부 의존성 격리 |
+| 컨트롤러 | `domain/*/controller/` | `@WebMvcTest`, MockMvc, 보안 필터 포함 |
+| 통합 | `integration/` | Testcontainers (MySQL + Redis + ES), Flyway 실행, 실제 HTTP 흐름 E2E |
+| 동시성 | `integration/InventoryConcurrencyTest` | 동시 입고 lost update · 재고 예약 overselling 검증 |
+
+현재 총 **580개** 테스트 전체 통과.
 
 ---
 
-### 2단계: 주문 & 재고 예약 🔄
-**목표**: 주문 생성 시 재고 예약 및 동시성 제어 구현
+## 프로젝트 구조
 
-#### 작업 내용
-- [ ] 주문 도메인 구현
-  - `Order`, `OrderItem` Entity 설계
-  - OrderStatus Enum (PENDING, CONFIRMED, CANCELLED)
-- [ ] 재고 예약 로직
-  - 주문 생성 시 `reserved` 수량 증가
-  - `available = onHand - reserved - allocated` 계산
-- [ ] 동시성 제어
-  - **비관적 락**: JPA `@Lock(LockModeType.PESSIMISTIC_WRITE)` 적용
-  - **낙관적 락**: `@Version` 필드로 버전 관리
-  - **분산 락**: Redisson으로 분산 환경 대응
-- [ ] 재고 부족 예외 처리
-  - `InsufficientStockException` 커스텀 예외
-  - `@ControllerAdvice`로 전역 예외 처리
+```
+com.stockmanagement/
+├── common/
+│   ├── config/          # SecurityConfig, AdminSecurityConfig, SpringBootAdminConfig
+│   │                    # JpaConfig, RedisConfig, CacheConfig, OpenApiConfig, TossPaymentsConfig
+│   ├── dto/             # ApiResponse<T> — 전 엔드포인트 통합 응답 래퍼
+│   ├── event/           # DomainEvent, OrderCreated/Cancelled, PaymentConfirmed, LowStock
+│   ├── exception/       # BusinessException, InsufficientStockException, ErrorCode, GlobalExceptionHandler
+│   ├── filter/          # RequestIdFilter (MDC requestId 주입)
+│   ├── lock/            # @DistributedLock (어노테이션), DistributedLockAspect (AOP)
+│   ├── outbox/          # OutboxEvent, OutboxEventStore, OutboxEventRelayScheduler
+│   ├── ratelimit/       # @RateLimit (어노테이션), RateLimitAspect (AOP, Redis)
+│   └── security/        # LoginRateLimiter, JwtBlacklist, RefreshTokenStore
+├── domain/
+│   ├── product/         # 상품 CRUD + Elasticsearch 검색 (document/, service/ProductSearchService)
+│   │   ├── category/    # 카테고리 계층 구조 (parent-child 2단계)
+│   │   ├── image/       # 상품 이미지 (MinIO S3 Presigned URL)
+│   │   ├── review/      # 상품 리뷰 (구매자 전용, 1인 1리뷰)
+│   │   └── wishlist/    # 찜 목록
+│   ├── inventory/       # 재고 4-state 모델 + 변동 이력 + 필터 검색 + 일별 스냅샷
+│   │   └── scheduler/   # InventorySnapshotScheduler (매일 자정 5분)
+│   ├── order/           # 주문 생성·취소, 멱등성 키, 상태 이력, 만료 자동 취소, 필터 조회, 일별 통계
+│   │   ├── cart/        # 장바구니 담기·수정·삭제·체크아웃
+│   │   └── scheduler/   # DailyOrderStatsScheduler (매일 자정 1분)
+│   ├── payment/         # TossPayments 연동, 결제 준비·확인·취소, Circuit Breaker
+│   ├── coupon/          # 쿠폰 생성·검증·적용·반환, FIXED_AMOUNT/PERCENTAGE, 비관적 락
+│   │   └── scheduler/   # CouponExpiryScheduler (매일 새벽 1시)
+│   ├── point/           # 포인트 적립·사용·환불 (결제금액 1% 자동 적립)
+│   ├── shipment/        # 배송 상태 관리 (PREPARING→SHIPPED→DELIVERED/RETURNED)
+│   ├── refund/          # 환불 이력 관리 (PENDING→COMPLETED/FAILED)
+│   ├── user/            # 회원가입·로그인, ADMIN/USER 역할, Refresh Token
+│   │   └── address/     # 배송지 관리 (기본 배송지, 주문 연동)
+│   └── admin/           # 관리자 대시보드, 사용자 관리, 전체 주문 조회, 배치 통계 조회
+└── security/            # JwtTokenProvider, JwtAuthenticationFilter
+```
 
-#### 핵심 코드 예시
+각 도메인: `entity / repository / service / controller / dto`
 
-**Inventory Entity (낙관적 락)**
-```java
-@Entity
-@Table(name = "inventory")
-public class Inventory {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    
-    private Long productId;
-    private Long warehouseId;
-    private Integer onHand;      // 실제 보유 수량
-    private Integer reserved;    // 예약된 수량
-    private Integer allocated;   // 할당된 수량
-    
-    @Version
-    private Long version;  // 낙관적 락 버전
-    
-    public Integer getAvailable() {
-        return onHand - reserved - allocated;
+---
+
+## ERD
+
+전체 테이블과 관계를 나타낸 Entity-Relationship Diagram입니다.
+
+```mermaid
+erDiagram
+    %% ── USER ─────────────────────────────────────────────
+    users {
+        bigint id PK
+        varchar username UK
+        varchar password
+        varchar email UK
+        varchar role "USER|ADMIN"
+        datetime deleted_at "NULL=활성 계정"
+        datetime created_at
     }
-    
-    public void reserve(Integer quantity) {
-        if (getAvailable() < quantity) {
-            throw new InsufficientStockException(
-                String.format("재고 부족. 요청: %d, 가용: %d", quantity, getAvailable())
-            );
-        }
-        this.reserved += quantity;
+    delivery_addresses {
+        bigint id PK
+        bigint user_id FK
+        varchar alias "집·회사 등"
+        varchar recipient
+        varchar phone
+        varchar zip_code
+        varchar address1
+        varchar address2
+        tinyint is_default
     }
-}
-```
 
-**InventoryRepository (비관적 락)**
-```java
-public interface InventoryRepository extends JpaRepository<Inventory, Long> {
-    
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT i FROM Inventory i WHERE i.productId = :productId AND i.warehouseId = :warehouseId")
-    Optional<Inventory> findByProductIdAndWarehouseIdForUpdate(
-        @Param("productId") Long productId,
-        @Param("warehouseId") Long warehouseId
-    );
-}
-```
-
-**InventoryService**
-```java
-@Service
-@Transactional(readOnly = true)
-public class InventoryService {
-    
-    private final InventoryRepository inventoryRepository;
-    
-    @Transactional
-    public void reserveStock(Long productId, Long warehouseId, int quantity, String orderId) {
-        Inventory inventory = inventoryRepository
-            .findByProductIdAndWarehouseIdForUpdate(productId, warehouseId)
-            .orElseThrow(() -> new InventoryNotFoundException());
-        
-        inventory.reserve(quantity);
-        inventoryRepository.save(inventory);
+    %% ── PRODUCT ──────────────────────────────────────────
+    categories {
+        bigint id PK
+        varchar name UK
+        bigint parent_id FK "NULL=최상위"
     }
-}
-```
+    products {
+        bigint id PK
+        varchar name
+        decimal price
+        varchar sku UK
+        varchar status "ACTIVE|INACTIVE|DISCONTINUED"
+        varchar thumbnail_url
+        bigint category_id FK
+    }
+    product_images {
+        bigint id PK
+        bigint product_id FK
+        varchar image_url
+        varchar object_key
+        varchar image_type "THUMBNAIL|DETAIL"
+        int display_order
+    }
+    reviews {
+        bigint id PK
+        bigint product_id FK
+        bigint user_id FK
+        tinyint rating "1–5"
+        varchar title
+        text content
+    }
+    wishlist_items {
+        bigint id PK
+        bigint user_id FK
+        bigint product_id FK
+    }
 
-#### API 예시
-```
-POST /api/orders                      # 주문 생성 (재고 예약)
-GET  /api/orders/{id}                 # 주문 조회
-GET  /api/orders                      # 주문 목록 조회
-POST /api/orders/{id}/cancel          # 주문 취소 (재고 예약 해제)
+    %% ── INVENTORY ────────────────────────────────────────
+    inventory {
+        bigint id PK
+        bigint product_id UK "FK, 상품당 1행"
+        int on_hand "창고 실물 수량"
+        int reserved "주문 생성 보류"
+        int allocated "결제 완료 확정"
+        int version "낙관적 락"
+    }
+    inventory_transactions {
+        bigint id PK
+        bigint inventory_id FK
+        varchar type "RECEIVE|RESERVE|RELEASE|CONFIRM|..."
+        int quantity
+        varchar note
+        int snapshot_on_hand
+        int snapshot_reserved
+        int snapshot_allocated
+    }
+
+    %% ── ORDER ────────────────────────────────────────────
+    cart_items {
+        bigint id PK
+        bigint user_id FK
+        bigint product_id FK
+        int quantity
+    }
+    orders {
+        bigint id PK
+        bigint user_id FK
+        varchar status "PENDING|CONFIRMED|CANCELLED"
+        decimal total_amount
+        varchar idempotency_key UK
+        bigint delivery_address_id FK "NULL=미지정"
+        bigint coupon_id FK "NULL=미사용"
+        decimal discount_amount
+        bigint used_points
+    }
+    order_items {
+        bigint id PK
+        bigint order_id FK
+        bigint product_id FK
+        int quantity
+        decimal unit_price "주문 당시 단가"
+        decimal subtotal
+    }
+    order_status_history {
+        bigint id PK
+        bigint order_id FK
+        varchar from_status
+        varchar to_status
+        varchar changed_by
+        varchar note
+    }
+
+    %% ── PAYMENT ──────────────────────────────────────────
+    payments {
+        bigint id PK
+        bigint order_id UK "FK"
+        varchar payment_key "Toss 발급, DONE 이후 설정"
+        varchar toss_order_id UK
+        decimal amount
+        varchar status "PENDING|DONE|FAILED|CANCELLED"
+        varchar method "카드|가상계좌 등"
+        datetime requested_at
+        datetime approved_at
+    }
+
+    %% ── COUPON ───────────────────────────────────────────
+    coupons {
+        bigint id PK
+        varchar code UK
+        varchar name
+        varchar discount_type "FIXED_AMOUNT|PERCENTAGE"
+        decimal discount_value
+        decimal minimum_order_amount
+        decimal max_discount_amount
+        int max_usage_count "NULL=무제한"
+        int usage_count
+        int max_usage_per_user
+        datetime valid_from
+        datetime valid_until
+        tinyint active
+    }
+    coupon_usages {
+        bigint id PK
+        bigint coupon_id FK
+        bigint user_id FK
+        bigint order_id UK "FK, 주문당 1건"
+        decimal discount_amount
+        datetime used_at
+    }
+
+    %% ── POINT ────────────────────────────────────────────
+    user_points {
+        bigint id PK
+        bigint user_id UK "FK"
+        bigint balance
+    }
+    point_transactions {
+        bigint id PK
+        bigint user_id FK
+        bigint amount "양수=적립·환불, 음수=사용·소멸"
+        varchar type "EARN|USE|REFUND|EXPIRE"
+        varchar description
+        bigint order_id "NULL 가능"
+    }
+
+    %% ── SHIPMENT ─────────────────────────────────────────
+    shipments {
+        bigint id PK
+        bigint order_id UK "FK"
+        varchar status "PREPARING|SHIPPED|DELIVERED|RETURNED"
+        varchar carrier
+        varchar tracking_number
+        datetime shipped_at
+        datetime delivered_at
+    }
+
+    %% ── REFUND ───────────────────────────────────────────
+    refunds {
+        bigint id PK
+        bigint payment_id UK "FK, 결제당 1건"
+        bigint order_id FK
+        decimal amount
+        varchar reason
+        varchar status "PENDING|COMPLETED|FAILED"
+        datetime completed_at
+    }
+
+    %% ── RELATIONSHIPS ────────────────────────────────────
+    users ||--o{ delivery_addresses : "배송지"
+    users ||--o{ orders : "주문"
+    users ||--o{ cart_items : "장바구니"
+    users ||--o{ reviews : "리뷰"
+    users ||--o{ wishlist_items : "위시리스트"
+    users ||--o| user_points : "포인트 잔액 (1:1)"
+    users ||--o{ point_transactions : "포인트 이력"
+    users ||--o{ coupon_usages : "쿠폰 사용"
+
+    categories ||--o{ categories : "하위 카테고리"
+    categories ||--o{ products : "상품 분류"
+
+    products ||--|| inventory : "재고 (1:1)"
+    products ||--o{ product_images : "이미지"
+    products ||--o{ order_items : "주문 항목"
+    products ||--o{ cart_items : "장바구니"
+    products ||--o{ reviews : "리뷰"
+    products ||--o{ wishlist_items : "찜"
+
+    inventory ||--o{ inventory_transactions : "변동 이력"
+
+    delivery_addresses ||--o{ orders : "배송지 적용"
+
+    coupons ||--o{ coupon_usages : "사용 이력"
+
+    orders ||--|{ order_items : "주문 항목"
+    orders ||--o{ order_status_history : "상태 이력"
+    orders ||--o| payments : "결제 (1:1)"
+    orders ||--o| shipments : "배송 (1:1)"
+    orders ||--o| coupon_usages : "쿠폰 적용 (1:1)"
+    orders ||--o| refunds : "환불 (1:1)"
+
+    payments ||--o| refunds : "환불 처리 (1:1)"
 ```
 
 ---
 
-### 3단계: 결제 연동 💳
-**목표**: 결제 프로세스 구현 및 재고 상태 전이 관리
+## 기능 흐름도
 
-#### 작업 내용
-- [ ] 결제 도메인 구현
-  - `Payment` Entity 설계
-  - PaymentStatus Enum (PENDING, SUCCESS, FAILED, CANCELLED)
-- [ ] 결제 요청 API
-  - 결제 요청 → PG사 연동 (Mock)
-  - 결제 결과 대기 상태로 주문 상태 변경
-- [ ] 웹훅 처리
-  - **결제 성공** → 재고 확정 (`reserved` → `allocated`)
-  - **결제 실패** → 재고 예약 해제 (`reserved` 감소)
-- [ ] 트랜잭션 관리
-  - `@Transactional`로 재고/주문/결제 일관성 보장
-  - 실패 시 롤백 처리
+### 전체 쇼핑 플로우
 
-#### 결제 프로세스 흐름
-
-```
-[주문 생성] → reserved +10
-    ↓
-[결제 요청] → Payment(PENDING)
-    ↓
-[PG사 처리]
-    ↓
-    ├─ [성공] → Payment(SUCCESS)
-    │           reserved -10, allocated +10
-    │           Order(CONFIRMED)
-    │
-    └─ [실패] → Payment(FAILED)
-                reserved -10
-                Order(PAYMENT_FAILED)
-```
-
-#### 핵심 코드 예시
-
-**PaymentService**
-```java
-@Service
-@Transactional(readOnly = true)
-public class PaymentService {
-    
-    private final PaymentRepository paymentRepository;
-    private final OrderService orderService;
-    private final InventoryService inventoryService;
-    
-    @Transactional
-    public PaymentResponse requestPayment(PaymentRequest request, String username) {
-        Order order = orderService.getOrder(request.getOrderId(), username);
-        
-        Payment payment = Payment.builder()
-            .orderId(request.getOrderId())
-            .amount(order.getTotalAmount())
-            .status(PaymentStatus.PENDING)
-            .build();
-        
-        return PaymentResponse.from(paymentRepository.save(payment));
-    }
-    
-    @Transactional
-    public void processPaymentWebhook(PaymentWebhookRequest webhook) {
-        Payment payment = paymentRepository
-            .findByPgTransactionId(webhook.getPgTransactionId())
-            .orElseThrow();
-        
-        if (webhook.isSuccess()) {
-            payment.complete();
-            Order order = orderService.getOrderById(payment.getOrderId());
-            order.confirmPayment();
-            
-            // 재고: 예약 → 할당
-            for (OrderItem item : order.getOrderItems()) {
-                inventoryService.allocateStock(
-                    item.getProductId(),
-                    item.getWarehouseId(),
-                    item.getQuantity(),
-                    order.getOrderNumber()
-                );
-            }
-        } else {
-            payment.fail();
-            Order order = orderService.getOrderById(payment.getOrderId());
-            
-            // 재고 예약 해제
-            for (OrderItem item : order.getOrderItems()) {
-                inventoryService.releaseReservation(
-                    item.getProductId(),
-                    item.getWarehouseId(),
-                    item.getQuantity(),
-                    order.getOrderNumber()
-                );
-            }
-            
-            order.failPayment();
-        }
-    }
-}
-```
-
-#### API 예시
-```
-POST /api/payments                    # 결제 요청
-POST /api/payments/webhook            # 결제 웹훅 (PG사 → 서버)
-GET  /api/payments/orders/{orderId}   # 결제 조회
+```mermaid
+flowchart TD
+    A([회원가입 / 로그인]) --> B[상품 검색\nElasticsearch or MySQL]
+    B --> C[장바구니 담기\n상품 ACTIVE 검증]
+    C --> D[장바구니 체크아웃\n쿠폰·포인트·배송지 선택]
+    D --> E[주문 생성\nPENDING\nreserved++ · 쿠폰 차감 · 포인트 차감]
+    E --> F[결제 준비\nPOST /api/payments/prepare]
+    F --> G[TossPayments\n결제창]
+    G --> H{결제 성공?}
+    H -->|성공| I[결제 승인\nPOST /api/payments/confirm]
+    I --> J[주문 CONFIRMED\nreserved → allocated]
+    J --> K[배송 자동 생성\nPREPARING]
+    J --> L[포인트 1% 적립]
+    K --> M[ADMIN 배송 시작\nSHIPPED]
+    M --> N[ADMIN 배송 완료\nDELIVERED]
+    H -->|실패| O[결제 FAILED\n주문 PENDING 유지]
+    E -->|30분 만료| P[OrderExpiryScheduler\n자동 취소\nreserved--]
+    E -->|사용자 취소| P
+    J -->|환불 요청| Q[환불 처리\nallocated--\n쿠폰 반환 · 포인트 회수]
 ```
 
 ---
 
-### 4단계: 사용자 관리 👤
-**목표**: JWT 기반 인증/인가 시스템 구현
+### TossPayments 결제 연동 플로우
 
-#### 작업 내용
-- [ ] User 도메인 구현
-  - `User` Entity (username, password, email, role)
-  - UserRole Enum (USER, ADMIN)
-- [ ] Spring Security + JWT 인증
-  - `/api/auth/signup`, `/api/auth/login` 엔드포인트
-  - JwtTokenProvider로 토큰 생성/검증
-  - SecurityFilterChain 설정
-- [ ] 사용자별 주문/결제 이력 조회
-  - 현재 로그인 사용자의 주문 목록
-  - 주문 상세 정보 조회
+```mermaid
+sequenceDiagram
+    participant C as Client (Browser)
+    participant S as Server (API)
+    participant T as TossPayments
 
-#### 핵심 코드 예시
+    rect rgb(240, 248, 255)
+        Note over C,T: 1단계 — 결제 준비 (prepare)
+        C->>S: POST /api/payments/prepare<br/>{orderId, amount}
+        S->>S: 주문 소유자 검증
+        S->>S: 서버측 금액 검증 (amount == order.totalAmount)
+        S->>S: Payment(PENDING) 생성, tossOrderId 발급
+        S-->>C: {tossOrderId, amount}
+    end
 
-**JwtTokenProvider**
-```java
-@Component
-public class JwtTokenProvider {
-    
-    @Value("${spring.security.jwt.secret}")
-    private String secretKey;
-    
-    @Value("${spring.security.jwt.token-validity-in-seconds}")
-    private long tokenValidityInSeconds;
-    
-    public String createToken(String username, List<String> roles) {
-        Claims claims = Jwts.claims().setSubject(username);
-        claims.put("roles", roles);
-        
-        Date now = new Date();
-        Date validity = new Date(now.getTime() + tokenValidityInSeconds * 1000);
-        
-        return Jwts.builder()
-            .setClaims(claims)
-            .setIssuedAt(now)
-            .setExpiration(validity)
-            .signWith(key, SignatureAlgorithm.HS256)
-            .compact();
-    }
-    
-    public boolean validateToken(String token) {
-        try {
-            Jwts.parserBuilder()
-                .setSigningKey(key)
-                .build()
-                .parseClaimsJws(token);
-            return true;
-        } catch (JwtException | IllegalArgumentException e) {
-            return false;
-        }
-    }
-}
-```
+    rect rgb(255, 248, 240)
+        Note over C,T: 2단계 — TossPayments 결제창
+        C->>T: 결제창 렌더링 (tossOrderId, amount, clientKey)
+        Note right of T: 사용자가 카드·계좌이체 등으로 결제
+        T-->>C: 성공 콜백 {paymentKey, orderId, amount}
+    end
 
-**SecurityConfig**
-```java
-@Configuration
-@EnableWebSecurity
-public class SecurityConfig {
-    
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-            .csrf(csrf -> csrf.disable())
-            .sessionManagement(session -> 
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            )
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/actuator/**").permitAll()
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                .anyRequest().authenticated()
-            )
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-        
-        return http.build();
-    }
-}
-```
+    rect rgb(240, 255, 240)
+        Note over C,T: 3단계 — 결제 승인 (confirm)
+        C->>S: POST /api/payments/confirm<br/>{paymentKey, tossOrderId, amount}
+        S->>S: Redis SETNX 선점 (중복 confirm 방지)
+        S->>S: 주문 소유자 재검증
+        S->>S: 금액 재검증 (server-side)
+        S->>T: POST confirmations API (Idempotency-Key 헤더 포함)
+        T-->>S: status: DONE
+        S->>S: Payment → DONE
+        S->>S: Order → CONFIRMED (reserved → allocated)
+        S->>S: Shipment(PREPARING) 자동 생성
+        S->>S: PointService.earn() 1% 적립
+        S->>S: Redis 결과 캐싱 (24h, 재요청 멱등성)
+        S-->>C: PaymentResponse
+    end
 
-#### API 예시
-```
-POST /api/auth/signup                 # 회원가입
-POST /api/auth/login                  # 로그인 (JWT 발급)
-GET  /api/users/me                    # 내 정보 조회
-GET  /api/users/me/orders             # 내 주문 목록
+    rect rgb(255, 240, 240)
+        Note over C,T: 취소 / 환불
+        C->>S: POST /api/payments/{paymentKey}/cancel
+        S->>T: POST cancels API
+        T-->>S: CANCELLED
+        S->>S: Payment → CANCELLED
+        S->>S: Order → CANCELLED (allocated--)
+        S->>S: 쿠폰 반환 (usageCount--)
+        S->>S: 포인트 반환 + 적립 회수
+        S-->>C: PaymentResponse
+    end
 ```
 
 ---
 
-### 5단계: 운영 환경 확장 🐳
-**목표**: Docker, Redis 통합 및 운영 환경 구축
+### 재고 상태 전이
 
-#### 작업 내용
-- [ ] **Docker & Docker Compose**
-  - Dockerfile 작성 (Multi-stage build)
-  - docker-compose.yml (MySQL, Redis, Spring Boot)
-  - 환경별 설정 분리 (dev, prod)
-  
-- [ ] **Redis 통합**
-  - Spring Data Redis 설정
-  - 재고 예약 TTL 관리
-    - 예약 후 30분 내 미결제 시 자동 해제
-  - 분산 락 구현 (Redisson)
-  
-- [ ] **백그라운드 작업**
-  - `@Scheduled`로 예약 만료 체크
-  - 만료된 예약 자동 해제
-  - 일일 재고 정산 배치
-  
-- [ ] **모니터링**
-  - Spring Actuator 활성화
-  - Prometheus + Grafana 연동
-  - 헬스 체크 엔드포인트
-
-#### Redis 재고 예약 TTL
-
-```java
-@Service
-public class InventoryReservationService {
-    
-    private final StringRedisTemplate redisTemplate;
-    private static final String RESERVATION_KEY = "inventory:reservation:";
-    private static final long RESERVATION_TTL_MINUTES = 30;
-    
-    public void reserveWithTTL(Long productId, Long warehouseId, int quantity, String orderId) {
-        // 1. 실제 재고 예약
-        inventoryService.reserveStock(productId, warehouseId, quantity, orderId);
-        
-        // 2. Redis에 예약 정보 저장 (30분 TTL)
-        String key = RESERVATION_KEY + orderId;
-        ReservationInfo info = new ReservationInfo(productId, warehouseId, quantity, orderId);
-        
-        redisTemplate.opsForValue().set(
-            key,
-            JsonUtil.toJson(info),
-            RESERVATION_TTL_MINUTES,
-            TimeUnit.MINUTES
-        );
-    }
-    
-    @Scheduled(fixedDelay = 60000) // 1분마다 실행
-    public void releaseExpiredReservations() {
-        // 만료된 예약 감지 및 자동 해제
-        // Redis Keyspace Notification 활용
-    }
-}
+```
+available = onHand - reserved - allocated
 ```
 
-#### Docker Compose 예시
-```yaml
-version: '3.8'
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "onHand" as H
+    state "reserved" as R
+    state "allocated" as A
 
-services:
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: stock_management
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
+    [*] --> H : ADMIN 입고 (receive)\nonHand ++
+    H --> R : 주문 생성\nreserved ++
+    R --> H : 주문 취소 (PENDING)\nreserved --
+    R --> A : 결제 완료\nreserved -- · allocated ++
+    A --> H : 결제 취소 (환불)\nallocated --
+```
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
+| 이벤트 | onHand | reserved | allocated | available |
+|---|---|---|---|---|
+| ADMIN 입고 | `+N` | — | — | `+N` |
+| 주문 생성 | — | `+N` | — | `-N` |
+| 결제 완료 | — | `-N` | `+N` | — |
+| 주문 취소 (결제 전) | — | `-N` | — | `+N` |
+| 환불 (결제 후) | — | — | `-N` | `+N` |
 
-  app:
-    build: .
-    depends_on:
-      - mysql
-      - redis
-    environment:
-      SPRING_PROFILES_ACTIVE: prod
-      DB_HOST: mysql
-      REDIS_HOST: redis
-    ports:
-      - "8080:8080"
+---
 
-volumes:
-  mysql_data:
+### 주문 · 배송 · 환불 상태 전이
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    state "주문 (Order)" as Order {
+        [*] --> PENDING : 주문 생성
+        PENDING --> CONFIRMED : 결제 완료
+        PENDING --> CANCELLED : 취소·만료
+        CONFIRMED --> CANCELLED : 환불
+    }
+
+    state "배송 (Shipment)" as Shipment {
+        [*] --> PREPARING : 결제 완료 시 자동 생성
+        PREPARING --> SHIPPED : ADMIN 배송 시작
+        SHIPPED --> DELIVERED : ADMIN 배송 완료
+        SHIPPED --> RETURNED : ADMIN 반품
+    }
+
+    state "환불 (Refund)" as Refund {
+        [*] --> PENDING : 환불 요청
+        PENDING --> COMPLETED : Toss 취소 성공
+        PENDING --> FAILED : Toss 취소 실패
+    }
 ```
 
 ---
 
-### 6단계: 성능 최적화 및 고도화 ⚡
-**목표**: 시스템 성능 개선 및 안정성 강화
+### 포인트 적립 / 사용 / 환불 흐름
 
-#### 작업 내용
-- [ ] **캐싱 전략**
-  - 상품 정보 Redis 캐싱
-  - 재고 조회 성능 최적화
-  - Cache-Aside 패턴 적용
-  
-- [ ] **배치 처리**
-  - Spring Batch로 대량 재고 업데이트
-  - 일일 재고 정산 작업
-  - 재고 트랜잭션 이력 아카이빙
-  
-- [ ] **API 성능 개선**
-  - N+1 문제 해결 (Fetch Join, @EntityGraph)
-  - 쿼리 최적화
-  - 인덱스 튜닝
-  - 페이징 성능 개선
-  
-- [ ] **로깅 및 모니터링**
-  - 슬로우 쿼리 모니터링
-  - API 응답 시간 추적
-  - 에러 로그 집계
+```mermaid
+flowchart LR
+    A[결제 완료\nOrder CONFIRMED] -->|실결제금액 × 1%| B[PointService.earn\nEARN 트랜잭션 기록]
+    B --> C[(user_points\nbalance ++)]
 
-#### 성능 최적화 예시
+    D[주문 생성 시\nusePoints > 0] -->|잔액 검증\n비관적 락| E[PointService.use\nUSE 트랜잭션 기록]
+    E --> C
 
-**N+1 문제 해결**
-```java
-// ❌ N+1 문제 발생
-@Query("SELECT o FROM Order o WHERE o.userId = :userId")
-List<Order> findByUserId(@Param("userId") Long userId);
-// → orderItems 조회 시 매번 쿼리 발생
-
-// ✅ Fetch Join으로 해결
-@Query("SELECT o FROM Order o " +
-       "JOIN FETCH o.orderItems oi " +
-       "WHERE o.userId = :userId")
-List<Order> findByUserIdWithItems(@Param("userId") Long userId);
-// → 한 번의 쿼리로 조회
-```
-
-**Redis 캐싱**
-```java
-@Service
-public class ProductService {
-    
-    @Cacheable(value = "products", key = "#productId")
-    public Product getProduct(Long productId) {
-        return productRepository.findById(productId)
-            .orElseThrow(() -> new ProductNotFoundException());
-    }
-    
-    @CacheEvict(value = "products", key = "#product.id")
-    public Product updateProduct(Product product) {
-        return productRepository.save(product);
-    }
-}
-```
-
-**데이터베이스 인덱스**
-```sql
--- 재고 조회 최적화
-CREATE INDEX idx_inventory_product_warehouse ON inventory(product_id, warehouse_id);
-CREATE INDEX idx_inventory_sku ON inventory(sku);
-
--- 주문 조회 최적화
-CREATE INDEX idx_order_user_created ON orders(user_id, created_at DESC);
-CREATE INDEX idx_order_status ON orders(status);
-
--- 결제 조회 최적화
-CREATE INDEX idx_payment_order ON payments(order_id);
+    F[주문 취소 / 환불] -->|사용 포인트 반환| G[PointService.refundByOrder\nREFUND 트랜잭션]
+    F -->|적립 포인트 회수| H[EXPIRE 트랜잭션\n잔액 부족 시 가능한 만큼만]
+    G --> C
+    H --> C
 ```
 
 ---
 
-## 📊 데이터베이스 스키마
+## 핵심 설계
 
-### ERD (Entity Relationship Diagram)
+### Inventory — 재고 4-state 모델
 
 ```
-┌─────────────┐       ┌──────────────┐       ┌─────────────┐
-│  products   │       │  inventory   │       │ warehouses  │
-├─────────────┤       ├──────────────┤       ├─────────────┤
-│ id (PK)     │◄──────│ product_id   │       │ id (PK)     │
-│ name        │       │ warehouse_id │──────►│ name        │
-│ sku         │       │ sku          │       │ location    │
-│ category    │       │ on_hand      │       │ is_active   │
-│ price       │       │ reserved     │       └─────────────┘
-│ created_at  │       │ allocated    │
-│ updated_at  │       │ version      │
-└─────────────┘       │ created_at   │
-                      │ updated_at   │
-                      └──────────────┘
-                             │
-                             │
-                      ┌──────▼──────────────────┐
-                      │ inventory_transactions  │
-                      ├─────────────────────────┤
-                      │ id (PK)                 │
-                      │ inventory_id (FK)       │
-                      │ order_id                │
-                      │ transaction_type        │
-                      │ quantity                │
-                      │ before_on_hand          │
-                      │ after_on_hand           │
-                      │ created_at              │
-                      └─────────────────────────┘
-
-┌─────────────┐       ┌──────────────┐       ┌──────────────┐
-│   users     │       │   orders     │       │ order_items  │
-├─────────────┤       ├──────────────┤       ├──────────────┤
-│ id (PK)     │◄──────│ user_id      │◄──────│ order_id     │
-│ username    │       │ order_number │       │ product_id   │
-│ password    │       │ status       │       │ quantity     │
-│ email       │       │ total_amount │       │ unit_price   │
-│ role        │       │ idempotency  │       │ subtotal     │
-│ created_at  │       │ created_at   │       └──────────────┘
-└─────────────┘       │ updated_at   │
-                      └──────────────┘
-                             │
-                             │
-                      ┌──────▼──────────┐
-                      │    payments     │
-                      ├─────────────────┤
-                      │ id (PK)         │
-                      │ order_id (FK)   │
-                      │ amount          │
-                      │ payment_method  │
-                      │ status          │
-                      │ pg_transaction  │
-                      │ paid_at         │
-                      │ created_at      │
-                      └─────────────────┘
+available = onHand - reserved - allocated
 ```
 
-### Flyway 마이그레이션 파일
+모든 변동은 `InventoryTransaction`에 이력으로 기록됩니다.
 
-**V1__init_schema.sql**
-```sql
--- 상품 테이블
-CREATE TABLE products (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    sku VARCHAR(100) NOT NULL UNIQUE,
-    category VARCHAR(100),
-    price DECIMAL(15, 2) NOT NULL,
-    description TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_sku (sku),
-    INDEX idx_category (category)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+### 동시성 제어 — 2중 락
 
--- 창고 테이블
-CREATE TABLE warehouses (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    location VARCHAR(255),
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+재고 뮤테이션 메서드에 분산 락과 비관적 락을 순서대로 적용합니다.
 
--- 재고 테이블
-CREATE TABLE inventory (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    product_id BIGINT NOT NULL,
-    warehouse_id BIGINT NOT NULL,
-    sku VARCHAR(100) NOT NULL,
-    on_hand INT NOT NULL DEFAULT 0,
-    reserved INT NOT NULL DEFAULT 0,
-    allocated INT NOT NULL DEFAULT 0,
-    version BIGINT NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_product_warehouse (product_id, warehouse_id),
-    INDEX idx_product_warehouse (product_id, warehouse_id),
-    INDEX idx_sku (sku),
-    FOREIGN KEY (product_id) REFERENCES products(id),
-    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 재고 트랜잭션 이력
-CREATE TABLE inventory_transactions (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    inventory_id BIGINT NOT NULL,
-    order_id VARCHAR(50),
-    transaction_type VARCHAR(20) NOT NULL,
-    quantity INT NOT NULL,
-    before_on_hand INT,
-    after_on_hand INT,
-    before_reserved INT,
-    after_reserved INT,
-    before_allocated INT,
-    after_allocated INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_inventory_id (inventory_id),
-    INDEX idx_order_id (order_id),
-    FOREIGN KEY (inventory_id) REFERENCES inventory(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+요청 → @DistributedLock (Redis, waitTime 5s) → @Lock(PESSIMISTIC_WRITE) (DB) → 재고 변경
 ```
 
-**V2__create_order_tables.sql**
-```sql
--- 사용자 테이블
-CREATE TABLE users (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(50) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    email VARCHAR(100) NOT NULL UNIQUE,
-    role VARCHAR(20) NOT NULL DEFAULT 'USER',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_username (username),
-    INDEX idx_email (email)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+- **분산 락**: 멀티 인스턴스 환경에서 Redis를 통해 직렬화 (key: `lock:inventory:{productId}`)
+- **비관적 락**: DB 레벨 lost update 방지 (`SELECT ... FOR UPDATE`)
 
--- 주문 테이블
-CREATE TABLE orders (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    order_number VARCHAR(50) NOT NULL UNIQUE,
-    status VARCHAR(20) NOT NULL,
-    total_amount DECIMAL(15, 2) NOT NULL,
-    idempotency_key VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_user_created (user_id, created_at DESC),
-    INDEX idx_order_number (order_number),
-    INDEX idx_status (status),
-    INDEX idx_idempotency (idempotency_key),
-    FOREIGN KEY (user_id) REFERENCES users(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+### Order — 멱등성 보장
 
--- 주문 항목 테이블
-CREATE TABLE order_items (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    order_id BIGINT NOT NULL,
-    product_id BIGINT NOT NULL,
-    warehouse_id BIGINT NOT NULL,
-    quantity INT NOT NULL,
-    unit_price DECIMAL(15, 2) NOT NULL,
-    subtotal DECIMAL(15, 2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_order_id (order_id),
-    INDEX idx_product_id (product_id),
-    FOREIGN KEY (order_id) REFERENCES orders(id),
-    FOREIGN KEY (product_id) REFERENCES products(id),
-    FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+`idempotencyKey` DB UNIQUE 제약. 같은 키로 재요청 시 기존 주문 반환.
+
+### 만료 주문 자동 취소
+
+`OrderExpiryScheduler`가 주기적으로 `PENDING` 상태 만료 주문을 스캔해 자동 취소 처리합니다.
+테스트 환경에서는 `order.expiry.enabled=false`로 비활성화합니다.
+
+### Coupon — 할인 도메인
+
+두 가지 할인 타입을 지원합니다.
+
+| 타입 | 계산 |
+|---|---|
+| `FIXED_AMOUNT` | `min(discountValue, orderAmount)` |
+| `PERCENTAGE` | `min(orderAmount × rate/100, maxDiscountAmount)` |
+
+쿠폰 적용 흐름:
+
+```
+[미리보기] POST /api/coupons/validate  →  읽기 전용, 할인 금액 계산만
+[주문 생성] POST /api/orders (couponCode 포함)
+           → CouponService.applyCoupon()  — PESSIMISTIC_WRITE + TOCTOU 재검증
+           → Coupon.usageCount++, CouponUsage 저장
+           → Order에 discountAmount·couponId 기록
+
+[주문 취소] → CouponService.releaseCoupon()
+           → CouponUsage 삭제, Coupon.usageCount--
 ```
 
-**V3__create_payment_tables.sql**
-```sql
--- 결제 테이블
-CREATE TABLE payments (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    order_id BIGINT NOT NULL,
-    payment_method VARCHAR(50) NOT NULL,
-    amount DECIMAL(15, 2) NOT NULL,
-    status VARCHAR(20) NOT NULL,
-    pg_transaction_id VARCHAR(100),
-    failure_reason VARCHAR(255),
-    paid_at TIMESTAMP NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_order_id (order_id),
-    INDEX idx_pg_transaction_id (pg_transaction_id),
-    INDEX idx_status (status),
-    FOREIGN KEY (order_id) REFERENCES orders(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+### Payment — TossPayments 2-step
+
 ```
+준비(/prepare) → [프론트 결제창] → 확인(/confirm)
+                                         ├─ 성공: Payment DONE, Order CONFIRMED, reserved→allocated
+                                         │        Shipment 자동 생성 (PREPARING), 포인트 1% 적립
+                                         └─ 실패: Payment FAILED
+
+결제 후 취소(/cancel): Payment CANCELLED, Order CANCELLED, allocated 해제
+                       쿠폰 반환, 포인트 반환 + 적립금 회수
+```
+
+**결제 멱등성 3중 전략**
+
+| 레이어 | 전략 |
+|---|---|
+| `prepare()` | `payments.order_id` DB UNIQUE 제약 |
+| `confirm()` / `cancel()` | Redis SETNX로 PROCESSING 상태 원자적 선점, 결과 24h 캐싱 |
+| Toss API 호출 | `Idempotency-Key: {tossOrderId}` 헤더 |
+
+**Circuit Breaker**: TossPayments 연속 실패 시 회로 차단 → 빠른 실패 응답.
+
+### Elasticsearch 상품 검색
+
+`GET /api/products` 쿼리 파라미터로 조건을 조합합니다.
+
+| 파라미터 | 설명 |
+|---|---|
+| `q` | 키워드 (name · sku · category · description multi_match) |
+| `minPrice` / `maxPrice` | 가격 범위 필터 |
+| `category` | 카테고리 정확 일치 |
+| `sort` | `price_asc` / `price_desc` / `newest` / `relevance` (기본) |
+
+검색 조건이 없으면 MySQL 조회, ES 장애 시 MySQL fallback.
+
+### 배치 처리 — 3개 스케줄러
+
+`@Scheduled` + `@ConditionalOnProperty` 패턴으로 환경별 활성화를 제어합니다.
+
+| 스케줄러 | 실행 시각 | 동작 |
+|---|---|---|
+| `CouponExpiryScheduler` | 매일 새벽 1시 | 만료된 활성 쿠폰 `deactivate()` (Dirty Checking) |
+| `InventorySnapshotScheduler` | 매일 자정 5분 | 전체 재고 → `daily_inventory_snapshots` 저장 (중복 스킵) |
+| `DailyOrderStatsScheduler` | 매일 자정 1분 | 전일 주문 집계 → `daily_order_stats` upsert |
+
+통합 테스트에서는 `*.enabled=false`로 비활성화, `BatchIntegrationTest`에서 `@TestPropertySource`로 재활성화 후 직접 호출 검증.
 
 ---
 
-## 📊 API 엔드포인트
+## DB 마이그레이션
 
-### 인증 (Authentication)
-
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/auth/signup` | 회원가입 | No |
-| POST | `/api/auth/login` | 로그인 (JWT 발급) | No |
-| GET | `/api/users/me` | 내 정보 조회 | Yes |
-| GET | `/api/users/me/orders` | 내 주문 목록 | Yes |
-
-### 상품 관리 (Products)
-
-| Method | Endpoint | Description | Auth Required | Role |
-|--------|----------|-------------|---------------|------|
-| GET | `/api/products` | 상품 목록 조회 | Yes | USER |
-| POST | `/api/products` | 상품 등록 | Yes | ADMIN |
-| GET | `/api/products/{id}` | 상품 상세 조회 | Yes | USER |
-| PUT | `/api/products/{id}` | 상품 수정 | Yes | ADMIN |
-| DELETE | `/api/products/{id}` | 상품 삭제 | Yes | ADMIN |
-
-### 재고 관리 (Inventory)
-
-| Method | Endpoint | Description | Auth Required | Role |
-|--------|----------|-------------|---------------|------|
-| GET | `/api/inventory/products/{productId}/warehouses/{warehouseId}` | 재고 조회 | Yes | USER |
-| POST | `/api/inventory/reserve` | 재고 예약 | Yes | USER |
-| POST | `/api/inventory/release` | 재고 예약 해제 | Yes | USER |
-| POST | `/api/inventory/receive` | 재고 입고 | Yes | ADMIN |
-| POST | `/api/inventory/adjust` | 재고 조정 | Yes | ADMIN |
-| GET | `/api/inventory/transactions` | 재고 트랜잭션 이력 | Yes | ADMIN |
-
-### 주문 관리 (Orders)
-
-| Method | Endpoint | Description | Auth Required | Role |
-|--------|----------|-------------|---------------|------|
-| POST | `/api/orders` | 주문 생성 | Yes | USER |
-| GET | `/api/orders/{id}` | 주문 조회 | Yes | USER |
-| GET | `/api/orders` | 주문 목록 조회 | Yes | USER |
-| POST | `/api/orders/{id}/cancel` | 주문 취소 | Yes | USER |
-| GET | `/api/admin/orders` | 전체 주문 조회 | Yes | ADMIN |
-
-### 결제 (Payments)
-
-| Method | Endpoint | Description | Auth Required | Role |
-|--------|----------|-------------|---------------|------|
-| POST | `/api/payments` | 결제 요청 | Yes | USER |
-| POST | `/api/payments/webhook` | 결제 웹훅 (PG사) | No | - |
-| GET | `/api/payments/orders/{orderId}` | 결제 조회 | Yes | USER |
+| 버전 | 내용 |
+|---|---|
+| V1 | `products` — 상품 마스터 |
+| V2 | `inventory` — 재고 (onHand / reserved / allocated) |
+| V3 | `orders`, `order_items` — 주문 |
+| V4 | `payments` — 결제 |
+| V5 | `users`, `orders.user_id FK` 추가 |
+| V6 | `inventory_transactions` — 재고 변동 이력 |
+| V7 | `inventory_transactions.note` 컬럼 추가 |
+| V8 | `payments.order_id UNIQUE` 제약 추가 |
+| V9 | `order_status_history` — 주문 상태 변경 이력 |
+| V10 | `cart_items` — 장바구니 |
+| V11 | `shipments` — 배송 |
+| V12 | `delivery_addresses`, `orders.delivery_address_id FK` 추가 |
+| V13 | `coupons`, `coupon_usages`, `orders.coupon_id / discount_amount` 추가 |
+| V14 | `categories`, `products.category_id FK` 추가 (category VARCHAR 제거) |
+| V15 | `daily_order_stats`, `daily_inventory_snapshots` — 배치 집계 |
+| V16 | `users.deleted_at` — Soft Delete |
+| V17 | `product_images`, `products.thumbnail_url` — 상품 이미지 |
+| V18 | `outbox_events` — Transactional Outbox 패턴 |
+| V19 | `reviews`, `wishlist_items` — 리뷰 · 위시리스트 |
+| V20 | `user_points`, `point_transactions`, `orders.used_points` — 포인트 |
+| V21 | `refunds` — 환불 이력 |
 
 ---
 
-## 🔧 API 요청/응답 예시
+## API 엔드포인트
 
-### 1. 회원가입
-```http
-POST /api/auth/signup
-Content-Type: application/json
+> Swagger UI에서 직접 테스트 가능: `http://localhost:8080/swagger-ui/index.html`
 
-{
-  "username": "user123",
-  "password": "password123!",
-  "email": "user@example.com"
-}
-```
+### 인증 / 사용자
 
-**Response (201 Created)**
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/auth/signup` | 회원가입 | 공개 |
+| POST | `/api/auth/login` | 로그인 → JWT + Refresh Token | 공개 |
+| POST | `/api/auth/logout` | 로그아웃 (JWT 블랙리스트 + Refresh Token revoke) | 공개 |
+| POST | `/api/auth/refresh` | Access Token 재발급 (Refresh Token rotation) | 공개 |
+| GET | `/api/users/me` | 내 정보 조회 | USER |
+| DELETE | `/api/users/me` | 회원 탈퇴 (Soft Delete + Refresh Token 일괄 폐기) | USER |
+
+### 상품
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/products` | 상품 등록 | ADMIN |
+| GET | `/api/products` | 상품 목록 (ES 검색 or MySQL, `?q=&minPrice=&maxPrice=&category=&sort=`) | 공개 |
+| GET | `/api/products/{id}` | 상품 단건 조회 | 공개 |
+| PUT | `/api/products/{id}` | 상품 수정 | ADMIN |
+| DELETE | `/api/products/{id}` | 상품 삭제 (soft delete → DISCONTINUED) | ADMIN |
+
+### 카테고리
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/categories` | 카테고리 생성 | ADMIN |
+| GET | `/api/categories` | 카테고리 트리 조회 (parent-child) | 공개 |
+| GET | `/api/categories/{id}` | 카테고리 단건 조회 | 공개 |
+| PUT | `/api/categories/{id}` | 카테고리 수정 | ADMIN |
+| DELETE | `/api/categories/{id}` | 카테고리 삭제 (하위·상품 존재 시 거부) | ADMIN |
+
+### 상품 이미지
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/products/{id}/images/presigned` | 이미지 업로드용 Presigned URL 발급 | ADMIN |
+| GET | `/api/products/{id}/images` | 상품 이미지 목록 | 공개 |
+| DELETE | `/api/products/{id}/images/{imageId}` | 이미지 삭제 | ADMIN |
+
+### 리뷰
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/products/{id}/reviews` | 리뷰 작성 (구매 확인, 1인 1리뷰) | USER |
+| GET | `/api/products/{id}/reviews` | 상품 리뷰 목록 + 평균 별점 | 공개 |
+| DELETE | `/api/products/{id}/reviews/{reviewId}` | 리뷰 삭제 (본인만) | USER |
+
+### 위시리스트
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/wishlist/{productId}` | 찜 추가 | USER |
+| DELETE | `/api/wishlist/{productId}` | 찜 제거 | USER |
+| GET | `/api/wishlist` | 찜 목록 조회 | USER |
+
+### 재고
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| GET | `/api/inventory` | 재고 목록 (`?status=&productId=` 필터) | USER |
+| GET | `/api/inventory/{productId}` | 재고 현황 조회 | USER |
+| GET | `/api/inventory/{productId}/transactions` | 재고 변동 이력 (페이징) | USER |
+| POST | `/api/inventory/{productId}/receive` | 입고 처리 | ADMIN |
+| POST | `/api/inventory/{productId}/adjust` | 재고 조정 | ADMIN |
+
+### 주문
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/orders` | 주문 생성 (재고 예약, 멱등성, 쿠폰·포인트·배송지 적용) | USER |
+| GET | `/api/orders` | 주문 목록 (USER=본인, ADMIN=전체, `?status=&userId=&startDate=&endDate=`) | USER |
+| GET | `/api/orders/{id}` | 주문 단건 조회 (본인 주문만) | USER |
+| GET | `/api/orders/{id}/history` | 주문 상태 변경 이력 (본인 주문만) | USER |
+| POST | `/api/orders/{id}/cancel` | 주문 취소 (재고 예약 해제, 쿠폰·포인트 반환) | USER |
+
+### 쿠폰
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/coupons` | 쿠폰 생성 | ADMIN |
+| GET | `/api/coupons` | 쿠폰 목록 (페이징) | ADMIN |
+| GET | `/api/coupons/{id}` | 쿠폰 상세 | ADMIN |
+| PATCH | `/api/coupons/{id}/deactivate` | 쿠폰 비활성화 | ADMIN |
+| POST | `/api/coupons/validate` | 쿠폰 유효성 확인 + 할인 금액 미리보기 | USER |
+
+### 결제
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/payments/prepare` | 결제 준비 (본인 주문만) | USER |
+| POST | `/api/payments/confirm` | 결제 승인 (배송·포인트 자동 처리, 본인 주문만) | USER |
+| POST | `/api/payments/{paymentKey}/cancel` | 결제 취소/환불 | USER |
+| GET | `/api/payments/{paymentKey}` | 결제 조회 | USER |
+| GET | `/api/payments/order/{orderId}` | 주문 ID로 결제 조회 (본인 주문만) | USER |
+| POST | `/api/payments/webhook` | TossPayments 웹훅 | 공개 |
+
+### 장바구니
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| GET | `/api/cart` | 장바구니 조회 | USER |
+| POST | `/api/cart/items` | 상품 담기 / 수량 변경 (ACTIVE 상품만) | USER |
+| DELETE | `/api/cart/items/{productId}` | 상품 제거 | USER |
+| DELETE | `/api/cart` | 장바구니 비우기 | USER |
+| POST | `/api/cart/checkout` | 장바구니 → 주문 전환 (쿠폰·포인트·배송지 포함) | USER |
+
+### 배송
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| GET | `/api/shipments/orders/{orderId}` | 주문 배송 조회 (본인 주문만) | USER |
+| PATCH | `/api/shipments/{id}/ship` | 배송 시작 (PREPARING → SHIPPED) | ADMIN |
+| PATCH | `/api/shipments/{id}/deliver` | 배송 완료 (SHIPPED → DELIVERED) | ADMIN |
+| PATCH | `/api/shipments/{id}/return` | 반품 처리 (SHIPPED → RETURNED) | ADMIN |
+
+### 배송지
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/delivery-addresses` | 배송지 등록 | USER |
+| GET | `/api/delivery-addresses` | 배송지 목록 | USER |
+| GET | `/api/delivery-addresses/{id}` | 배송지 단건 조회 | USER |
+| PUT | `/api/delivery-addresses/{id}` | 배송지 수정 | USER |
+| DELETE | `/api/delivery-addresses/{id}` | 배송지 삭제 (기본 배송지 삭제 시 자동 승격) | USER |
+| POST | `/api/delivery-addresses/{id}/default` | 기본 배송지 설정 | USER |
+
+### 포인트
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| GET | `/api/points/balance` | 포인트 잔액 조회 | USER |
+| GET | `/api/points/history` | 포인트 변동 이력 (페이징) | USER |
+
+### 환불
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/refunds` | 환불 요청 (DONE 결제만 가능, 본인 주문만) | USER |
+| GET | `/api/refunds/{id}` | 환불 단건 조회 (본인만) | USER |
+| GET | `/api/payments/{paymentId}/refund` | 결제 ID로 환불 조회 (본인만) | USER |
+
+### 관리자 REST API
+
+ADMIN JWT 인증 필요.
+
+| Method | Endpoint | 설명 |
+|---|---|---|
+| GET | `/api/admin/dashboard` | 주문 통계, 매출, 사용자 수, 저재고 목록 |
+| GET | `/api/admin/users` | 전체 사용자 목록 (페이징) |
+| PATCH | `/api/admin/users/{id}/role` | 사용자 권한 변경 (USER ↔ ADMIN) |
+| GET | `/api/admin/orders` | 전체 주문 목록 (`?status=` 필터) |
+| GET | `/api/admin/products` | 전체 상품 목록 (ACTIVE + DISCONTINUED) |
+| GET | `/api/admin/stats/orders` | 기간별 일별 주문·매출 통계 (`?from=&to=`) |
+| GET | `/api/admin/stats/inventory` | 특정 날짜 전체 재고 스냅샷 (`?date=`) |
+
+---
+
+## 요청/응답 예시
+
+모든 응답은 `ApiResponse<T>` 래퍼로 반환됩니다.
+
 ```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "username": "user123",
-    "email": "user@example.com",
-    "createdAt": "2026-01-31T10:00:00"
-  }
-}
+{ "success": true,  "data": { ... } }
+{ "success": false, "message": "재고가 부족합니다." }
 ```
 
-### 2. 로그인
+### 로그인
+
 ```http
 POST /api/auth/login
-Content-Type: application/json
-
-{
-  "username": "user123",
-  "password": "password123!"
-}
+{ "username": "user123", "password": "password123!" }
 ```
 
-**Response (200 OK)**
 ```json
 {
   "success": true,
   "data": {
-    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "accessToken": "eyJ...",
     "tokenType": "Bearer",
-    "expiresIn": 86400
+    "expiresIn": 86400,
+    "refreshToken": "uuid-..."
   }
 }
 ```
 
-### 3. 상품 등록 (관리자)
+### 상품 검색
+
 ```http
-POST /api/products
-Authorization: Bearer {admin-token}
-Content-Type: application/json
-
-{
-  "name": "스마트폰 Galaxy S24",
-  "sku": "PHONE-GS24-128-BLK",
-  "category": "Electronics",
-  "price": 1200000,
-  "description": "최신 갤럭시 S24 스마트폰"
-}
+GET /api/products?q=노트북&minPrice=500000&maxPrice=2000000&category=전자&sort=price_asc
 ```
 
-**Response (201 Created)**
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "name": "스마트폰 Galaxy S24",
-    "sku": "PHONE-GS24-128-BLK",
-    "category": "Electronics",
-    "price": 1200000,
-    "createdAt": "2026-01-31T11:00:00"
-  }
-}
-```
+### 쿠폰 + 포인트 적용 주문 생성
 
-### 4. 재고 조회
-```http
-GET /api/inventory/products/1/warehouses/1
-Authorization: Bearer {token}
-```
-
-**Response (200 OK)**
-```json
-{
-  "success": true,
-  "data": {
-    "inventoryId": 1,
-    "productId": 1,
-    "warehouseId": 1,
-    "sku": "PHONE-GS24-128-BLK",
-    "onHand": 100,
-    "reserved": 10,
-    "allocated": 5,
-    "available": 85,
-    "updatedAt": "2026-01-31T12:00:00"
-  }
-}
-```
-
-### 5. 주문 생성
 ```http
 POST /api/orders
-Authorization: Bearer {token}
-Content-Type: application/json
-
+Authorization: Bearer <token>
 {
-  "idempotencyKey": "unique-key-12345",
-  "items": [
-    {
-      "productId": 1,
-      "warehouseId": 1,
-      "quantity": 2,
-      "unitPrice": 1200000
-    }
-  ]
+  "idempotencyKey": "550e8400-e29b-41d4-a716-446655440000",
+  "couponCode": "FIXED5000",
+  "usePoints": 3000,
+  "deliveryAddressId": 1,
+  "items": [{ "productId": 1, "quantity": 2, "unitPrice": 30000 }]
 }
 ```
 
-**Response (201 Created)**
 ```json
 {
   "success": true,
   "data": {
-    "orderId": 1,
-    "orderNumber": "ORD20260131120000ABC123",
-    "status": "PENDING",
-    "totalAmount": 2400000,
-    "items": [
-      {
-        "productId": 1,
-        "productName": "스마트폰 Galaxy S24",
-        "quantity": 2,
-        "unitPrice": 1200000,
-        "subtotal": 2400000
-      }
-    ],
-    "createdAt": "2026-01-31T12:00:00"
+    "id": 1, "status": "PENDING",
+    "totalAmount": 60000, "discountAmount": 5000, "usedPoints": 3000,
+    "couponId": 3, "items": [...]
   }
 }
 ```
 
-### 6. 결제 요청
-```http
-POST /api/payments
-Authorization: Bearer {token}
-Content-Type: application/json
+### 쿠폰 할인 미리보기
 
-{
-  "orderId": 1,
-  "paymentMethod": "CREDIT_CARD"
-}
+```http
+POST /api/coupons/validate
+Authorization: Bearer <token>
+{ "couponCode": "FIXED5000", "orderAmount": 60000 }
 ```
 
-**Response (201 Created)**
 ```json
 {
   "success": true,
   "data": {
-    "paymentId": 1,
-    "orderId": 1,
-    "amount": 2400000,
-    "status": "PENDING",
-    "pgTransactionId": "PG123456789",
-    "createdAt": "2026-01-31T12:05:00"
+    "couponCode": "FIXED5000", "couponName": "5천원 할인",
+    "orderAmount": 60000, "discountAmount": 5000, "finalAmount": 55000
   }
 }
 ```
 
-### 7. 결제 웹훅 (PG사 → 서버)
-```http
-POST /api/payments/webhook
-Content-Type: application/json
-X-PG-Signature: {signature}
+---
 
-{
-  "pgTransactionId": "PG123456789",
-  "status": "SUCCESS",
-  "paidAmount": 2400000,
-  "paidAt": "2026-01-31T12:05:30"
-}
-```
+## 보안
 
-**Response (200 OK)**
-```json
-{
-  "success": true,
-  "message": "결제 처리 완료"
-}
-```
+| 체인 | 우선순위 | 경로 | 인증 방식 |
+|---|---|---|---|
+| `AdminSecurityConfig` | @Order(1) | `/admin-ui/**`, `/instances/**` | Form Login + 세션 |
+| `SecurityConfig` | @Order(2) | 나머지 전체 | JWT (stateless) |
+
+- 미인증 → 403
+- 공개: `/api/auth/**`, `/api/products/**`, `/api/categories/**`, `/actuator/health`, `/actuator/info`, `/api/payments/webhook`, `/swagger-ui/**`
+- ADMIN 전용: `/actuator/**` (health/info 제외), 상품·재고 write, 쿠폰 관리, 배송 상태 변경, 카테고리 write
+
+### 추가 보안 기능
+
+| 기능 | 구현 |
+|---|---|
+| 로그인 Rate Limiting | Redis 기반, 15분 내 5회 초과 시 429 |
+| API Rate Limiting | 주문 생성 10회/분, 결제 확정 5회/분 (AOP, Redis) |
+| JWT 블랙리스트 | 로그아웃 시 jti로 Redis에 등록, 토큰 만료까지 유효 |
+| Refresh Token Rotation | 발급 시 이전 토큰 자동 revoke (Redis, TTL 30일) |
+| Refresh Token 일괄 폐기 | 회원 탈퇴 시 해당 사용자의 모든 Refresh Token 즉시 폐기 |
+| IDOR 방어 | 주문·결제·배송·환불 조회 시 소유자 검증 (username + isAdmin) |
+| Toss 웹훅 서명 검증 | `Toss-Signature` 헤더 HMAC-SHA256 검증 |
+| CORS | `cors.allowed-origins` 환경 변수로 허용 도메인 제어 |
+| MDC Logging | 요청별 `requestId` 자동 주입 (RequestIdFilter) |
 
 ---
 
-## 🚀 실행 방법
+## Spring Boot Admin — 인프라 모니터링
 
-### 사전 요구사항
-- JDK 17 이상
-- Docker & Docker Compose
-- Gradle 8.x
+`http://localhost:8080/admin-ui` (계정: `admin` / `changeme`)
 
-### 로컬 환경 실행
-
-#### 1. MySQL & Redis 실행
-```bash
-# MySQL 실행
-docker run -d --name stock-mysql \
-  -e MYSQL_ROOT_PASSWORD=root \
-  -e MYSQL_DATABASE=stock_management \
-  -p 3306:3306 \
-  mysql:8
-
-# Redis 실행
-docker run -d --name stock-redis \
-  -p 6379:6379 \
-  redis:7-alpine
-```
-
-#### 2. 애플리케이션 실행
-```bash
-# Gradle Wrapper 사용
-./gradlew bootRun
-
-# 또는 JAR 빌드 후 실행
-./gradlew clean build
-java -jar build/libs/stock-management-api-0.0.1-SNAPSHOT.jar
-```
-
-#### 3. 접속 확인
-```bash
-curl http://localhost:8080/actuator/health
-```
-
-### Docker Compose로 전체 스택 실행
-
-```bash
-# 전체 서비스 실행
-docker-compose up -d
-
-# 로그 확인
-docker-compose logs -f app
-
-# 서비스 중지
-docker-compose down
-
-# 볼륨까지 삭제 (데이터 초기화)
-docker-compose down -v
-```
+| 기능 | 설명 |
+|---|---|
+| 애플리케이션 상태 | Health, 메모리/힙/GC, 스레드 |
+| HTTP 트레이스 | 최근 요청/응답 내역 |
+| 로그 레벨 | 런타임에서 패키지별 레벨 즉시 변경 |
+| 빈 목록 | Spring 컨텍스트의 전체 빈 확인 |
+| 환경변수 | application.properties 설정값 조회 |
 
 ---
 
-## 🧪 테스트
+## 라이선스
 
-### 단위 테스트
-```bash
-./gradlew test
-```
-
-### 통합 테스트
-```bash
-./gradlew integrationTest
-```
-
-### 테스트 커버리지
-```bash
-./gradlew jacocoTestReport
-open build/reports/jacoco/test/html/index.html
-```
-
----
-
-## 🔒 보안 가이드
-
-### 1. 비밀번호 암호화
-```java
-@Bean
-public PasswordEncoder passwordEncoder() {
-    return new BCryptPasswordEncoder(12);
-}
-```
-
-### 2. JWT Secret 설정
-```yaml
-spring:
-  security:
-    jwt:
-      secret: ${JWT_SECRET}  # 환경 변수로 관리
-```
-
-### 3. HTTPS 설정 (프로덕션)
-```yaml
-server:
-  ssl:
-    enabled: true
-    key-store: classpath:keystore.p12
-    key-store-password: ${SSL_KEY_PASSWORD}
-```
-
----
-
-## 🚀 최종 목표
-- 확장 가능한 **쇼핑몰 백엔드 구조**
-- 안정적인 **재고 및 주문/결제 관리**
-- **동시성 제어**를 통한 데이터 정합성 보장
-- **MSA 전환 가능한 모듈 구조**
-
----
-
-## 📝 라이선스
 MIT License
-
----
