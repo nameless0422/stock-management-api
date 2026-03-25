@@ -94,30 +94,31 @@ public class RefundService {
     }
 
     /** 환불 ID로 단건 조회한다. 본인 또는 ADMIN만 가능. */
-    public RefundResponse getById(Long refundId, String username) {
+    public RefundResponse getById(Long refundId, String username, boolean isAdmin) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         Refund refund = refundRepository.findById(refundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REFUND_NOT_FOUND));
-        validateOwnership(refund, user);
+        validateOwnership(refund, user, isAdmin);
         return RefundResponse.from(refund);
     }
 
     /** 결제 ID로 환불 정보를 조회한다. 본인 또는 ADMIN만 가능. */
-    public RefundResponse getByPaymentId(Long paymentId, String username) {
+    public RefundResponse getByPaymentId(Long paymentId, String username, boolean isAdmin) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         Refund refund = refundRepository.findByPaymentId(paymentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REFUND_NOT_FOUND));
-        validateOwnership(refund, user);
+        validateOwnership(refund, user, isAdmin);
         return RefundResponse.from(refund);
     }
 
     /**
      * 환불 소유권을 검증한다.
-     * 환불의 orderId로 주문을 조회하여 요청 사용자가 주문자인지 확인한다.
+     * ADMIN은 모든 환불에 접근 가능하며, USER는 본인 주문의 환불만 조회할 수 있다.
      */
-    private void validateOwnership(Refund refund, User user) {
+    private void validateOwnership(Refund refund, User user, boolean isAdmin) {
+        if (isAdmin) return;
         Order order = orderRepository.findById(refund.getOrderId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!order.getUserId().equals(user.getId())) {

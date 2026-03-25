@@ -159,7 +159,7 @@ class RefundServiceTest {
             given(refundRepository.findByPaymentId(10L)).willReturn(Optional.of(refund));
             given(orderRepository.findById(100L)).willReturn(Optional.of(order));
 
-            RefundResponse response = refundService.getByPaymentId(10L, "user1");
+            RefundResponse response = refundService.getByPaymentId(10L, "user1", false);
 
             assertThat(response.getId()).isEqualTo(5L);
         }
@@ -171,9 +171,30 @@ class RefundServiceTest {
             given(userRepository.findByUsername("user1")).willReturn(Optional.of(user));
             given(refundRepository.findByPaymentId(10L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> refundService.getByPaymentId(10L, "user1"))
+            assertThatThrownBy(() -> refundService.getByPaymentId(10L, "user1", false))
                     .isInstanceOf(BusinessException.class)
                     .hasFieldOrPropertyWithValue("errorCode", ErrorCode.REFUND_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("ADMIN은 타인 환불도 조회 가능")
+        void adminCanAccessAnyRefund() {
+            User admin = mockUser(99L);
+            Order order = Order.builder().userId(1L).idempotencyKey("k").build();
+            ReflectionTestUtils.setField(order, "id", 100L);
+            Refund refund = Refund.builder()
+                    .paymentId(10L).orderId(100L)
+                    .amount(BigDecimal.valueOf(50000)).reason("변심")
+                    .build();
+            ReflectionTestUtils.setField(refund, "id", 5L);
+            given(userRepository.findByUsername("admin")).willReturn(Optional.of(admin));
+            given(refundRepository.findByPaymentId(10L)).willReturn(Optional.of(refund));
+
+            RefundResponse response = refundService.getByPaymentId(10L, "admin", true);
+
+            assertThat(response.getId()).isEqualTo(5L);
+            // isAdmin=true 이므로 orderRepository 조회 없음
+            verify(orderRepository, never()).findById(any());
         }
     }
 }

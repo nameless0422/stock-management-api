@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,19 +30,25 @@ public class RefundController {
         return ApiResponse.ok(refundService.requestRefund(request, username));
     }
 
-    @Operation(summary = "환불 단건 조회")
+    @Operation(summary = "환불 단건 조회", description = "ADMIN은 모든 환불 조회 가능. USER는 본인 주문의 환불만 가능.")
     @GetMapping("/{refundId}")
     public ApiResponse<RefundResponse> getById(
             @PathVariable Long refundId,
-            @AuthenticationPrincipal String username) {
-        return ApiResponse.ok(refundService.getById(refundId, username));
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        return ApiResponse.ok(refundService.getById(refundId, username, isAdmin));
     }
 
-    @Operation(summary = "결제 ID로 환불 조회")
+    @Operation(summary = "결제 ID로 환불 조회", description = "ADMIN은 모든 환불 조회 가능. USER는 본인 주문의 환불만 가능.")
     @GetMapping("/payments/{paymentId}")
     public ApiResponse<RefundResponse> getByPaymentId(
             @PathVariable Long paymentId,
-            @AuthenticationPrincipal String username) {
-        return ApiResponse.ok(refundService.getByPaymentId(paymentId, username));
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        return ApiResponse.ok(refundService.getByPaymentId(paymentId, username, isAdmin));
     }
 }

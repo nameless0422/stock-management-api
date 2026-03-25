@@ -13,6 +13,8 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import org.springframework.web.util.HtmlUtils;
+
 import java.math.BigDecimal;
 import java.text.NumberFormat;
 import java.util.List;
@@ -192,14 +194,14 @@ public class EmailService {
                 """.formatted(rowsHtml);
     }
 
-    /** 정보 박스 내 항목 한 줄 */
+    /** 정보 박스 내 항목 한 줄 — label/value를 HTML 이스케이프하여 XSS 방지 */
     private String row(String label, String value) {
         return """
                 <tr>
                   <td style="padding:9px 16px;font-size:13px;color:#888;width:120px;">%s</td>
                   <td style="padding:9px 16px;font-size:13px;color:#111;font-weight:600;">%s</td>
                 </tr>
-                """.formatted(label, value);
+                """.formatted(HtmlUtils.htmlEscape(label), HtmlUtils.htmlEscape(value));
     }
 
     /** 주문 항목 목록 테이블 (없으면 빈 문자열) */

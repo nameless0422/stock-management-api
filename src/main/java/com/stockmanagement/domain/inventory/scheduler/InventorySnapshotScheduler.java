@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 일별 재고 스냅샷 스케줄러.
@@ -34,13 +35,15 @@ public class InventorySnapshotScheduler {
     public void takeSnapshot() {
         LocalDate today = LocalDate.now();
         List<Inventory> inventories = inventoryRepository.findAll();
+        // 오늘 이미 스냅샷이 존재하는 inventoryId를 한 번에 조회하여 N+1 방지
+        Set<Long> alreadySnapped = snapshotRepository.findInventoryIdsBySnapshotDate(today);
         log.info("[InventorySnapshotScheduler] 재고 스냅샷 시작 — 대상: {}건, 기준일: {}", inventories.size(), today);
 
         int saved = 0;
         int skipped = 0;
         for (Inventory inv : inventories) {
             try {
-                if (snapshotRepository.existsByInventoryIdAndSnapshotDate(inv.getId(), today)) {
+                if (alreadySnapped.contains(inv.getId())) {
                     skipped++;
                     continue;
                 }
