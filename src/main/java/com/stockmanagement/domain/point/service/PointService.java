@@ -93,8 +93,8 @@ public class PointService {
         if (usePoints <= 0) {
             throw new BusinessException(ErrorCode.INVALID_POINT_AMOUNT);
         }
-        UserPoint userPoint = userPointRepository.findByUserIdWithLock(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.INSUFFICIENT_POINTS));
+        // 포인트 계정이 없으면 잔액 0으로 생성 → 이후 use()에서 INSUFFICIENT_POINTS 발생
+        UserPoint userPoint = getOrCreate(userId);
         userPoint.use(usePoints);
 
         pointTransactionRepository.save(PointTransaction.builder()

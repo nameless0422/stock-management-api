@@ -73,4 +73,15 @@ public class User {
     public boolean isDeleted() {
         return this.deletedAt != null;
     }
+
+    /**
+     * 탈퇴 시 unique 필드(username, email) 익명화.
+     * MySQL UNIQUE KEY는 partial index를 지원하지 않으므로,
+     * 탈퇴 계정이 unique 슬롯을 점유하지 않도록 덮어쓴다.
+     * 이후 동일한 username/email로 재가입이 가능해진다.
+     */
+    public void anonymize(Long id) {
+        this.username = "deleted_" + id;
+        this.email    = "deleted_" + id + "@deleted.invalid";
+    }
 }
