@@ -479,14 +479,18 @@ sequenceDiagram
             S-->>C: PaymentResponse
         else 캐시 MISS
             S->>R: SETNX tryAcquire("cancel:paymentKey")
-            S->>S: DB 상태 재확인
-            S->>T: POST cancels API
-            T-->>S: CANCELLED
-            S->>S: Payment → CANCELLED
-            S->>S: Order → CANCELLED (allocated--)
-            S->>S: 쿠폰 반환 & 포인트 반환 + 적립 회수
-            S->>R: complete (결과 캐싱 24h TTL)
-            S-->>C: PaymentResponse
+            alt 선점 실패 (동시 처리 중)
+                S-->>C: 409 PAYMENT_PROCESSING_IN_PROGRESS
+            else 선점 성공
+                S->>S: DB 상태 재확인
+                S->>T: POST cancels API
+                T-->>S: CANCELLED
+                S->>S: Payment → CANCELLED
+                S->>S: Order → CANCELLED (allocated--)
+                S->>S: 쿠폰 반환 & 포인트 반환 + 적립 회수
+                S->>R: complete (결과 캐싱 24h TTL)
+                S-->>C: PaymentResponse
+            end
         end
     end
 ```
