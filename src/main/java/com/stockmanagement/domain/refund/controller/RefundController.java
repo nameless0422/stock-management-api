@@ -39,7 +39,9 @@ public class RefundController {
 
     @Operation(summary = "결제 ID로 환불 조회")
     @GetMapping("/payments/{paymentId}")
-    public ApiResponse<RefundResponse> getByPaymentId(@PathVariable Long paymentId) {
-        return ApiResponse.ok(refundService.getByPaymentId(paymentId));
+    public ApiResponse<RefundResponse> getByPaymentId(
+            @PathVariable Long paymentId,
+            @AuthenticationPrincipal String username) {
+        return ApiResponse.ok(refundService.getByPaymentId(paymentId, username));
     }
 }

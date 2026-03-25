@@ -12,6 +12,7 @@ import com.stockmanagement.domain.point.repository.UserPointRepository;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>모든 잔액 변경 메서드는 호출 측 트랜잭션에 참여({@link Propagation#MANDATORY})하여
  * 비즈니스 로직과 원자적으로 처리된다.
  */
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -130,15 +132,23 @@ public class PointService {
                         .build());
             } else if (tx.getType() == PointTransactionType.EARN) {
                 // 적립 포인트 회수 (취소 시 소급 적용)
+                // 잔액 부족 시 회수 가능한 만큼만 차감하고, 트랜잭션 기록도 실제 차감량으로 남긴다
                 long reclaimAmount = tx.getAmount();
-                userPoint.use(Math.min(reclaimAmount, userPoint.getBalance()));
-                pointTransactionRepository.save(PointTransaction.builder()
-                        .userId(userId)
-                        .amount(-reclaimAmount)
-                        .type(PointTransactionType.EXPIRE)
-                        .description("주문 취소 적립금 회수 (주문 #" + orderId + ")")
-                        .orderId(orderId)
-                        .build());
+                long actualReclaim = Math.min(reclaimAmount, userPoint.getBalance());
+                if (actualReclaim > 0) {
+                    userPoint.use(actualReclaim);
+                    pointTransactionRepository.save(PointTransaction.builder()
+                            .userId(userId)
+                            .amount(-actualReclaim)
+                            .type(PointTransactionType.EXPIRE)
+                            .description("주문 취소 적립금 회수 (주문 #" + orderId + ")")
+                            .orderId(orderId)
+                            .build());
+                }
+                if (actualReclaim < reclaimAmount) {
+                    log.warn("[Point] 적립금 전액 회수 불가: userId={}, orderId={}, 요청={}, 실제={}",
+                            userId, orderId, reclaimAmount, actualReclaim);
+                }
             }
         });
     }

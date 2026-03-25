@@ -24,8 +24,10 @@ import java.util.List;
 @NoArgsConstructor
 public class OrderCreateRequest {
 
-    /** 주문자 ID */
-    @NotNull(message = "사용자 ID는 필수입니다.")
+    /**
+     * 주문자 ID — 내부 호출(장바구니 결제) 전용.
+     * 외부 API에서는 JWT에서 추출한 userId를 사용하므로 이 필드는 무시된다.
+     */
     private Long userId;
 
     /**

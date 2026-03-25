@@ -125,7 +125,7 @@ public class CartService {
         OrderCreateRequest orderRequest = OrderCreateRequest.of(
                 userId, checkoutRequest.getIdempotencyKey(), orderItems);
 
-        OrderResponse orderResponse = orderService.create(orderRequest);
+        OrderResponse orderResponse = orderService.create(orderRequest, userId);
 
         // 주문 생성 성공 후 장바구니 비우기
         cartRepository.deleteByUserId(userId);

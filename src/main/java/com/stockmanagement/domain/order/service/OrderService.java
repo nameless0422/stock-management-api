@@ -86,8 +86,24 @@ public class OrderService {
      * @param request 주문 생성 요청
      * @return 생성된 주문 응답
      */
+    /**
+     * 주문을 생성한다 (내부 호출 전용 — 장바구니 결제 등).
+     *
+     * <p>외부 API 호출은 {@link #create(OrderCreateRequest, Long)}를 사용한다.
+     */
     @Transactional
     public OrderResponse create(OrderCreateRequest request) {
+        return create(request, request.getUserId());
+    }
+
+    /**
+     * 주문을 생성한다.
+     *
+     * <p>외부 API에서는 JWT에서 추출한 {@code userId}를 전달하여
+     * 클라이언트가 임의로 userId를 지정하지 못하도록 한다.
+     */
+    @Transactional
+    public OrderResponse create(OrderCreateRequest request, Long userId) {
         // 1. 멱등성 키 중복 확인 — 기존 주문 반환 (새 주문 생성 없음)
         Optional<Order> existing = orderRepository.findByIdempotencyKey(request.getIdempotencyKey());
         if (existing.isPresent()) {
@@ -122,7 +138,7 @@ public class OrderService {
         // 3. Order 생성 (확정된 totalAmount 사용)
         long usePointsLong = request.getUsePoints() != null ? request.getUsePoints() : 0L;
         Order order = Order.builder()
-                .userId(request.getUserId())
+                .userId(userId)
                 .totalAmount(totalAmount)
                 .idempotencyKey(request.getIdempotencyKey())
                 .deliveryAddressId(request.getDeliveryAddressId())
@@ -139,7 +155,7 @@ public class OrderService {
         // 5. 쿠폰 적용 — 쿠폰 코드가 있으면 할인 금액 계산 및 사용 기록
         if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
             var result = couponService.applyCoupon(
-                    request.getCouponCode(), request.getUserId(),
+                    request.getCouponCode(), userId,
                     savedOrder.getId(), totalAmount);
             savedOrder.applyDiscount(result.getCouponId(), result.getDiscountAmount());
         }

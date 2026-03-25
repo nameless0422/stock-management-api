@@ -2,6 +2,9 @@ package com.stockmanagement.domain.refund.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.order.entity.Order;
+import com.stockmanagement.domain.order.entity.OrderStatus;
+import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.payment.entity.Payment;
 import com.stockmanagement.domain.payment.entity.PaymentStatus;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
@@ -37,6 +40,7 @@ class RefundServiceTest {
 
     @Mock private RefundRepository refundRepository;
     @Mock private PaymentRepository paymentRepository;
+    @Mock private OrderRepository orderRepository;
     @Mock private PaymentService paymentService;
     @Mock private UserRepository userRepository;
 
@@ -134,14 +138,19 @@ class RefundServiceTest {
         @Test
         @DisplayName("존재하면 반환")
         void found() {
+            User user = mockUser(1L);
+            Order order = Order.builder().userId(1L).idempotencyKey("k").build();
+            ReflectionTestUtils.setField(order, "id", 100L);
             Refund refund = Refund.builder()
                     .paymentId(10L).orderId(100L)
                     .amount(BigDecimal.valueOf(50000)).reason("변심")
                     .build();
             ReflectionTestUtils.setField(refund, "id", 5L);
+            given(userRepository.findByUsername("user1")).willReturn(Optional.of(user));
             given(refundRepository.findByPaymentId(10L)).willReturn(Optional.of(refund));
+            given(orderRepository.findById(100L)).willReturn(Optional.of(order));
 
-            RefundResponse response = refundService.getByPaymentId(10L);
+            RefundResponse response = refundService.getByPaymentId(10L, "user1");
 
             assertThat(response.getId()).isEqualTo(5L);
         }
@@ -149,9 +158,11 @@ class RefundServiceTest {
         @Test
         @DisplayName("없으면 REFUND_NOT_FOUND")
         void notFound() {
+            User user = mockUser(1L);
+            given(userRepository.findByUsername("user1")).willReturn(Optional.of(user));
             given(refundRepository.findByPaymentId(10L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> refundService.getByPaymentId(10L))
+            assertThatThrownBy(() -> refundService.getByPaymentId(10L, "user1"))
                     .isInstanceOf(BusinessException.class)
                     .hasFieldOrPropertyWithValue("errorCode", ErrorCode.REFUND_NOT_FOUND);
         }

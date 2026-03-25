@@ -6,8 +6,10 @@ import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
 import com.stockmanagement.domain.order.service.OrderService;
+import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.security.JwtTokenProvider;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -42,10 +45,18 @@ class OrderControllerTest {
     private OrderService orderService;
 
     @MockBean
+    private UserService userService;
+
+    @MockBean
     private JwtTokenProvider jwtTokenProvider;
 
     @MockBean
     private JwtBlacklist jwtBlacklist;
+
+    @BeforeEach
+    void setUp() {
+        given(userService.resolveUserId(any())).willReturn(1L);
+    }
 
     // ===== POST /api/orders =====
 
@@ -61,7 +72,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 주문 생성 성공 → 201")
         void createsOrder() throws Exception {
-            given(orderService.create(any())).willReturn(mock(OrderResponse.class));
+            given(orderService.create(any(), anyLong())).willReturn(mock(OrderResponse.class));
 
             mockMvc.perform(post("/api/orders")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -81,7 +92,7 @@ class OrderControllerTest {
 
         @Test
         @WithMockUser
-        @DisplayName("필수 필드(userId, idempotencyKey, items) 누락 → 400")
+        @DisplayName("필수 필드(idempotencyKey, items) 누락 → 400")
         void validationFailure() throws Exception {
             mockMvc.perform(post("/api/orders")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -93,7 +104,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("재고 부족 → 409")
         void insufficientStock() throws Exception {
-            given(orderService.create(any()))
+            given(orderService.create(any(), anyLong()))
                     .willThrow(new BusinessException(ErrorCode.INSUFFICIENT_STOCK));
 
             mockMvc.perform(post("/api/orders")
