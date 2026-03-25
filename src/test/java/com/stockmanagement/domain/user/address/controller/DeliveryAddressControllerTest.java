@@ -4,8 +4,7 @@ import com.stockmanagement.common.config.SecurityConfig;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.user.address.dto.DeliveryAddressResponse;
 import com.stockmanagement.domain.user.address.service.DeliveryAddressService;
-import com.stockmanagement.domain.user.entity.User;
-import com.stockmanagement.domain.user.repository.UserRepository;
+import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,7 +20,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -40,7 +38,7 @@ class DeliveryAddressControllerTest {
     private MockMvc mockMvc;
 
     @MockBean private DeliveryAddressService deliveryAddressService;
-    @MockBean private UserRepository userRepository;
+    @MockBean private UserService userService;
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtBlacklist jwtBlacklist;
 
@@ -54,9 +52,7 @@ class DeliveryAddressControllerTest {
 
     @BeforeEach
     void setUp() {
-        User mockUser = mock(User.class);
-        given(mockUser.getId()).willReturn(1L);
-        given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser));
+        given(userService.resolveUserId("user1")).willReturn(1L);
     }
 
     // ===== POST /api/delivery-addresses =====

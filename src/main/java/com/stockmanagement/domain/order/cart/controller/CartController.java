@@ -6,6 +6,7 @@ import com.stockmanagement.domain.order.cart.dto.CartItemRequest;
 import com.stockmanagement.domain.order.cart.dto.CartResponse;
 import com.stockmanagement.domain.order.cart.service.CartService;
 import com.stockmanagement.domain.order.dto.OrderResponse;
+import com.stockmanagement.domain.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -35,13 +36,12 @@ import org.springframework.web.bind.annotation.*;
 public class CartController {
 
     private final CartService cartService;
-    private final com.stockmanagement.domain.user.repository.UserRepository userRepository;
+    private final UserService userService;
 
     @Operation(summary = "장바구니 조회")
     @GetMapping
     public ApiResponse<CartResponse> getCart(@AuthenticationPrincipal String username) {
-        Long userId = resolveUserId(username);
-        return ApiResponse.ok(cartService.getCart(userId));
+        return ApiResponse.ok(cartService.getCart(userService.resolveUserId(username)));
     }
 
     @Operation(summary = "상품 추가 또는 수량 변경",
@@ -50,8 +50,7 @@ public class CartController {
     public ApiResponse<CartResponse> addOrUpdate(
             @AuthenticationPrincipal String username,
             @RequestBody @Valid CartItemRequest request) {
-        Long userId = resolveUserId(username);
-        return ApiResponse.ok(cartService.addOrUpdate(userId, request));
+        return ApiResponse.ok(cartService.addOrUpdate(userService.resolveUserId(username), request));
     }
 
     @Operation(summary = "특정 상품 제거")
@@ -60,16 +59,14 @@ public class CartController {
     public void removeItem(
             @AuthenticationPrincipal String username,
             @PathVariable Long productId) {
-        Long userId = resolveUserId(username);
-        cartService.removeItem(userId, productId);
+        cartService.removeItem(userService.resolveUserId(username), productId);
     }
 
     @Operation(summary = "장바구니 전체 비우기")
     @DeleteMapping
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void clear(@AuthenticationPrincipal String username) {
-        Long userId = resolveUserId(username);
-        cartService.clear(userId);
+        cartService.clear(userService.resolveUserId(username));
     }
 
     @Operation(summary = "장바구니 → 주문 전환",
@@ -79,14 +76,6 @@ public class CartController {
     public ApiResponse<OrderResponse> checkout(
             @AuthenticationPrincipal String username,
             @RequestBody @Valid CartCheckoutRequest request) {
-        Long userId = resolveUserId(username);
-        return ApiResponse.ok(cartService.checkout(userId, request));
-    }
-
-    private Long resolveUserId(String username) {
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new com.stockmanagement.common.exception.BusinessException(
-                        com.stockmanagement.common.exception.ErrorCode.USER_NOT_FOUND))
-                .getId();
+        return ApiResponse.ok(cartService.checkout(userService.resolveUserId(username), request));
     }
 }
