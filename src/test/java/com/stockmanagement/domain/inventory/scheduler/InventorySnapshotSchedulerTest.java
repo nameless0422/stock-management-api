@@ -14,6 +14,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
@@ -32,8 +33,9 @@ class InventorySnapshotSchedulerTest {
     void savesSnapshotWhenNotExists() {
         Inventory inv = buildInventory(1L, 100, 10, 5);
         given(inventoryRepository.findAll()).willReturn(List.of(inv));
-        given(snapshotRepository.existsByInventoryIdAndSnapshotDate(eq(1L), any(LocalDate.class)))
-                .willReturn(false);
+        // 오늘 스냅샷이 없는 상태 — 빈 Set 반환
+        given(snapshotRepository.findInventoryIdsBySnapshotDate(any(LocalDate.class)))
+                .willReturn(Set.of());
         given(snapshotRepository.save(any(DailyInventorySnapshot.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
 
@@ -47,8 +49,9 @@ class InventorySnapshotSchedulerTest {
     void skipsWhenSnapshotAlreadyExists() {
         Inventory inv = buildInventory(1L, 100, 10, 5);
         given(inventoryRepository.findAll()).willReturn(List.of(inv));
-        given(snapshotRepository.existsByInventoryIdAndSnapshotDate(eq(1L), any(LocalDate.class)))
-                .willReturn(true);
+        // inventoryId=1L이 이미 존재하는 상태
+        given(snapshotRepository.findInventoryIdsBySnapshotDate(any(LocalDate.class)))
+                .willReturn(Set.of(1L));
 
         scheduler.takeSnapshot();
 
