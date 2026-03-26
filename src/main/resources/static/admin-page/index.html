@@ -1101,7 +1101,7 @@ async function loadInventoryTab(page = 0) {
 
   // 일반 모드 — 상품 목록 + 병렬 재고 로드
   const q    = document.getElementById('inventorySearch').value.trim();
-  const path = `/api/products?page=${page}&size=10&sort=createdAt,desc${q ? '&search=' + encodeURIComponent(q) : ''}`;
+  const path = `/api/products?page=${page}&size=10&sort=createdAt,desc${q ? '&q=' + encodeURIComponent(q) : ''}`;
 
   const d = await api('GET', path);
   if (!d) return;
