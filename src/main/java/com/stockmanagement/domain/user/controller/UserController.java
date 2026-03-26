@@ -2,20 +2,21 @@ package com.stockmanagement.domain.user.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
+import com.stockmanagement.domain.user.dto.ChangePasswordRequest;
+import com.stockmanagement.domain.user.dto.UpdateProfileRequest;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * 사용자 REST API 컨트롤러.
@@ -46,6 +47,23 @@ public class UserController {
     public ApiResponse<Void> deactivate(@AuthenticationPrincipal String username) {
         userService.deactivate(username);
         return ApiResponse.ok(null);
+    }
+
+    @Operation(summary = "프로필 수정", description = "이메일 변경. 중복 이메일이면 409.")
+    @PatchMapping("/me")
+    public ApiResponse<UserResponse> updateProfile(
+            @AuthenticationPrincipal String username,
+            @Valid @RequestBody UpdateProfileRequest request) {
+        return ApiResponse.ok(userService.updateProfile(username, request));
+    }
+
+    @Operation(summary = "비밀번호 변경", description = "현재 비밀번호 확인 후 새 비밀번호로 변경.")
+    @PatchMapping("/me/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void changePassword(
+            @AuthenticationPrincipal String username,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        userService.changePassword(username, request);
     }
 
     @Operation(summary = "내 주문 목록 (페이징)", description = "기본: 최신순, 20건.")

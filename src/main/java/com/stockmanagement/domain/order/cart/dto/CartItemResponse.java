@@ -17,7 +17,16 @@ public class CartItemResponse {
     private int quantity;
     private BigDecimal subtotal;
 
+    /** 현재 가용 재고 수량 — null이면 재고 정보 미포함 */
+    private Integer availableQuantity;
+    /** 담은 수량만큼 구매 가능한지 여부 — null이면 재고 정보 미포함 */
+    private Boolean isAvailable;
+
     public static CartItemResponse from(CartItem item) {
+        return from(item, null);
+    }
+
+    public static CartItemResponse from(CartItem item, Integer availableQuantity) {
         BigDecimal unitPrice = item.getProduct().getPrice();
         return CartItemResponse.builder()
                 .productId(item.getProduct().getId())
@@ -25,6 +34,8 @@ public class CartItemResponse {
                 .unitPrice(unitPrice)
                 .quantity(item.getQuantity())
                 .subtotal(unitPrice.multiply(BigDecimal.valueOf(item.getQuantity())))
+                .availableQuantity(availableQuantity)
+                .isAvailable(availableQuantity != null ? availableQuantity >= item.getQuantity() : null)
                 .build();
     }
 }

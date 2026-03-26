@@ -48,6 +48,15 @@ public class OrderResponse {
 
     /** Order 엔티티를 응답 DTO로 변환하는 정적 팩토리 메서드 */
     public static OrderResponse from(Order order) {
+        return from(order, null);
+    }
+
+    /**
+     * Order 엔티티를 hasReview 포함 응답 DTO로 변환한다.
+     *
+     * @param reviewedProductIds 현재 사용자가 리뷰를 작성한 상품 ID 집합 (null이면 hasReview=null)
+     */
+    public static OrderResponse from(Order order, java.util.Set<Long> reviewedProductIds) {
         return OrderResponse.builder()
                 .id(order.getId())
                 .userId(order.getUserId())
@@ -59,7 +68,10 @@ public class OrderResponse {
                 .discountAmount(order.getDiscountAmount())
                 .usedPoints(order.getUsedPoints())
                 .items(order.getItems().stream()
-                        .map(OrderItemResponse::from)
+                        .map(i -> OrderItemResponse.from(i,
+                                reviewedProductIds != null
+                                        ? reviewedProductIds.contains(i.getProduct().getId())
+                                        : null))
                         .toList())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())

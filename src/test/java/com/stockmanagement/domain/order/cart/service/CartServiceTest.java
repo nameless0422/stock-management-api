@@ -6,6 +6,7 @@ import com.stockmanagement.domain.order.cart.dto.CartCheckoutRequest;
 import com.stockmanagement.domain.order.cart.dto.CartItemRequest;
 import com.stockmanagement.domain.order.cart.dto.CartResponse;
 import com.stockmanagement.domain.order.cart.entity.CartItem;
+import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.order.cart.repository.CartRepository;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.service.OrderService;
@@ -37,6 +38,7 @@ class CartServiceTest {
 
     @Mock CartRepository cartRepository;
     @Mock ProductRepository productRepository;
+    @Mock InventoryRepository inventoryRepository;
     @Mock OrderService orderService;
 
     @InjectMocks CartService cartService;

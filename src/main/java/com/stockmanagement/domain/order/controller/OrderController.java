@@ -3,6 +3,7 @@ package com.stockmanagement.domain.order.controller;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
+import com.stockmanagement.domain.order.dto.OrderDetailResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
@@ -68,6 +69,18 @@ public class OrderController {
         boolean isAdmin = authentication.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
         return ApiResponse.ok(orderService.getByIdForUser(id, username, isAdmin));
+    }
+
+    @Operation(summary = "주문 상세 통합 조회",
+               description = "주문 + 결제 + 배송 정보를 단일 응답으로 반환한다. 결제/배송이 없으면 해당 필드는 null.")
+    @GetMapping("/{id}/detail")
+    public ApiResponse<OrderDetailResponse> getDetail(
+            @PathVariable Long id,
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        return ApiResponse.ok(orderService.getDetail(id, username, isAdmin));
     }
 
     @Operation(summary = "주문 목록 조회 (필터 + 페이징)",

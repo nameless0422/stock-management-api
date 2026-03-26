@@ -6,6 +6,7 @@ import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 /** 장바구니 전체 응답 DTO. */
 @Getter
@@ -17,8 +18,14 @@ public class CartResponse {
     private BigDecimal totalAmount;
 
     public static CartResponse from(Long userId, List<CartItem> cartItems) {
+        return from(userId, cartItems, null);
+    }
+
+    public static CartResponse from(Long userId, List<CartItem> cartItems,
+                                    Map<Long, Integer> availabilityMap) {
         List<CartItemResponse> itemResponses = cartItems.stream()
-                .map(CartItemResponse::from)
+                .map(i -> CartItemResponse.from(i,
+                        availabilityMap != null ? availabilityMap.get(i.getProduct().getId()) : null))
                 .toList();
         BigDecimal total = itemResponses.stream()
                 .map(CartItemResponse::getSubtotal)
