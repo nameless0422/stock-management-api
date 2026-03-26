@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>마이페이지 - StockMall</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="/shop/js/common.css" rel="stylesheet">
+  <style>
+    .content-wrap { max-width:900px; margin:0 auto; padding:1.5rem 1rem; }
+    .page-title { font-size:1.15rem; font-weight:800; margin-bottom:1.5rem; }
+    .mp-nav { display:flex; border-bottom:2px solid var(--border); margin-bottom:1.5rem; overflow-x:auto; scrollbar-width:none; }
+    .mp-nav::-webkit-scrollbar { display:none; }
+    .mp-tab { padding:.6rem 1.1rem; font-size:.85rem; font-weight:700; color:#888; cursor:pointer; border:none; background:none; border-bottom:2px solid transparent; margin-bottom:-2px; white-space:nowrap; transition:all .15s; }
+    .mp-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+    .section-card { background:#fff; border:1px solid var(--border); border-radius:4px; padding:1.2rem; margin-bottom:.8rem; }
+    /* 주문 */
+    .order-row { border:1px solid var(--border); border-radius:4px; padding:.9rem 1rem; margin-bottom:.6rem; cursor:pointer; transition:border-color .15s; }
+    .order-row:hover { border-color:var(--primary); }
+    .order-product { font-size:.88rem; font-weight:600; }
+    .order-meta { font-size:.75rem; color:#aaa; margin-top:.2rem; }
+    .order-total { font-weight:800; color:var(--primary); }
+    /* 배송지 */
+    .addr-card { border:1px solid var(--border); border-radius:4px; padding:.85rem 1rem; margin-bottom:.5rem; }
+    .addr-alias { font-weight:700; font-size:.88rem; }
+    .addr-default-badge { font-size:.7rem; background:var(--primary); color:#fff; border-radius:3px; padding:1px 6px; margin-left:6px; }
+    .addr-detail { font-size:.8rem; color:#555; margin-top:.25rem; line-height:1.5; }
+    /* 포인트 */
+    .point-balance-box { background:linear-gradient(135deg,var(--primary),#ff8c42); color:#fff; border-radius:6px; padding:1.2rem 1.5rem; margin-bottom:1rem; }
+    .point-tx-row { display:flex; justify-content:space-between; padding:.45rem 0; border-bottom:1px solid #f0f0f0; font-size:.82rem; }
+    .tx-earn { color:#1a7f4b; font-weight:700; }
+    .tx-use  { color:#e74c3c; font-weight:700; }
+    /* 쿠폰 */
+    .coupon-card { border:1px solid var(--border); border-radius:4px; padding:.85rem 1rem; margin-bottom:.5rem; display:flex; gap:1rem; align-items:center; }
+    .coupon-disc { font-size:1.05rem; font-weight:900; color:var(--primary); min-width:80px; text-align:center; }
+    .coupon-info .name { font-weight:700; font-size:.88rem; }
+    .coupon-info .desc { font-size:.78rem; color:#888; margin-top:.15rem; }
+    .coupon-info .expire { font-size:.72rem; color:#aaa; margin-top:.15rem; }
+    /* 위시리스트 */
+    .wish-item { border:1px solid var(--border); border-radius:4px; padding:.85rem 1rem; margin-bottom:.5rem; display:flex; align-items:center; gap:1rem; cursor:pointer; transition:border-color .15s; }
+    .wish-item:hover { border-color:var(--primary); }
+    .wish-thumb { width:56px; height:56px; background:#f5f5f5; border-radius:3px; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden; }
+    .wish-thumb img { width:100%; height:100%; object-fit:cover; }
+    /* 배송지 추가 폼 */
+    .add-addr-form { background:var(--surface); border-radius:4px; padding:1rem; margin-top:.75rem; display:none; }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="logo" href="/shop/">Stock<em>Mall</em></a>
+    <div class="header-actions ms-auto">
+      <button class="hdr-btn" id="cartBtn">
+        <i class="bi bi-cart3"></i><span>장바구니</span>
+        <span class="cart-badge" id="cartBadge">0</span>
+      </button>
+      <button class="hdr-btn d-none" id="myPageBtn"><i class="bi bi-person-lines-fill"></i><span>마이페이지</span></button>
+      <button class="hdr-btn" id="loginOpenBtn"><i class="bi bi-person"></i><span>로그인</span></button>
+      <div class="hdr-user d-none" id="userInfo">
+        <i class="bi bi-person-check-fill"></i>
+        <span id="userNameDisplay"></span>
+        <button class="btn btn-link p-0 text-muted" style="font-size:.72rem" id="logoutBtn">로그아웃</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="content-wrap">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="page-title mb-0"><i class="bi bi-person-lines-fill me-2"></i>마이페이지</div>
+    <span class="text-muted small" id="mpUsername"></span>
+  </div>
+
+  <nav class="mp-nav">
+    <button class="mp-tab active" data-tab="orders">주문내역</button>
+    <button class="mp-tab" data-tab="addresses">배송지</button>
+    <button class="mp-tab" data-tab="points">포인트</button>
+    <button class="mp-tab" data-tab="coupons">쿠폰</button>
+    <button class="mp-tab" data-tab="wishlist">찜목록</button>
+  </nav>
+
+  <!-- 주문내역 -->
+  <div id="tabOrders">
+    <div id="orderList"></div>
+    <div id="orderPager" class="pagination-wrap"></div>
+  </div>
+
+  <!-- 배송지 -->
+  <div id="tabAddresses" style="display:none">
+    <div id="addrCards"></div>
+    <div class="mt-2">
+      <button class="btn btn-sm fw-bold" style="background:var(--primary);color:#fff" id="toggleAddrFormBtn">
+        <i class="bi bi-plus me-1"></i>새 배송지 추가
+      </button>
+    </div>
+    <div class="add-addr-form" id="addAddrForm">
+      <div class="fw-bold small mb-2">새 배송지</div>
+      <div class="row g-2">
+        <div class="col-6"><input id="addrAlias"     class="form-control form-control-sm" placeholder="별칭"></div>
+        <div class="col-6"><input id="addrRecipient" class="form-control form-control-sm" placeholder="수령인"></div>
+        <div class="col-6"><input id="addrPhone"     class="form-control form-control-sm" placeholder="전화번호"></div>
+        <div class="col-6"><input id="addrZip"       class="form-control form-control-sm" placeholder="우편번호"></div>
+        <div class="col-12"><input id="addrAddr1"    class="form-control form-control-sm" placeholder="주소"></div>
+        <div class="col-12"><input id="addrAddr2"    class="form-control form-control-sm" placeholder="상세주소 (선택)"></div>
+      </div>
+      <div id="addrFormError" class="alert alert-danger py-2 small mt-2 d-none"></div>
+      <div class="d-flex gap-2 mt-2">
+        <button class="btn btn-sm fw-bold" style="background:var(--primary);color:#fff" id="saveAddrBtn">저장</button>
+        <button class="btn btn-sm btn-outline-secondary" id="cancelAddrBtn">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 포인트 -->
+  <div id="tabPoints" style="display:none">
+    <div class="point-balance-box">
+      <div class="small mb-1 opacity-75">보유 포인트</div>
+      <div style="font-size:2rem;font-weight:900"><span id="pointBalDisplay">0</span> P</div>
+    </div>
+    <div id="pointList"></div>
+    <div id="pointPager" class="pagination-wrap"></div>
+  </div>
+
+  <!-- 쿠폰 -->
+  <div id="tabCoupons" style="display:none">
+    <div id="couponList"></div>
+  </div>
+
+  <!-- 찜목록 -->
+  <div id="tabWishlist" style="display:none">
+    <div id="wishList"></div>
+    <div id="wishPager" class="pagination-wrap"></div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/shop/js/common.js"></script>
+<script>
+'use strict';
+let orderPage = 0, pointPage = 0, wishPage = 0;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!requireAuth()) return;
+  initHeader();
+  document.getElementById('mpUsername').textContent = getUsername();
+
+  // URL 탭 파라미터
+  const tab = new URLSearchParams(location.search).get('tab') || 'orders';
+  switchTab(tab);
+
+  document.querySelectorAll('.mp-tab').forEach(btn =>
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+  );
+});
+
+function switchTab(tab) {
+  document.querySelectorAll('.mp-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  ['orders','addresses','points','coupons','wishlist'].forEach(t => {
+    document.getElementById(`tab${t.charAt(0).toUpperCase()+t.slice(1)}`).style.display = t === tab ? '' : 'none';
+  });
+  if (tab === 'orders')    loadOrders(0);
+  if (tab === 'addresses') loadAddresses();
+  if (tab === 'points')    { loadPointBalance(); loadPointHistory(0); }
+  if (tab === 'coupons')   loadCoupons();
+  if (tab === 'wishlist')  loadWishlist(0);
+}
+
+// ── 주문내역 ─────────────────────────────────────────────
+async function loadOrders(page) {
+  orderPage = page;
+  document.getElementById('orderList').innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm" style="color:var(--primary)"></div></div>';
+  const json = await api('GET', `/api/users/me/orders?page=${page}&size=10&sort=createdAt,desc`);
+  if (!json.success) { document.getElementById('orderList').innerHTML = '<div class="text-muted small text-center py-3">불러오기 실패</div>'; return; }
+  const orders = json.data?.content ?? [];
+  const totalPages = json.data?.totalPages ?? 1;
+  if (!orders.length) {
+    document.getElementById('orderList').innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-bag d-block fs-2 mb-2"></i>주문 내역이 없습니다</div>';
+    document.getElementById('orderPager').innerHTML = '';
+    return;
+  }
+  document.getElementById('orderList').innerHTML = orders.map(o => {
+    const firstName = o.items?.[0]?.productName ?? '상품';
+    const more = o.items?.length > 1 ? ` 외 ${o.items.length - 1}건` : '';
+    return `<div class="order-row" data-order-id="${o.id}">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="order-product">${esc(firstName)}${esc(more)}</div>
+          <div class="order-meta">주문 #${o.id} · ${fmtDate(o.createdAt)}</div>
+        </div>
+        <div class="text-end">
+          <span class="status-badge badge-${o.status}">${orderStatusLabel(o.status)}</span>
+          <div class="order-total mt-1">${fmtMoney(o.totalAmount)}원</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  renderPager('orderPager', page, totalPages, loadOrders);
+}
+
+document.getElementById('orderList').addEventListener('click', e => {
+  const row = e.target.closest('[data-order-id]');
+  if (row) location.href = `/shop/order-detail.html?id=${row.dataset.orderId}`;
+});
+
+// ── 배송지 ───────────────────────────────────────────────
+async function loadAddresses() {
+  const json = await api('GET', '/api/delivery-addresses');
+  const addrs = json.success ? (Array.isArray(json.data) ? json.data : []) : [];
+  const el = document.getElementById('addrCards');
+  if (!addrs.length) { el.innerHTML = '<div class="text-muted small py-2">등록된 배송지가 없습니다</div>'; return; }
+  el.innerHTML = addrs.map(a => `
+    <div class="addr-card">
+      <div class="d-flex justify-content-between align-items-start">
+        <div class="addr-alias">${esc(a.alias)} ${a.isDefault ? '<span class="addr-default-badge">기본</span>' : ''}</div>
+        <div class="d-flex gap-2">
+          ${!a.isDefault ? `<button class="btn btn-link btn-sm p-0 text-muted" data-action="set-default" data-id="${a.id}" style="font-size:.75rem">기본 설정</button>` : ''}
+          <button class="btn btn-link btn-sm p-0 text-danger" data-action="del-addr" data-id="${a.id}" style="font-size:.75rem"><i class="bi bi-trash"></i></button>
+        </div>
+      </div>
+      <div class="addr-detail">${esc(a.recipient)} · ${esc(a.phone)}<br>${esc(a.address1)} ${esc(a.address2??'')}</div>
+    </div>`).join('');
+}
+
+document.getElementById('addrCards').addEventListener('click', async e => {
+  const defBtn = e.target.closest('[data-action="set-default"]');
+  if (defBtn) {
+    const json = await api('POST', `/api/delivery-addresses/${defBtn.dataset.id}/default`);
+    if (!json.success) { showToast(json.message||'실패', 'danger'); return; }
+    showToast('기본 배송지로 설정했습니다', 'success'); loadAddresses();
+  }
+  const delBtn = e.target.closest('[data-action="del-addr"]');
+  if (delBtn) {
+    if (!confirm('배송지를 삭제하시겠습니까?')) return;
+    const json = await api('DELETE', `/api/delivery-addresses/${delBtn.dataset.id}`);
+    if (!json.success) { showToast(json.message||'실패', 'danger'); return; }
+    showToast('삭제되었습니다'); loadAddresses();
+  }
+});
+
+document.getElementById('toggleAddrFormBtn').addEventListener('click', () => {
+  const f = document.getElementById('addAddrForm');
+  f.style.display = f.style.display === 'none' ? '' : 'none';
+});
+document.getElementById('cancelAddrBtn').addEventListener('click', () => { document.getElementById('addAddrForm').style.display='none'; });
+document.getElementById('saveAddrBtn').addEventListener('click', async () => {
+  const body = {
+    alias: document.getElementById('addrAlias').value.trim(),
+    recipient: document.getElementById('addrRecipient').value.trim(),
+    phone: document.getElementById('addrPhone').value.trim().replace(/\D/g,''),
+    zipCode: document.getElementById('addrZip').value.trim(),
+    address1: document.getElementById('addrAddr1').value.trim(),
+    address2: document.getElementById('addrAddr2').value.trim() || null,
+  };
+  const errEl = document.getElementById('addrFormError');
+  if (!body.alias||!body.recipient||!body.phone||!body.zipCode||!body.address1) {
+    errEl.textContent='상세주소 외 모든 항목을 입력하세요'; errEl.classList.remove('d-none'); return;
+  }
+  errEl.classList.add('d-none');
+  const btn = document.getElementById('saveAddrBtn');
+  setLoading(btn, true);
+  const json = await api('POST', '/api/delivery-addresses', body);
+  setLoading(btn, false);
+  if (!json.success) { errEl.textContent=json.message||'저장 실패'; errEl.classList.remove('d-none'); return; }
+  ['addrAlias','addrRecipient','addrPhone','addrZip','addrAddr1','addrAddr2'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('addAddrForm').style.display='none';
+  showToast('배송지가 저장되었습니다', 'success');
+  loadAddresses();
+});
+
+// ── 포인트 ───────────────────────────────────────────────
+async function loadPointBalance() {
+  const json = await api('GET', '/api/points/balance');
+  document.getElementById('pointBalDisplay').textContent = fmtMoney(json.success ? (json.data?.balance ?? 0) : 0);
+}
+async function loadPointHistory(page) {
+  pointPage = page;
+  const json = await api('GET', `/api/points/history?page=${page}&size=15`);
+  if (!json.success) { document.getElementById('pointList').innerHTML = '<div class="text-muted small text-center py-3">불러오기 실패</div>'; return; }
+  const items = json.data?.content ?? [];
+  const totalPages = json.data?.totalPages ?? 1;
+  if (!items.length) { document.getElementById('pointList').innerHTML = '<div class="text-muted small text-center py-3">포인트 내역이 없습니다</div>'; return; }
+  document.getElementById('pointList').innerHTML = items.map(tx => `
+    <div class="point-tx-row">
+      <div><div class="fw-semibold">${esc(tx.description||tx.type)}</div><div style="font-size:.72rem;color:#aaa">${fmtDate(tx.createdAt)}</div></div>
+      <div class="${tx.amount>0?'tx-earn':'tx-use'}">${tx.amount>0?'+':''}${fmtMoney(tx.amount)}P</div>
+    </div>`).join('');
+  renderPager('pointPager', page, totalPages, loadPointHistory);
+}
+
+// ── 쿠폰 ─────────────────────────────────────────────────
+async function loadCoupons() {
+  document.getElementById('couponList').innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm" style="color:var(--primary)"></div></div>';
+  const json = await api('GET', '/api/coupons/my');
+  const coupons = json.success ? (Array.isArray(json.data) ? json.data : []) : [];
+  if (!coupons.length) { document.getElementById('couponList').innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-ticket-perforated d-block fs-2 mb-2"></i>보유 쿠폰이 없습니다</div>'; return; }
+  document.getElementById('couponList').innerHTML = coupons.map(c => {
+    const disc = c.discountType==='PERCENTAGE' ? `${c.discountValue}%` : `${fmtMoney(c.discountValue)}원`;
+    return `<div class="coupon-card ${!c.isUsable?'opacity-50':''}">
+      <div class="coupon-disc">${disc}<br><span style="font-size:.65rem;font-weight:500;color:#888">할인</span></div>
+      <div class="coupon-info">
+        <div class="name">${esc(c.name)}</div>
+        <div class="desc">${esc(c.code)}${c.minimumOrderAmount?` · ${fmtMoney(c.minimumOrderAmount)}원 이상`:''}</div>
+        <div class="expire">~${fmtDate(c.validUntil)} ${!c.isUsable?'<span class="text-danger">(사용불가)</span>':''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── 찜목록 ───────────────────────────────────────────────
+async function loadWishlist(page) {
+  wishPage = page;
+  document.getElementById('wishList').innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm" style="color:var(--primary)"></div></div>';
+  const json = await api('GET', `/api/wishlist?page=${page}&size=10`);
+  if (!json.success) { document.getElementById('wishList').innerHTML = '<div class="text-muted small text-center py-3">불러오기 실패</div>'; return; }
+  const items = Array.isArray(json.data) ? json.data : (json.data?.content ?? []);
+  const totalPages = json.data?.totalPages ?? 1;
+  if (!items.length) { document.getElementById('wishList').innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-heart d-block fs-2 mb-2"></i>찜한 상품이 없습니다</div>'; return; }
+  document.getElementById('wishList').innerHTML = items.map(i => `
+    <div class="wish-item" data-action="go-product" data-id="${i.productId??i.id}">
+      <div class="wish-thumb"><i class="bi bi-box-seam text-secondary"></i></div>
+      <div class="flex-grow-1">
+        <div class="fw-semibold small">${esc(i.productName??i.name??'')}</div>
+        <div class="text-muted" style="font-size:.78rem">${fmtMoney(i.price??0)}원</div>
+      </div>
+      <button class="btn btn-link text-danger p-1" data-action="remove-wish" data-id="${i.productId??i.id}" style="font-size:.9rem"><i class="bi bi-heart-fill"></i></button>
+    </div>`).join('');
+  renderPager('wishPager', page, totalPages, loadWishlist);
+}
+
+document.getElementById('wishList').addEventListener('click', async e => {
+  const removeBtn = e.target.closest('[data-action="remove-wish"]');
+  if (removeBtn) {
+    e.stopPropagation();
+    const json = await api('DELETE', `/api/wishlist/${removeBtn.dataset.id}`);
+    if (!json.success) { showToast('실패', 'danger'); return; }
+    loadWishlist(wishPage);
+    return;
+  }
+  const goBtn = e.target.closest('[data-action="go-product"]');
+  if (goBtn) location.href = `/shop/product.html?id=${goBtn.dataset.id}`;
+});
+</script>
+</body>
+</html>

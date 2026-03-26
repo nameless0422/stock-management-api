@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>결제 - StockMall</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="/shop/js/common.css" rel="stylesheet">
+  <style>
+    .content-wrap { max-width:520px; margin:0 auto; padding:2rem 1rem; }
+    .pay-card { background:#fff; border:1px solid var(--border); border-radius:6px; padding:1.5rem; }
+    .pay-title { font-size:1.1rem; font-weight:800; margin-bottom:1.2rem; }
+    .info-row { display:flex; justify-content:space-between; font-size:.85rem; padding:.35rem 0; border-bottom:1px solid #f5f5f5; }
+    .info-row:last-child { border-bottom:none; }
+    .amount-display { font-size:1.8rem; font-weight:900; color:var(--primary); text-align:center; padding:1rem 0; }
+    .toss-id-box { background:var(--surface); border-radius:4px; padding:.6rem .9rem; font-size:.78rem; color:#666; word-break:break-all; margin:.5rem 0 1rem; }
+    .test-notice { background:#e8f4fd; border:1px solid #bee3f8; border-radius:4px; padding:.6rem .9rem; font-size:.8rem; color:#2b6cb0; margin-bottom:1rem; }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="logo" href="/shop/">Stock<em>Mall</em></a>
+    <div class="header-actions ms-auto">
+      <button class="hdr-btn d-none" id="myPageBtn"><i class="bi bi-person-lines-fill"></i><span>마이페이지</span></button>
+      <div class="hdr-user d-none" id="userInfo">
+        <i class="bi bi-person-check-fill"></i>
+        <span id="userNameDisplay"></span>
+      </div>
+      <button class="hdr-btn" id="loginOpenBtn"><i class="bi bi-person"></i><span>로그인</span></button>
+    </div>
+  </div>
+</header>
+
+<div class="content-wrap">
+  <div id="loadingArea" class="text-center py-5">
+    <div class="spinner-border" style="color:var(--primary)"></div>
+    <p class="mt-2 small text-muted">결제 정보를 준비하는 중...</p>
+  </div>
+
+  <div id="payArea" style="display:none">
+    <div class="pay-card">
+      <div class="pay-title"><i class="bi bi-credit-card me-2"></i>결제</div>
+
+      <div id="orderInfoRows" class="mb-3"></div>
+
+      <div class="amount-display" id="amountDisplay">0원</div>
+
+      <div class="mb-3">
+        <div class="small text-muted mb-1">TossPayments 주문 ID</div>
+        <div class="toss-id-box" id="tossOrderIdBox">-</div>
+      </div>
+
+      <div class="test-notice">
+        <i class="bi bi-info-circle me-1"></i>
+        <strong>API 테스트 모드</strong>: paymentKey가 자동 생성됩니다. 직접 수정하거나 그대로 진행하세요.
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label small fw-bold">paymentKey</label>
+        <input id="paymentKeyInput" class="form-control form-control-sm" placeholder="자동 생성됩니다">
+      </div>
+
+      <div id="payError" class="alert alert-danger py-2 small d-none"></div>
+
+      <div class="d-grid gap-2">
+        <button class="btn-primary-custom" id="confirmPayBtn">
+          <i class="bi bi-shield-check me-1"></i>결제 완료 처리
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" id="cancelOrderBtn">주문 취소</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="successArea" style="display:none">
+    <div class="pay-card text-center py-4">
+      <i class="bi bi-check-circle-fill text-success" style="font-size:3.5rem"></i>
+      <div class="fw-bold fs-5 mt-3 mb-1">결제 완료!</div>
+      <div class="text-muted small mb-1">주문 번호: <strong id="successOrderId"></strong></div>
+      <div class="text-muted small mb-4">주문이 접수되었습니다. 감사합니다!</div>
+      <div class="d-flex gap-2 justify-content-center">
+        <a href="/shop/" class="btn btn-outline-secondary btn-sm fw-bold">계속 쇼핑</a>
+        <a href="/shop/mypage.html" class="btn btn-sm fw-bold" style="background:var(--primary);color:#fff">주문 내역 확인</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/shop/js/common.js"></script>
+<script>
+'use strict';
+let orderId = null, orderAmount = null, tossOrderId = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!requireAuth()) return;
+  initHeader();
+
+  // sessionStorage에서 주문 정보 가져오기
+  const pending = sessionStorage.getItem('pendingOrder');
+  if (!pending) { location.href = '/shop/cart.html'; return; }
+  const data = JSON.parse(pending);
+  orderId     = data.orderId;
+  orderAmount = data.amount;
+
+  await preparePayment();
+});
+
+async function preparePayment() {
+  const json = await api('POST', '/api/payments/prepare', { orderId, amount: orderAmount });
+  document.getElementById('loadingArea').style.display = 'none';
+
+  if (!json.success) {
+    document.getElementById('loadingArea').innerHTML = `<div class="alert alert-danger">${esc(json.message||'결제 준비 실패')}</div>`;
+    document.getElementById('loadingArea').style.display = '';
+    return;
+  }
+
+  tossOrderId = json.data.tossOrderId;
+  const amount = json.data.amount ?? orderAmount;
+
+  document.getElementById('orderInfoRows').innerHTML = `
+    <div class="info-row"><span class="text-muted">주문 번호</span><span class="fw-bold">#${orderId}</span></div>
+    <div class="info-row"><span class="text-muted">주문명</span><span>${esc(json.data.orderName||'상품')}</span></div>`;
+  document.getElementById('amountDisplay').textContent = `${fmtMoney(amount)}원`;
+  document.getElementById('tossOrderIdBox').textContent = tossOrderId;
+  document.getElementById('paymentKeyInput').value = `test_pk_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+  document.getElementById('payArea').style.display = '';
+}
+
+document.getElementById('confirmPayBtn').addEventListener('click', async () => {
+  const paymentKey = document.getElementById('paymentKeyInput').value.trim();
+  const errEl      = document.getElementById('payError');
+  errEl.classList.add('d-none');
+  if (!paymentKey) { errEl.textContent = 'paymentKey를 입력하세요'; errEl.classList.remove('d-none'); return; }
+  const btn = document.getElementById('confirmPayBtn');
+  setLoading(btn, true, '처리 중...');
+  const json = await api('POST', '/api/payments/confirm', { paymentKey, tossOrderId, amount: orderAmount });
+  setLoading(btn, false);
+  if (!json.success) { errEl.textContent = json.message || '결제 실패'; errEl.classList.remove('d-none'); return; }
+  // 성공
+  sessionStorage.removeItem('pendingOrder');
+  document.getElementById('payArea').style.display = 'none';
+  document.getElementById('successOrderId').textContent = orderId;
+  document.getElementById('successArea').style.display = '';
+  updateCartBadge(0);
+});
+
+document.getElementById('cancelOrderBtn').addEventListener('click', async () => {
+  if (!confirm('주문을 취소하시겠습니까?')) return;
+  const btn = document.getElementById('cancelOrderBtn');
+  setLoading(btn, true, '취소 중...');
+  const json = await api('POST', `/api/orders/${orderId}/cancel`);
+  setLoading(btn, false);
+  sessionStorage.removeItem('pendingOrder');
+  if (!json.success) { showToast(json.message || '취소 실패', 'danger'); return; }
+  showToast('주문이 취소되었습니다');
+  location.href = '/shop/cart.html';
+});
+</script>
+</body>
+</html>
