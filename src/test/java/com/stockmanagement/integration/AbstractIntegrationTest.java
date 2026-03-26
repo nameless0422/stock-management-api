@@ -124,6 +124,7 @@ abstract class AbstractIntegrationTest {
             stmt.execute("DELETE FROM point_transactions");
             stmt.execute("DELETE FROM orders");          // delivery_address_id FK → delivery_addresses
             stmt.execute("DELETE FROM delivery_addresses");
+            stmt.execute("DELETE FROM user_coupons");    // coupons 삭제 전 발급 이력 제거
             stmt.execute("DELETE FROM coupons");
             stmt.execute("DELETE FROM inventory_transactions");
             stmt.execute("DELETE FROM inventory");

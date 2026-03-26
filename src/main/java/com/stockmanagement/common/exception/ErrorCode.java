@@ -71,6 +71,7 @@ public enum ErrorCode {
     COUPON_EXHAUSTED(HttpStatus.CONFLICT, "쿠폰 사용 가능 횟수를 초과했습니다."),
     COUPON_ALREADY_USED(HttpStatus.CONFLICT, "이미 사용한 쿠폰입니다."),
     COUPON_MIN_ORDER_NOT_MET(HttpStatus.BAD_REQUEST, "쿠폰 적용을 위한 최소 주문 금액을 충족하지 않습니다."),
+    COUPON_ALREADY_ISSUED(HttpStatus.CONFLICT, "이미 발급된 쿠폰입니다."),
 
     // ===== Review =====
     REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "리뷰를 찾을 수 없습니다."),

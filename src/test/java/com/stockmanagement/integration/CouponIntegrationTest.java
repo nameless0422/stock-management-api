@@ -252,6 +252,97 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isConflict());
     }
 
+    // ===== 쿠폰 발급 / 내 쿠폰 목록 =====
+
+    @Test
+    @DisplayName("ADMIN 쿠폰 발급 → GET /api/coupons/my에서 조회됨")
+    void issueCouponAndGetMyCoupons() throws Exception {
+        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        long couponId = createCoupon(adminToken, "MY-COUPON", "FIXED_AMOUNT", 3000, 100);
+
+        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
+
+        // 발급
+        mockMvc.perform(post("/api/coupons/" + couponId + "/issue")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":" + userId + "}"))
+                .andExpect(status().isCreated());
+
+        // 내 쿠폰 목록 조회 — 발급된 쿠폰 1건, isUsable=true
+        mockMvc.perform(get("/api/coupons/my")
+                        .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].code").value("MY-COUPON"))
+                .andExpect(jsonPath("$.data[0].isUsable").value(true));
+    }
+
+    @Test
+    @DisplayName("동일 쿠폰 중복 발급 → 409 COUPON_ALREADY_ISSUED")
+    void duplicateIssuance() throws Exception {
+        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        long couponId = createCoupon(adminToken, "ONCE-ISSUE", "FIXED_AMOUNT", 1000, 100);
+        long userId = userRepository.findByUsername("admin").orElseThrow().getId();
+
+        String body = "{\"userId\":" + userId + "}";
+
+        // 첫 번째 발급 — 성공
+        mockMvc.perform(post("/api/coupons/" + couponId + "/issue")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated());
+
+        // 두 번째 발급 — 409
+        mockMvc.perform(post("/api/coupons/" + couponId + "/issue")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("쿠폰 사용 후 isUsable = false")
+    void usedCouponNotUsable() throws Exception {
+        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        long productId = createProductAndReceive(adminToken, "SKU-MY1", 20000, 5);
+        long couponId = createCoupon(adminToken, "USE-ONCE", "FIXED_AMOUNT", 1000, 100);
+
+        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
+
+        // 발급
+        mockMvc.perform(post("/api/coupons/" + couponId + "/issue")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":" + userId + "}"))
+                .andExpect(status().isCreated());
+
+        // 쿠폰 사용해서 주문
+        createOrder(userToken, userId, productId, 20000, "USE-ONCE");
+
+        // 내 쿠폰 — isUsable = false (maxUsagePerUser=1 이미 사용)
+        mockMvc.perform(get("/api/coupons/my")
+                        .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].isUsable").value(false));
+    }
+
+    @Test
+    @DisplayName("발급받지 않은 사용자 — 내 쿠폰 목록 빈 배열")
+    void noIssuedCoupons() throws Exception {
+        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+
+        mockMvc.perform(get("/api/coupons/my")
+                        .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
     @Test
     @DisplayName("쿠폰 없는 일반 주문 — discountAmount=0")
     void orderWithoutCoupon() throws Exception {

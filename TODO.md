@@ -16,9 +16,9 @@
 
 **필요한 작업**:
 
-- [ ] `ProductResponse`에 `availableQuantity` (또는 `inStock: boolean`) 필드 추가
-- [ ] `ProductResponse`에 `avgRating`, `reviewCount` 필드 추가
-- [ ] `ProductService.getById()` / `getList()`에서 재고·리뷰 통계 함께 조회
+- [x] `ProductResponse`에 `availableQuantity` (또는 `inStock: boolean`) 필드 추가
+- [x] `ProductResponse`에 `avgRating`, `reviewCount` 필드 추가
+- [x] `ProductService.getById()` / `getList()`에서 재고·리뷰 통계 함께 조회
 
 ---
 
@@ -34,7 +34,7 @@
 
 **필요한 작업**:
 
-- [ ] `GET /api/orders/{id}/detail` 통합 엔드포인트 추가 (주문 + 결제 + 배송 정보 포함)
+- [x] `GET /api/orders/{id}/detail` 통합 엔드포인트 추가 (주문 + 결제 + 배송 정보 포함)
   - 또는 `OrderResponse`에 `payment`, `shipment` nested 필드 추가 (optional)
 
 ---
@@ -48,6 +48,8 @@
 - [ ] 쿠폰 사용 모델 설계 (사용자에게 쿠폰 발급하는 `coupon_usages` 또는 별도 발급 테이블)
 - [ ] `GET /api/coupons/my` — 내가 사용할 수 있는 쿠폰 목록 (USER 권한)
 
+> ⚠️ 현재 미구현 — `coupon_usages`는 사용 이력만 추적하고 발급 모델이 없음. 별도 설계 필요.
+
 ---
 
 ### 4. 위시리스트 단건 상태 조회
@@ -56,7 +58,7 @@
 
 **필요한 작업**:
 
-- [ ] `GET /api/wishlist/{productId}` — 특정 상품의 위시리스트 추가 여부 반환 (`{ "wishlisted": true }`)
+- [x] `GET /api/wishlist/{productId}` — 특정 상품의 위시리스트 추가 여부 반환 (`{ "wishlisted": true }`)
 
 ---
 
@@ -66,8 +68,8 @@
 
 **필요한 작업**:
 
-- [ ] `PATCH /api/users/me` — 이름, 이메일 등 프로필 수정
-- [ ] `PATCH /api/users/me/password` — 현재 비밀번호 확인 후 변경
+- [x] `PATCH /api/users/me` — 이름, 이메일 등 프로필 수정
+- [x] `PATCH /api/users/me/password` — 현재 비밀번호 확인 후 변경
 
 ---
 
@@ -77,7 +79,7 @@
 
 **필요한 작업**:
 
-- [ ] `PUT /api/products/{productId}/reviews/{reviewId}` — 리뷰 내용·별점 수정 (작성자 본인)
+- [x] `PUT /api/products/{productId}/reviews/{reviewId}` — 리뷰 내용·별점 수정 (작성자 본인)
 
 ---
 
@@ -89,7 +91,7 @@
 
 **필요한 작업**:
 
-- [ ] `OrderItemResponse`에 `hasReview: boolean` 필드 추가
+- [x] `OrderItemResponse`에 `hasReview: boolean` 필드 추가
   - 또는 `GET /api/orders/{id}/reviews` — 해당 주문의 리뷰 작성 현황 조회
 
 ---
@@ -100,7 +102,7 @@
 
 **필요한 작업**:
 
-- [ ] `CartItemResponse`에 `availableQuantity`, `isAvailable` 필드 추가
+- [x] `CartItemResponse`에 `availableQuantity`, `isAvailable` 필드 추가
 
 ---
 
@@ -110,7 +112,7 @@
 
 **필요한 작업**:
 
-- [ ] `GET /api/products/{id}` 응답에 `images: List<ProductImageResponse>` 포함 (상세 조회 시만)
+- [x] `GET /api/products/{id}` 응답에 `images: List<ProductImageResponse>` 포함 (상세 조회 시만)
 
 ---
 
@@ -131,9 +133,13 @@
 | 위시리스트 추가/삭제/목록 | ✅ |
 | 포인트 잔액/이력 | ✅ |
 | 배송지 관리 | ✅ |
-| 상품 재고 상태 (목록 연동) | ❌ |
-| 별점 통계 (목록 연동) | ❌ |
-| 내 쿠폰 목록 | ❌ |
-| 프로필 수정 / 비밀번호 변경 | ❌ |
-| 리뷰 수정 | ❌ |
-| 위시리스트 단건 상태 조회 | ❌ |
+| 상품 재고 상태 (목록 연동) | ✅ |
+| 별점 통계 (목록 연동) | ✅ |
+| 내 쿠폰 목록 | ❌ (발급 모델 미설계) |
+| 프로필 수정 / 비밀번호 변경 | ✅ |
+| 리뷰 수정 | ✅ |
+| 위시리스트 단건 상태 조회 | ✅ |
+| 주문 상세 통합 응답 (detail) | ✅ |
+| 주문 아이템 리뷰 작성 여부 | ✅ |
+| 장바구니 품절 상태 | ✅ |
+| 상품 이미지 상세 포함 | ✅ |

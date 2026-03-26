@@ -8,8 +8,12 @@ import com.stockmanagement.domain.coupon.dto.CouponValidateResponse;
 import com.stockmanagement.domain.coupon.entity.Coupon;
 import com.stockmanagement.domain.coupon.entity.CouponUsage;
 import com.stockmanagement.domain.coupon.entity.DiscountType;
+import com.stockmanagement.domain.coupon.entity.UserCoupon;
 import com.stockmanagement.domain.coupon.repository.CouponRepository;
 import com.stockmanagement.domain.coupon.repository.CouponUsageRepository;
+import com.stockmanagement.domain.coupon.repository.UserCouponRepository;
+
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +36,7 @@ class CouponServiceTest {
 
     @Mock private CouponRepository couponRepository;
     @Mock private CouponUsageRepository couponUsageRepository;
+    @Mock private UserCouponRepository userCouponRepository;
 
     @InjectMocks private CouponService couponService;
 
@@ -229,5 +234,70 @@ class CouponServiceTest {
         couponService.releaseCoupon(ORDER_ID);
 
         verify(couponUsageRepository, never()).delete(any());
+    }
+
+    // ===== issueToUser =====
+
+    @Test
+    @DisplayName("issueToUser — 정상 발급: UserCoupon 저장")
+    void issueToUser_success() {
+        Coupon coupon = fixedCoupon(BigDecimal.valueOf(1000), null);
+        given(couponRepository.findById(1L)).willReturn(Optional.of(coupon));
+        given(userCouponRepository.existsByUserIdAndCouponId(USER_ID, 1L)).willReturn(false);
+        given(userCouponRepository.save(any())).willReturn(mock(UserCoupon.class));
+
+        couponService.issueToUser(1L, USER_ID);
+
+        verify(userCouponRepository).save(any(UserCoupon.class));
+    }
+
+    @Test
+    @DisplayName("issueToUser — 이미 발급된 쿠폰 → COUPON_ALREADY_ISSUED")
+    void issueToUser_alreadyIssued() {
+        Coupon coupon = fixedCoupon(BigDecimal.valueOf(1000), null);
+        given(couponRepository.findById(1L)).willReturn(Optional.of(coupon));
+        given(userCouponRepository.existsByUserIdAndCouponId(USER_ID, 1L)).willReturn(true);
+
+        assertThatThrownBy(() -> couponService.issueToUser(1L, USER_ID))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.COUPON_ALREADY_ISSUED);
+    }
+
+    // ===== getMyCoupons =====
+
+    @Test
+    @DisplayName("getMyCoupons — 발급된 쿠폰 목록 반환 + isUsable 계산")
+    void getMyCoupons_returnsIssuedCoupons() {
+        Coupon coupon = fixedCoupon(BigDecimal.valueOf(2000), null);
+        UserCoupon userCoupon = UserCoupon.builder().userId(USER_ID).coupon(coupon).build();
+
+        given(userCouponRepository.findByUserId(USER_ID)).willReturn(List.of(userCoupon));
+        given(couponUsageRepository.countByCoupon_IdAndUserId(any(), eq(USER_ID))).willReturn(0);
+
+        var result = couponService.getMyCoupons(USER_ID);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).isUsable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("getMyCoupons — 만료 쿠폰은 isUsable = false")
+    void getMyCoupons_expiredCouponNotUsable() {
+        Coupon expired = Coupon.builder()
+                .code("EXP")
+                .name("만료")
+                .discountType(DiscountType.FIXED_AMOUNT)
+                .discountValue(BigDecimal.valueOf(1000))
+                .maxUsagePerUser(1)
+                .validFrom(NOW.minusDays(10))
+                .validUntil(NOW.minusDays(1))
+                .build();
+        UserCoupon userCoupon = UserCoupon.builder().userId(USER_ID).coupon(expired).build();
+
+        given(userCouponRepository.findByUserId(USER_ID)).willReturn(List.of(userCoupon));
+
+        var result = couponService.getMyCoupons(USER_ID);
+
+        assertThat(result.get(0).isUsable()).isFalse();
     }
 }
