@@ -3,13 +3,17 @@ package com.stockmanagement.domain.coupon.service;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.coupon.dto.CouponCreateRequest;
+import com.stockmanagement.domain.coupon.dto.CouponIssueRequest;
 import com.stockmanagement.domain.coupon.dto.CouponResponse;
 import com.stockmanagement.domain.coupon.dto.CouponValidateRequest;
 import com.stockmanagement.domain.coupon.dto.CouponValidateResponse;
+import com.stockmanagement.domain.coupon.dto.MyCouponResponse;
 import com.stockmanagement.domain.coupon.entity.Coupon;
 import com.stockmanagement.domain.coupon.entity.CouponUsage;
+import com.stockmanagement.domain.coupon.entity.UserCoupon;
 import com.stockmanagement.domain.coupon.repository.CouponRepository;
 import com.stockmanagement.domain.coupon.repository.CouponUsageRepository;
+import com.stockmanagement.domain.coupon.repository.UserCouponRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -18,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -34,6 +39,7 @@ public class CouponService {
 
     private final CouponRepository couponRepository;
     private final CouponUsageRepository couponUsageRepository;
+    private final UserCouponRepository userCouponRepository;
 
     // ===== ADMIN =====
 
@@ -68,6 +74,32 @@ public class CouponService {
         Coupon coupon = findById(id);
         coupon.deactivate();
         return CouponResponse.from(coupon);
+    }
+
+    /**
+     * 특정 사용자에게 쿠폰을 발급한다 (ADMIN 전용).
+     * 이미 발급된 쿠폰은 중복 발급할 수 없다.
+     */
+    @Transactional
+    public void issueToUser(Long couponId, Long userId) {
+        Coupon coupon = findById(couponId);
+        if (userCouponRepository.existsByUserIdAndCouponId(userId, couponId)) {
+            throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
+        }
+        userCouponRepository.save(UserCoupon.builder()
+                .userId(userId)
+                .coupon(coupon)
+                .build());
+    }
+
+    /**
+     * 나에게 발급된 쿠폰 목록을 반환한다.
+     * 각 쿠폰의 현재 사용 가능 여부({@code isUsable})를 함께 계산한다.
+     */
+    public List<MyCouponResponse> getMyCoupons(Long userId) {
+        return userCouponRepository.findByUserId(userId).stream()
+                .map(uc -> MyCouponResponse.from(uc, isUsable(uc.getCoupon(), userId)))
+                .toList();
     }
 
     // ===== USER =====
@@ -130,6 +162,16 @@ public class CouponService {
     }
 
     // ===== 내부 검증 헬퍼 =====
+
+    /** 쿠폰이 현재 사용 가능한지 여부를 반환한다 (예외 없이 boolean 반환). */
+    private boolean isUsable(Coupon coupon, Long userId) {
+        if (!coupon.isActive()) return false;
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isBefore(coupon.getValidFrom()) || now.isAfter(coupon.getValidUntil())) return false;
+        if (coupon.getMaxUsageCount() != null && coupon.getUsageCount() >= coupon.getMaxUsageCount()) return false;
+        int usedCount = couponUsageRepository.countByCoupon_IdAndUserId(coupon.getId(), userId);
+        return usedCount < coupon.getMaxUsagePerUser();
+    }
 
     private Coupon findById(Long id) {
         return couponRepository.findById(id)

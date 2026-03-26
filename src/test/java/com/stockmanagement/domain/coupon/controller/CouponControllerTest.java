@@ -143,6 +143,61 @@ class CouponControllerTest {
         }
     }
 
+    // ===== POST /api/coupons/{id}/issue =====
+
+    @Nested
+    @DisplayName("POST /api/coupons/{id}/issue")
+    class Issue {
+
+        @Test
+        @WithMockUser(roles = "ADMIN")
+        @DisplayName("ADMIN 발급 → 201")
+        void adminIssues() throws Exception {
+            mockMvc.perform(post("/api/coupons/1/issue")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"userId\":2}"))
+                    .andExpect(status().isCreated());
+        }
+
+        @Test
+        @WithMockUser(roles = "USER")
+        @DisplayName("USER 발급 시도 → 403")
+        void userForbidden() throws Exception {
+            mockMvc.perform(post("/api/coupons/1/issue")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"userId\":2}"))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    // ===== GET /api/coupons/my =====
+
+    @Nested
+    @DisplayName("GET /api/coupons/my")
+    class GetMyCoupons {
+
+        @Test
+        @DisplayName("인증 사용자 내 쿠폰 목록 조회 → 200")
+        void userGetsMyCoupons() throws Exception {
+            given(userService.resolveUserId("testuser")).willReturn(1L);
+            given(couponService.getMyCoupons(1L)).willReturn(List.of());
+
+            var auth = new UsernamePasswordAuthenticationToken("testuser", null,
+                    List.of(new SimpleGrantedAuthority("ROLE_USER")));
+
+            mockMvc.perform(get("/api/coupons/my").with(authentication(auth)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @DisplayName("인증 없음 → 403")
+        void unauthenticated() throws Exception {
+            mockMvc.perform(get("/api/coupons/my"))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
     // ===== POST /api/coupons/validate =====
 
     @Nested

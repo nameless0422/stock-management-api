@@ -101,9 +101,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/categories").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/categories/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/categories/**").hasRole("ADMIN")
-                        // 쿠폰 관리 (생성/비활성화)는 ADMIN 전용
+                        // 내 쿠폰 목록 — USER 인증 필요 (ADMIN 쿠폰 패턴보다 먼저 선언)
+                        .requestMatchers(HttpMethod.GET, "/api/coupons/my").authenticated()
+                        // 쿠폰 관리 (생성/발급/비활성화)는 ADMIN 전용
                         .requestMatchers(HttpMethod.POST, "/api/coupons").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/coupons/*/issue").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/coupons/**").hasRole("ADMIN")
+                        // 쿠폰 목록/상세 — ADMIN 전용
+                        .requestMatchers(HttpMethod.GET, "/api/coupons", "/api/coupons/**").hasRole("ADMIN")
                         // 리뷰 조회는 공개, 작성/삭제는 인증 필요 (authenticated() 로 처리)
                         .requestMatchers(HttpMethod.GET, "/api/products/*/reviews").permitAll()
                         // 포인트/위시리스트/환불은 인증 필요 (authenticated() 로 처리)
