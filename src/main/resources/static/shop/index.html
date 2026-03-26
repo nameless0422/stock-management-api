@@ -6,229 +6,69 @@
   <title>StockMall</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="/shop/js/common.css" rel="stylesheet">
   <style>
-    :root {
-      --primary:  #FF470A;
-      --primary2: #e03d08;
-      --dark:     #111;
-      --gray:     #888;
-      --border:   #e8e8e8;
-      --surface:  #f4f6f8;
-      --card-bg:  #fff;
-    }
-    * { box-sizing: border-box; }
-    body { background: var(--surface); font-family: -apple-system, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; color: var(--dark); font-size: 13px; }
-
-    /* ══ 헤더 ══ */
-    .site-header { background: #fff; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-    .header-inner { max-width: 1200px; margin: 0 auto; padding: .6rem 1rem; display: flex; align-items: center; gap: 1rem; }
-    .logo { font-size: 1.25rem; font-weight: 900; text-decoration: none; color: var(--dark); white-space: nowrap; letter-spacing: -.5px; }
-    .logo em { font-style: normal; color: var(--primary); }
-    .search-wrap { flex: 1; max-width: 520px; }
-    .search-box { display: flex; border: 2px solid var(--primary); border-radius: 4px; overflow: hidden; background: #fff; }
-    .search-box input { flex: 1; border: none; padding: .45rem .8rem; font-size: .88rem; outline: none; background: transparent; }
-    .search-box .btn-search { background: var(--primary); color: #fff; border: none; padding: 0 1rem; font-size: .95rem; cursor: pointer; }
-    .search-box .btn-search:hover { background: var(--primary2); }
-    .header-actions { display: flex; align-items: center; gap: .25rem; margin-left: auto; }
-    .hdr-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: .2rem .5rem; border: none; background: transparent; cursor: pointer; color: #333; font-size: .65rem; font-weight: 500; line-height: 1; position: relative; }
-    .hdr-btn i { font-size: 1.15rem; }
-    .hdr-btn:hover { color: var(--primary); }
-    .cart-badge { position: absolute; top: -2px; right: 2px; background: var(--primary); color: #fff; font-size: .55rem; font-weight: 700; min-width: 14px; height: 14px; border-radius: 7px; display: none; align-items: center; justify-content: center; padding: 0 2px; }
-    .cart-badge.show { display: flex; }
-    .hdr-user { display: flex; align-items: center; gap: .3rem; font-size: .75rem; color: #333; padding: .2rem .5rem; }
-    .hdr-user i { color: var(--primary); }
-
-    /* ══ 카테고리 탭 ══ */
-    .cat-nav { background: #fff; border-bottom: 2px solid #eee; }
-    .cat-nav-inner { max-width: 1200px; margin: 0 auto; padding: 0 1rem; display: flex; overflow-x: auto; scrollbar-width: none; }
-    .cat-nav-inner::-webkit-scrollbar { display: none; }
-    .cat-tab { padding: .6rem 1rem; font-size: .83rem; font-weight: 600; color: #444; cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color .15s; user-select: none; }
-    .cat-tab:hover { color: var(--primary); }
-    .cat-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
-
-    /* ══ 서브 카테고리 ══ */
-    .subcat-bar { background: #fafafa; border-bottom: 1px solid var(--border); display: none; }
-    .subcat-bar.show { display: block; }
-    .subcat-inner { max-width: 1200px; margin: 0 auto; padding: .5rem 1rem; display: flex; gap: .35rem; flex-wrap: wrap; }
-    .subcat-chip { padding: .25rem .75rem; border-radius: 2px; font-size: .78rem; cursor: pointer; border: 1px solid #ddd; background: #fff; color: #555; transition: all .12s; white-space: nowrap; font-weight: 500; }
-    .subcat-chip:hover { border-color: var(--primary); color: var(--primary); }
-    .subcat-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-
-    /* ══ 필터 바 ══ */
-    .filter-bar { background: #fff; border-bottom: 1px solid var(--border); }
-    .filter-inner { max-width: 1200px; margin: 0 auto; padding: .55rem 1rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
-    .result-count { font-size: .8rem; color: #666; }
-    .result-count strong { color: var(--primary); }
-    .filter-sep { width: 1px; height: 14px; background: #ddd; flex-shrink: 0; }
-    .sort-tabs { display: flex; }
-    .sort-tab { padding: .3rem .65rem; font-size: .78rem; color: #555; cursor: pointer; border: 1px solid #ddd; background: #fff; margin-right: -1px; transition: all .12s; font-weight: 500; }
-    .sort-tab:first-child { border-radius: 2px 0 0 2px; }
-    .sort-tab:last-child  { border-radius: 0 2px 2px 0; }
-    .sort-tab:hover  { color: var(--primary); border-color: var(--primary); z-index: 1; position: relative; }
-    .sort-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); z-index: 1; position: relative; }
-    .price-range-wrap { display: flex; align-items: center; gap: .3rem; margin-left: auto; }
-    .price-input { width: 80px; padding: .28rem .5rem; border-radius: 2px; border: 1px solid #ddd; font-size: .78rem; text-align: center; outline: none; }
-    .price-input:focus { border-color: var(--primary); }
-    .price-apply { padding: .28rem .65rem; border-radius: 2px; background: var(--primary); color: #fff; border: none; font-size: .78rem; cursor: pointer; }
-    .price-apply:hover { background: var(--primary2); }
-    .btn-filter-sm { padding: .28rem .65rem; font-size: .78rem; border-radius: 2px; border: 1px solid #ddd; background: #fff; color: #555; cursor: pointer; display: flex; align-items: center; gap: .25rem; transition: all .12s; }
-    .btn-filter-sm:hover  { border-color: var(--primary); color: var(--primary); }
-    .btn-filter-sm.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-
-    /* ══ 메인 ══ */
-    .content-wrap { max-width: 1200px; margin: 0 auto; padding: 1rem; }
-
-    /* ══ 상품 카드 ══ */
-    .product-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
-    @media (max-width: 1100px) { .product-grid { grid-template-columns: repeat(5, 1fr); } }
-    @media (max-width: 860px)  { .product-grid { grid-template-columns: repeat(4, 1fr); } }
-    @media (max-width: 640px)  { .product-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; } }
-    @media (max-width: 440px)  { .product-grid { grid-template-columns: repeat(2, 1fr); } }
-    .product-card { background: var(--card-bg); cursor: pointer; transition: box-shadow .18s; position: relative; }
-    .product-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
-    .thumb-wrap { position: relative; overflow: hidden; aspect-ratio: 1; background: #f5f5f5; }
-    .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; transition: transform .3s; }
-    .product-card:hover .thumb-wrap img { transform: scale(1.04); }
-    .thumb-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; background: linear-gradient(145deg, #f2f3f5 0%, #e9eaec 100%); color: #b8bcc4; }
-    .thumb-placeholder i    { font-size: 1.6rem; }
-    .thumb-placeholder span { font-size: .62rem; letter-spacing: .02em; }
-    .card-status-badge { position: absolute; top: 0; left: 0; padding: 3px 6px; font-size: .65rem; font-weight: 700; }
-    .badge-inactive-overlay { background: rgba(0,0,0,.45); color: #fff; }
-    .badge-disc-overlay     { background: rgba(80,80,80,.7); color: #fff; }
-
-    /* 찜 버튼 */
-    .wish-btn { position: absolute; top: 5px; right: 5px; background: rgba(255,255,255,.85); border: none; border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: .85rem; color: #ccc; transition: all .15s; z-index: 1; }
-    .wish-btn:hover, .wish-btn.active { color: #e84393; }
-    .wish-btn.active i::before { content: "\F415"; } /* bi-heart-fill */
-
-    .card-info   { padding: 7px 8px 10px; }
-    .card-mall   { font-size: .68rem; color: #888; margin-bottom: 2px; }
-    .card-name   { font-size: .78rem; font-weight: 500; line-height: 1.35; color: #222; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: 2.1em; margin-bottom: 4px; }
-    .card-price  { font-size: .95rem; font-weight: 800; color: #111; letter-spacing: -.3px; }
-    .card-price-won { font-size: .7rem; font-weight: 500; color: #888; margin-left: 1px; }
-    .card-delivery  { font-size: .68rem; color: #1a7f4b; font-weight: 600; margin-top: 3px; }
-
-    /* ══ 로딩/빈 상태 ══ */
-    .loading-state, .empty-state { padding: 5rem 0; text-align: center; color: #bbb; }
-    .empty-state i { font-size: 3rem; display: block; margin-bottom: .75rem; }
-
-    /* ══ 페이지네이션 ══ */
-    .pagination-wrap { display: flex; justify-content: center; margin-top: 1.5rem; gap: 2px; }
-    .page-btn { min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: .82rem; border: 1px solid #ddd; background: #fff; color: #444; cursor: pointer; border-radius: 2px; padding: 0 6px; transition: all .12s; }
-    .page-btn:hover { border-color: var(--primary); color: var(--primary); }
-    .page-btn.active   { background: var(--primary); color: #fff; border-color: var(--primary); }
-    .page-btn.disabled { color: #ccc; cursor: default; pointer-events: none; }
-
-    /* ══ 모달 ══ */
-    .modal-content { border-radius: 4px; border: none; }
-    .modal-header  { border-bottom: 1px solid var(--border); padding: .85rem 1.2rem .75rem; }
-    .modal-header .modal-title { font-size: .95rem; font-weight: 700; }
-    .modal-body    { padding: 1.2rem; }
-    .modal-main-img { aspect-ratio: 1; background: #f5f5f5; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-    .modal-main-img img { width: 100%; height: 100%; object-fit: cover; }
-    .thumb-list  { display: flex; gap: 6px; margin-top: 8px; overflow-x: auto; }
-    .thumb-item  { width: 54px; height: 54px; object-fit: cover; border-radius: 3px; border: 2px solid var(--border); cursor: pointer; flex-shrink: 0; }
-    .thumb-item.active { border-color: var(--primary); }
-    .modal-cat-badge { display: block; font-size: .75rem; color: #aaa; margin-bottom: 4px; }
-    .modal-name  { font-size: 1.05rem; font-weight: 700; line-height: 1.4; margin-bottom: .5rem; }
-    .modal-price { font-size: 1.7rem; font-weight: 900; color: var(--primary); letter-spacing: -.5px; }
-    .modal-price span { font-size: .85rem; font-weight: 500; color: #888; }
-    .modal-sku   { font-size: .72rem; color: #bbb; margin-bottom: .5rem; }
-    .modal-desc  { font-size: .83rem; color: #666; line-height: 1.6; }
-    .inv-row  { display: flex; flex-wrap: wrap; gap: 6px; margin-top: .75rem; }
-    .inv-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 2px; font-size: .78rem; color: #444; }
-    .inv-chip strong { color: #222; }
-    .modal-actions { display: flex; gap: 8px; margin-top: 1.2rem; }
-    .btn-cart { flex: 1; padding: .7rem; font-size: .88rem; font-weight: 700; border: 2px solid var(--primary); background: #fff; color: var(--primary); border-radius: 2px; cursor: pointer; transition: all .15s; }
-    .btn-cart:hover:not(:disabled) { background: #fff5f2; }
-    .btn-cart:disabled { opacity: .45; cursor: not-allowed; }
-    .btn-buy  { flex: 1; padding: .7rem; font-size: .88rem; font-weight: 700; background: var(--primary); color: #fff; border: none; border-radius: 2px; cursor: pointer; }
-    .btn-buy:hover:not(:disabled) { background: var(--primary2); }
-    .btn-buy:disabled { opacity: .45; cursor: not-allowed; }
-
-    /* ══ 인증 모달 ══ */
-    .auth-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1rem; }
-    .auth-tab  { flex: 1; padding: .6rem; text-align: center; font-size: .88rem; font-weight: 700; cursor: pointer; color: #888; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .15s; }
-    .auth-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
-
-    /* ══ 토스트 ══ */
-    #toast-container { position: fixed; bottom: 1.2rem; right: 1.2rem; z-index: 9999; }
-    .my-toast { padding: .65rem 1rem; background: #333; color: #fff; border-radius: 4px; font-size: .82rem; margin-top: .35rem; box-shadow: 0 4px 12px rgba(0,0,0,.2); animation: fadeIn .2s; }
-    .my-toast.danger  { background: #d63031; }
-    .my-toast.success { background: #27ae60; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-
-    mark { background: #fff176; padding: 0 1px; border-radius: 2px; }
-
-    @media (max-width: 640px) {
-      .search-wrap { max-width: none; }
-      .price-range-wrap { display: none; }
-      .hdr-btn span { display: none; }
-    }
-
-    /* ══ 리뷰 ══ */
-    .star-rating { display:flex; gap:2px; }
-    .star-rating i { font-size:1rem; color:#ddd; cursor:pointer; transition:color .1s; }
-    .star-rating i.active, .star-rating i:hover { color:#f5a623; }
-    .review-item { padding:.75rem 0; border-bottom:1px solid var(--border); }
-    .review-stars { color:#f5a623; font-size:.8rem; }
-    .review-title { font-weight:700; font-size:.85rem; }
-    .review-content { font-size:.82rem; color:#555; margin-top:.25rem; line-height:1.5; }
-    .review-meta { font-size:.72rem; color:#aaa; margin-top:.25rem; }
-    .avg-score { font-size:2.5rem; font-weight:900; color:var(--primary); line-height:1; }
-
-    /* ══ 주문/결제 상태 배지 ══ */
-    .badge-PENDING    { background:#fff3cd; color:#856404; }
-    .badge-CONFIRMED  { background:#d1ecf1; color:#0c5460; }
-    .badge-CANCELLED  { background:#f8d7da; color:#721c24; }
-    .badge-COMPLETED  { background:#d4edda; color:#155724; }
-    .badge-PAID       { background:#d4edda; color:#155724; }
-    .badge-FAILED     { background:#f8d7da; color:#721c24; }
-    .badge-PREPARING  { background:#e2e3e5; color:#383d41; }
-    .badge-SHIPPED    { background:#d1ecf1; color:#0c5460; }
-    .badge-DELIVERED  { background:#d4edda; color:#155724; }
-    .status-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:.72rem; font-weight:700; }
-
-    /* ══ 배송지 카드 ══ */
-    .addr-card { border:1px solid var(--border); border-radius:4px; padding:.85rem 1rem; cursor:pointer; transition:border-color .15s; position:relative; margin-bottom:.5rem; }
-    .addr-card:hover { border-color:var(--primary); }
-    .addr-card.selected { border-color:var(--primary); background:#fff8f6; }
-    .addr-card .addr-alias { font-weight:700; font-size:.88rem; }
-    .addr-card .addr-default { font-size:.7rem; background:var(--primary); color:#fff; border-radius:3px; padding:1px 6px; margin-left:6px; }
-    .addr-card .addr-detail { font-size:.8rem; color:#555; margin-top:.3rem; line-height:1.5; }
-
-    /* ══ 체크아웃 ══ */
-    .checkout-section { margin-bottom:1.25rem; }
-    .checkout-section h6 { font-size:.83rem; font-weight:700; color:#333; margin-bottom:.6rem; padding-bottom:.4rem; border-bottom:1px solid var(--border); }
-    .coupon-preview { background:#fff3e0; border:1px solid #ffcc80; border-radius:4px; padding:.5rem .85rem; font-size:.82rem; color:#e65c00; margin-top:.4rem; display:none; }
-    .point-balance-info { font-size:.78rem; color:#888; margin-top:.3rem; }
-
-    /* ══ 주문 목록 ══ */
-    .order-row { border:1px solid var(--border); border-radius:4px; padding:.85rem 1rem; margin-bottom:.5rem; cursor:pointer; transition:border-color .15s; }
-    .order-row:hover { border-color:#aaa; }
-    .order-row .order-id { font-size:.72rem; color:#999; }
-    .order-row .order-total { font-weight:800; color:var(--primary); }
-    .order-detail-section { margin-bottom:1rem; }
-    .order-detail-section h6 { font-size:.82rem; font-weight:700; border-bottom:1px solid var(--border); padding-bottom:.35rem; margin-bottom:.5rem; }
-    .shipment-timeline { font-size:.8rem; color:#555; }
-
-    /* ══ 포인트/쿠폰 탭 ══ */
-    .mypage-tabs { display:flex; border-bottom:2px solid var(--border); margin-bottom:1rem; gap:0; }
-    .mypage-tab { flex:1; padding:.55rem; text-align:center; font-size:.82rem; font-weight:700; cursor:pointer; color:#888; background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .15s; }
-    .mypage-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
-    .point-tx-row { display:flex; justify-content:space-between; padding:.45rem 0; border-bottom:1px solid #f0f0f0; font-size:.8rem; }
-    .point-tx-row .tx-amount { font-weight:700; }
-    .point-tx-row .tx-amount.earn { color:#1a7f4b; }
-    .point-tx-row .tx-amount.use  { color:#e74c3c; }
-    .coupon-card { border:1px solid var(--border); border-radius:4px; padding:.75rem 1rem; margin-bottom:.5rem; }
-    .coupon-card .coupon-name { font-weight:700; font-size:.88rem; }
-    .coupon-card .coupon-desc { font-size:.78rem; color:#888; margin-top:.2rem; }
-    .coupon-card .coupon-expire { font-size:.72rem; color:#aaa; margin-top:.25rem; }
+    .cat-nav { background:#fff; border-bottom:2px solid #eee; }
+    .cat-nav-inner { max-width:1200px; margin:0 auto; padding:0 1rem; display:flex; overflow-x:auto; scrollbar-width:none; }
+    .cat-nav-inner::-webkit-scrollbar { display:none; }
+    .cat-tab { padding:.6rem 1rem; font-size:.83rem; font-weight:600; color:#444; cursor:pointer; white-space:nowrap; border-bottom:2px solid transparent; margin-bottom:-2px; transition:color .15s; user-select:none; }
+    .cat-tab:hover { color:var(--primary); }
+    .cat-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+    .subcat-bar { background:#fafafa; border-bottom:1px solid var(--border); display:none; }
+    .subcat-bar.show { display:block; }
+    .subcat-inner { max-width:1200px; margin:0 auto; padding:.5rem 1rem; display:flex; gap:.35rem; flex-wrap:wrap; }
+    .subcat-chip { padding:.25rem .75rem; border-radius:2px; font-size:.78rem; cursor:pointer; border:1px solid #ddd; background:#fff; color:#555; transition:all .12s; white-space:nowrap; font-weight:500; }
+    .subcat-chip:hover { border-color:var(--primary); color:var(--primary); }
+    .subcat-chip.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .filter-bar { background:#fff; border-bottom:1px solid var(--border); }
+    .filter-inner { max-width:1200px; margin:0 auto; padding:.55rem 1rem; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+    .result-count { font-size:.8rem; color:#666; }
+    .result-count strong { color:var(--primary); }
+    .filter-sep { width:1px; height:14px; background:#ddd; flex-shrink:0; }
+    .sort-tab { padding:.3rem .65rem; font-size:.78rem; color:#555; cursor:pointer; border:1px solid #ddd; background:#fff; margin-right:-1px; transition:all .12s; font-weight:500; }
+    .sort-tab:first-child { border-radius:2px 0 0 2px; }
+    .sort-tab:last-child  { border-radius:0 2px 2px 0; }
+    .sort-tab:hover  { color:var(--primary); border-color:var(--primary); z-index:1; position:relative; }
+    .sort-tab.active { background:var(--primary); color:#fff; border-color:var(--primary); z-index:1; position:relative; }
+    .price-input { width:80px; padding:.28rem .5rem; border-radius:2px; border:1px solid #ddd; font-size:.78rem; text-align:center; outline:none; }
+    .price-input:focus { border-color:var(--primary); }
+    .price-apply { padding:.28rem .65rem; border-radius:2px; background:var(--primary); color:#fff; border:none; font-size:.78rem; cursor:pointer; }
+    .btn-filter-sm { padding:.28rem .65rem; font-size:.78rem; border-radius:2px; border:1px solid #ddd; background:#fff; color:#555; cursor:pointer; display:flex; align-items:center; gap:.25rem; transition:all .12s; }
+    .btn-filter-sm:hover  { border-color:var(--primary); color:var(--primary); }
+    .btn-filter-sm.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .content-wrap { max-width:1200px; margin:0 auto; padding:1rem; }
+    .product-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; }
+    @media(max-width:1100px){.product-grid{grid-template-columns:repeat(5,1fr);}}
+    @media(max-width:860px) {.product-grid{grid-template-columns:repeat(4,1fr);}}
+    @media(max-width:640px) {.product-grid{grid-template-columns:repeat(3,1fr);gap:6px;} .price-range-wrap{display:none!important;}}
+    @media(max-width:440px) {.product-grid{grid-template-columns:repeat(2,1fr);}}
+    .product-card { background:#fff; cursor:pointer; transition:box-shadow .18s; position:relative; }
+    .product-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.13); }
+    .thumb-wrap { position:relative; overflow:hidden; aspect-ratio:1; background:#f5f5f5; }
+    .thumb-wrap img { width:100%; height:100%; object-fit:cover; transition:transform .3s; }
+    .product-card:hover .thumb-wrap img { transform:scale(1.04); }
+    .thumb-placeholder { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; background:linear-gradient(145deg,#f2f3f5,#e9eaec); color:#b8bcc4; }
+    .thumb-placeholder i { font-size:1.6rem; }
+    .card-status-badge { position:absolute; top:0; left:0; padding:3px 6px; font-size:.65rem; font-weight:700; }
+    .badge-inactive-overlay { background:rgba(0,0,0,.45); color:#fff; }
+    .badge-disc-overlay { background:rgba(80,80,80,.7); color:#fff; }
+    .wish-btn { position:absolute; top:5px; right:5px; background:rgba(255,255,255,.85); border:none; border-radius:50%; width:26px; height:26px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:.85rem; color:#ccc; transition:all .15s; z-index:1; }
+    .wish-btn:hover, .wish-btn.active { color:#e84393; }
+    .wish-btn.active i::before { content:"\F415"; }
+    .card-info { padding:7px 8px 10px; }
+    .card-mall { font-size:.68rem; color:#888; margin-bottom:2px; }
+    .card-name { font-size:.78rem; font-weight:500; line-height:1.35; color:#222; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; min-height:2.1em; margin-bottom:4px; }
+    .card-price { font-size:.95rem; font-weight:800; color:#111; }
+    .card-delivery { font-size:.68rem; color:#1a7f4b; font-weight:600; margin-top:3px; }
+    .loading-state, .empty-state { padding:5rem 0; text-align:center; color:#bbb; }
+    .empty-state i { font-size:3rem; display:block; margin-bottom:.75rem; }
+    mark { background:#fff176; padding:0 1px; border-radius:2px; }
+    .auth-tab { flex:1; padding:.6rem; text-align:center; font-size:.88rem; font-weight:700; cursor:pointer; color:#888; background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .15s; }
+    .auth-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
   </style>
 </head>
 <body>
 
-<!-- ═══ 헤더 ═══ -->
 <header class="site-header">
   <div class="header-inner">
     <a class="logo" href="/shop/">Stock<em>Mall</em></a>
@@ -239,21 +79,13 @@
       </div>
     </div>
     <div class="header-actions">
-      <button class="hdr-btn" id="wishBtn" title="찜목록">
-        <i class="bi bi-heart"></i><span>찜</span>
-      </button>
+      <button class="hdr-btn" id="wishlistBtn" title="찜목록"><i class="bi bi-heart"></i><span>찜</span></button>
       <button class="hdr-btn" id="cartBtn" title="장바구니">
         <i class="bi bi-cart3"></i><span>장바구니</span>
         <span class="cart-badge" id="cartBadge">0</span>
       </button>
-      <button class="hdr-btn d-none" id="myPageBtn" title="마이페이지">
-        <i class="bi bi-person-lines-fill"></i><span>마이페이지</span>
-      </button>
-      <!-- 비로그인 -->
-      <button class="hdr-btn" id="loginOpenBtn" title="로그인">
-        <i class="bi bi-person"></i><span>로그인</span>
-      </button>
-      <!-- 로그인 후 -->
+      <button class="hdr-btn d-none" id="myPageBtn"><i class="bi bi-person-lines-fill"></i><span>마이페이지</span></button>
+      <button class="hdr-btn" id="loginOpenBtn"><i class="bi bi-person"></i><span>로그인</span></button>
       <div class="hdr-user d-none" id="userInfo">
         <i class="bi bi-person-check-fill"></i>
         <span id="userNameDisplay"></span>
@@ -263,1627 +95,279 @@
   </div>
 </header>
 
-<!-- ═══ 카테고리 탭 ═══ -->
-<nav class="cat-nav">
-  <div class="cat-nav-inner" id="catTabs"></div>
-</nav>
+<nav class="cat-nav"><div class="cat-nav-inner" id="catTabs"></div></nav>
+<div class="subcat-bar" id="subcatBar"><div class="subcat-inner" id="subcatChips"></div></div>
 
-<!-- ═══ 서브 카테고리 ═══ -->
-<div class="subcat-bar" id="subcatBar">
-  <div class="subcat-inner" id="subcatChips"></div>
-</div>
-
-<!-- ═══ 필터 바 ═══ -->
 <div class="filter-bar">
   <div class="filter-inner">
     <span class="result-count" id="resultCount"></span>
     <div class="filter-sep"></div>
-    <div class="sort-tabs" id="sortTabs">
+    <div id="sortTabs" style="display:flex">
       <div class="sort-tab active" data-val="">관련도순</div>
       <div class="sort-tab" data-val="price_asc">낮은가격</div>
       <div class="sort-tab" data-val="price_desc">높은가격</div>
       <div class="sort-tab" data-val="newest">최신순</div>
     </div>
-    <button class="btn-filter-sm" id="stockBtn">
-      <i class="bi bi-check-circle-fill"></i> 재고있음
-    </button>
-    <div class="price-range-wrap">
-      <input id="priceMin" class="price-input" type="number" placeholder="최소가" min="0" step="1000">
-      <span style="color:#ccc;font-size:.8rem">~</span>
-      <input id="priceMax" class="price-input" type="number" placeholder="최대가" min="0" step="1000">
+    <button class="btn-filter-sm" id="stockBtn"><i class="bi bi-check-circle-fill"></i> 재고있음</button>
+    <div class="price-range-wrap" style="display:flex;align-items:center;gap:.3rem;margin-left:auto">
+      <input id="priceMin" class="price-input" type="number" placeholder="최소가" min="0">
+      <span style="color:#ccc">~</span>
+      <input id="priceMax" class="price-input" type="number" placeholder="최대가" min="0">
       <button class="price-apply" id="priceApplyBtn">적용</button>
       <button class="btn-filter-sm" id="priceResetBtn">초기화</button>
     </div>
   </div>
 </div>
 
-<!-- ═══ 상품 그리드 ═══ -->
 <div class="content-wrap">
-  <div id="loadingState" class="loading-state d-none">
-    <div class="spinner-border" style="color:var(--primary);width:2rem;height:2rem" role="status"></div>
+  <div id="loadingState" class="loading-state">
+    <div class="spinner-border" style="color:var(--primary);width:2rem;height:2rem"></div>
     <p class="mt-2 small" style="color:#bbb">상품을 불러오는 중...</p>
   </div>
   <div id="emptyState" class="empty-state d-none">
     <i class="bi bi-search"></i>
     <p class="fw-semibold" style="color:#999;font-size:.9rem">검색 결과가 없습니다</p>
-    <p class="small" style="color:#bbb">다른 검색어나 필터를 사용해 보세요</p>
   </div>
-  <div id="productGrid" class="product-grid"></div>
-  <div id="paginationWrap" class="pagination-wrap"></div>
+  <div id="productGrid" class="product-grid d-none"></div>
+  <div id="paginationWrap" class="pagination-wrap d-none"></div>
 </div>
 
-<!-- ═══ 상품 상세 모달 ═══ -->
-<div class="modal fade" id="productModal" tabindex="-1">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span class="modal-title" id="modalTitleHeader">상품 상세</span>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body p-0">
-        <!-- 탭 -->
-        <ul class="nav nav-tabs px-3 pt-2" id="productModalTabs">
-          <li class="nav-item">
-            <button class="nav-link active" data-tab="info" style="font-size:.84rem">상품정보</button>
-          </li>
-          <li class="nav-item">
-            <button class="nav-link" data-tab="review" style="font-size:.84rem">리뷰 <span id="reviewCountBadge" class="badge bg-secondary ms-1" style="font-size:.65rem">0</span></button>
-          </li>
-        </ul>
-        <!-- 상품정보 탭 -->
-        <div id="tabInfo" class="p-3">
-          <div class="row g-3">
-            <div class="col-md-5">
-              <div class="modal-main-img" id="modalMainImg">
-                <div style="font-size:3rem;color:#ddd"><i class="bi bi-image"></i></div>
-              </div>
-              <div class="thumb-list" id="modalThumbList"></div>
-            </div>
-            <div class="col-md-7 d-flex flex-column">
-              <div class="modal-sku" id="modalSku"></div>
-              <span id="modalBadge" class="mb-1 d-inline-block" style="width:fit-content"></span>
-              <span class="modal-cat-badge" id="modalCategory"></span>
-              <div class="modal-name" id="modalName"></div>
-              <div class="modal-price" id="modalPrice"><span>원</span></div>
-              <p class="modal-desc mt-2" id="modalDesc"></p>
-              <div id="modalInventory" class="inv-row"></div>
-              <div class="modal-actions mt-auto">
-                <button class="btn-cart" id="modalCartBtn">
-                  <i class="bi bi-bag-plus me-1"></i>장바구니 담기
-                </button>
-                <button class="btn-buy" id="modalBuyBtn">
-                  <i class="bi bi-lightning-fill me-1"></i>바로구매
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <!-- 리뷰 탭 -->
-        <div id="tabReview" class="p-3" style="display:none">
-          <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="text-center">
-              <div class="avg-score" id="reviewAvgScore">-</div>
-              <div style="font-size:.72rem;color:#999;margin-top:2px">평균 평점</div>
-            </div>
-            <div id="reviewStarDisplay" class="review-stars fs-5 ms-2"></div>
-          </div>
-          <!-- 리뷰 작성 폼 (로그인 + 구매 확정 시) -->
-          <div id="reviewFormWrap" class="mb-3 p-3 bg-light rounded" style="display:none">
-            <div class="fw-bold small mb-2">리뷰 작성</div>
-            <div class="star-rating mb-2" id="writeStars">
-              <i class="bi bi-star-fill" data-val="1"></i>
-              <i class="bi bi-star-fill" data-val="2"></i>
-              <i class="bi bi-star-fill" data-val="3"></i>
-              <i class="bi bi-star-fill" data-val="4"></i>
-              <i class="bi bi-star-fill" data-val="5"></i>
-            </div>
-            <input type="text" id="reviewTitle" class="form-control form-control-sm mb-2" placeholder="제목 (필수)">
-            <textarea id="reviewContent" class="form-control form-control-sm mb-2" rows="3" placeholder="내용 (필수)"></textarea>
-            <button class="btn btn-sm fw-bold" style="background:var(--primary);color:#fff" id="submitReviewBtn">등록</button>
-          </div>
-          <div id="reviewList"><div class="text-center text-muted py-3 small">불러오는 중...</div></div>
-          <div id="reviewPager" class="d-flex justify-content-center gap-1 mt-2"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ 로그인 / 회원가입 모달 ═══ -->
+<!-- 로그인/회원가입 모달 -->
 <div class="modal fade" id="authModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered" style="max-width:360px">
     <div class="modal-content">
       <div class="modal-header border-0 pb-0">
-        <div class="auth-tabs w-100">
+        <div style="display:flex;border-bottom:2px solid var(--border);width:100%">
           <button class="auth-tab active" data-pane="loginPane">로그인</button>
           <button class="auth-tab" data-pane="signupPane">회원가입</button>
         </div>
         <button type="button" class="btn-close ms-2 mb-auto" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body pt-2">
-        <!-- 로그인 -->
+      <div class="modal-body pt-1">
         <div id="loginPane">
-          <div class="mb-2">
-            <input id="authUsername" type="text" class="form-control form-control-sm" placeholder="아이디">
-          </div>
-          <div class="mb-3">
-            <input id="authPassword" type="password" class="form-control form-control-sm" placeholder="비밀번호">
-          </div>
+          <input id="authUsername" type="text" class="form-control form-control-sm mb-2" placeholder="아이디">
+          <input id="authPassword" type="password" class="form-control form-control-sm mb-3" placeholder="비밀번호">
           <div id="loginError" class="alert alert-danger py-2 small mb-2 d-none"></div>
-          <button class="btn w-100 fw-bold btn-sm" style="background:var(--primary);color:#fff" id="loginSubmitBtn">
-            로그인
-          </button>
+          <button class="btn w-100 fw-bold btn-sm" style="background:var(--primary);color:#fff" id="loginSubmitBtn">로그인</button>
         </div>
-        <!-- 회원가입 -->
         <div id="signupPane" style="display:none">
-          <div class="mb-2">
-            <input id="signUsername" type="text" class="form-control form-control-sm" placeholder="아이디">
-          </div>
-          <div class="mb-2">
-            <input id="signEmail" type="email" class="form-control form-control-sm" placeholder="이메일">
-          </div>
-          <div class="mb-3">
-            <input id="signPassword" type="password" class="form-control form-control-sm" placeholder="비밀번호">
-          </div>
+          <input id="signUsername" type="text" class="form-control form-control-sm mb-2" placeholder="아이디">
+          <input id="signEmail" type="email" class="form-control form-control-sm mb-2" placeholder="이메일">
+          <input id="signPassword" type="password" class="form-control form-control-sm mb-3" placeholder="비밀번호 (8자 이상)">
           <div id="signupError" class="alert alert-danger py-2 small mb-2 d-none"></div>
-          <button class="btn w-100 fw-bold btn-sm" style="background:var(--primary);color:#fff" id="signupSubmitBtn">
-            가입하기
-          </button>
+          <button class="btn w-100 fw-bold btn-sm" style="background:var(--primary);color:#fff" id="signupSubmitBtn">가입하기</button>
         </div>
       </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ 장바구니 모달 ═══ -->
-<div class="modal fade" id="cartModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered" style="max-width:460px">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span class="modal-title fw-bold"><i class="bi bi-cart3 me-2"></i>장바구니</span>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body p-0">
-        <div id="cartBody" class="p-3">
-          <div class="text-center py-4 text-muted">불러오는 중...</div>
-        </div>
-      </div>
-      <div class="modal-footer d-flex justify-content-between align-items-center">
-        <span class="fw-bold" id="cartTotal"></span>
-        <button class="btn btn-sm fw-bold" style="background:var(--primary);color:#fff" id="cartCheckoutBtn">
-          주문하기
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ 찜 목록 모달 ═══ -->
-<div class="modal fade" id="wishlistModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered" style="max-width:460px">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span class="modal-title fw-bold"><i class="bi bi-heart me-2 text-danger"></i>찜 목록</span>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body p-0">
-        <div id="wishlistBody" class="p-3">
-          <div class="text-center py-4 text-muted">불러오는 중...</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ 배송지 관리 모달 ═══ -->
-<div class="modal fade" id="addressModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered" style="max-width:480px">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span class="modal-title fw-bold"><i class="bi bi-geo-alt me-2"></i>배송지 관리</span>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body" style="max-height:70vh;overflow-y:auto">
-        <div id="addrList"></div>
-        <hr>
-        <div class="fw-bold small mb-2">새 배송지 추가</div>
-        <div class="row g-2">
-          <div class="col-6"><input id="addrAlias" class="form-control form-control-sm" placeholder="별칭 (예: 집)"></div>
-          <div class="col-6"><input id="addrRecipient" class="form-control form-control-sm" placeholder="수령인"></div>
-          <div class="col-6"><input id="addrPhone" class="form-control form-control-sm" placeholder="전화번호 (숫자만)"></div>
-          <div class="col-6"><input id="addrZip" class="form-control form-control-sm" placeholder="우편번호"></div>
-          <div class="col-12"><input id="addrAddr1" class="form-control form-control-sm" placeholder="주소"></div>
-          <div class="col-12"><input id="addrAddr2" class="form-control form-control-sm" placeholder="상세주소 (선택)"></div>
-        </div>
-        <div id="addrError" class="alert alert-danger py-2 small mt-2 d-none"></div>
-        <button class="btn btn-sm mt-2 fw-bold" style="background:var(--primary);color:#fff" id="addrSaveBtn">저장</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ 체크아웃 모달 ═══ -->
-<div class="modal fade" id="checkoutModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered" style="max-width:500px">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span class="modal-title fw-bold"><i class="bi bi-bag-check me-2"></i>주문하기</span>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body" style="max-height:75vh;overflow-y:auto">
-        <!-- 주문 상품 -->
-        <div class="checkout-section">
-          <h6><i class="bi bi-cart3 me-1"></i>주문 상품</h6>
-          <div id="coItems"></div>
-          <div class="d-flex justify-content-between fw-bold mt-2 pt-2 border-top">
-            <span>상품 합계</span><span id="coItemTotal" style="color:var(--primary)"></span>
-          </div>
-        </div>
-        <!-- 배송지 -->
-        <div class="checkout-section">
-          <h6><i class="bi bi-geo-alt me-1"></i>배송지
-            <button class="btn btn-link btn-sm p-0 ms-2" id="coManageAddrBtn" style="font-size:.75rem">관리</button>
-          </h6>
-          <div id="coAddrList"></div>
-          <div id="coNoAddr" class="text-muted small d-none">등록된 배송지가 없습니다. 위 '관리'를 눌러 추가하세요.</div>
-        </div>
-        <!-- 쿠폰 -->
-        <div class="checkout-section">
-          <h6><i class="bi bi-ticket-perforated me-1"></i>쿠폰</h6>
-          <select id="coCouponSelect" class="form-select form-select-sm">
-            <option value="">쿠폰 사용 안함</option>
-          </select>
-          <div class="coupon-preview" id="coCouponPreview"></div>
-        </div>
-        <!-- 포인트 -->
-        <div class="checkout-section">
-          <h6><i class="bi bi-star me-1"></i>포인트</h6>
-          <div class="point-balance-info mb-1">보유 포인트: <strong id="coPointBalance">0</strong>P</div>
-          <div class="d-flex gap-2 align-items-center">
-            <input type="number" id="coUsePoints" class="form-control form-control-sm" placeholder="0" min="0" style="width:120px">
-            <button class="btn btn-sm btn-outline-secondary" id="coUseAllPoints">전액 사용</button>
-          </div>
-        </div>
-        <!-- 최종 금액 -->
-        <div class="p-3 bg-light rounded">
-          <div class="d-flex justify-content-between small mb-1"><span>상품 합계</span><span id="coFinalBase"></span></div>
-          <div class="d-flex justify-content-between small mb-1 text-danger" id="coDiscountRow" style="display:none!important">
-            <span>쿠폰 할인</span><span id="coDiscountAmt"></span>
-          </div>
-          <div class="d-flex justify-content-between small mb-1 text-danger" id="coPointRow" style="display:none!important">
-            <span>포인트 사용</span><span id="coPointAmt"></span>
-          </div>
-          <div class="d-flex justify-content-between fw-bold border-top pt-2 mt-1">
-            <span>최종 결제 금액</span><span id="coFinalTotal" style="color:var(--primary);font-size:1.05rem"></span>
-          </div>
-        </div>
-        <div id="coError" class="alert alert-danger py-2 small mt-2 d-none"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">취소</button>
-        <button class="btn btn-sm fw-bold" style="background:var(--primary);color:#fff;min-width:100px" id="coPlaceBtn">주문 확인</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ 결제 모달 ═══ -->
-<div class="modal fade" id="paymentModal" tabindex="-1" data-bs-backdrop="static">
-  <div class="modal-dialog modal-dialog-centered" style="max-width:440px">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span class="modal-title fw-bold"><i class="bi bi-credit-card me-2"></i>결제</span>
-      </div>
-      <div class="modal-body">
-        <div class="mb-3 p-3 bg-light rounded">
-          <div class="small text-muted mb-1">주문 번호</div>
-          <div class="fw-bold" id="pmOrderId"></div>
-          <div class="small text-muted mt-2 mb-1">결제 금액</div>
-          <div class="fw-bold fs-5" style="color:var(--primary)" id="pmAmount"></div>
-          <div class="small text-muted mt-2 mb-1">TossPayments 주문 ID</div>
-          <div class="text-break small" id="pmTossOrderId"></div>
-        </div>
-        <div class="alert alert-info small py-2 mb-3">
-          <i class="bi bi-info-circle me-1"></i>
-          API 테스트용 결제입니다. paymentKey를 직접 입력하거나 "테스트 결제"를 클릭하세요.
-        </div>
-        <div class="mb-2">
-          <label class="form-label small fw-bold">paymentKey</label>
-          <input id="pmPaymentKey" class="form-control form-control-sm" placeholder="자동 생성 또는 직접 입력">
-        </div>
-        <div id="pmError" class="alert alert-danger py-2 small d-none"></div>
-      </div>
-      <div class="modal-footer justify-content-between">
-        <button class="btn btn-sm btn-outline-danger" id="pmCancelBtn">주문 취소</button>
-        <button class="btn btn-sm fw-bold" style="background:var(--primary);color:#fff;min-width:110px" id="pmConfirmBtn">
-          <i class="bi bi-credit-card me-1"></i>결제 완료 처리
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ 주문 완료 모달 ═══ -->
-<div class="modal fade" id="orderCompleteModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered" style="max-width:380px">
-    <div class="modal-content text-center">
-      <div class="modal-body py-4">
-        <i class="bi bi-check-circle-fill text-success" style="font-size:3rem"></i>
-        <div class="fw-bold fs-5 mt-3 mb-1">주문이 완료되었습니다!</div>
-        <div class="text-muted small mb-3">주문 번호: <strong id="ocOrderId"></strong></div>
-        <div class="d-flex gap-2 justify-content-center">
-          <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">계속 쇼핑</button>
-          <button class="btn btn-sm fw-bold" style="background:var(--primary);color:#fff" id="ocMyPageBtn">주문 확인</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ 마이페이지 모달 ═══ -->
-<div class="modal fade" id="myPageModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span class="modal-title fw-bold"><i class="bi bi-person-lines-fill me-2"></i>마이페이지</span>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mypage-tabs">
-          <button class="mypage-tab active" data-mp="orders">주문내역</button>
-          <button class="mypage-tab" data-mp="points">포인트</button>
-          <button class="mypage-tab" data-mp="coupons">쿠폰</button>
-        </div>
-        <!-- 주문내역 -->
-        <div id="mpOrders">
-          <div id="mpOrderList"><div class="text-center text-muted py-4 small"><div class="spinner-border spinner-border-sm"></div></div></div>
-          <div id="mpOrderPager" class="d-flex justify-content-center gap-1 mt-2"></div>
-        </div>
-        <!-- 포인트 -->
-        <div id="mpPoints" style="display:none">
-          <div class="d-flex align-items-center gap-3 mb-3 p-3 bg-light rounded">
-            <i class="bi bi-star-fill text-warning fs-3"></i>
-            <div>
-              <div class="text-muted small">보유 포인트</div>
-              <div class="fw-bold fs-4" id="mpPointBalance">0 P</div>
-            </div>
-          </div>
-          <div id="mpPointList"></div>
-          <div id="mpPointPager" class="d-flex justify-content-center gap-1 mt-2"></div>
-        </div>
-        <!-- 쿠폰 -->
-        <div id="mpCoupons" style="display:none">
-          <div id="mpCouponList"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ 주문 상세 모달 ═══ -->
-<div class="modal fade" id="orderDetailModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span class="modal-title fw-bold">주문 상세</span>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body" id="orderDetailBody">
-        <div class="text-center py-4"><div class="spinner-border" style="color:var(--primary)"></div></div>
-      </div>
-      <div class="modal-footer" id="orderDetailFooter"></div>
     </div>
   </div>
 </div>
 
 <div id="toast-container"></div>
-
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/shop/js/common.js"></script>
 <script>
 'use strict';
-
-// ═══ 상태 ═══════════════════════════════════════════════
-const state = {
-  keyword: '', category: '', categoryId: null, rootId: null,
-  minPrice: null, maxPrice: null,
-  sort: '', page: 0, size: 30, inStockOnly: false,
-};
+const state = { keyword:'', category:'', sort:'', page:0, size:30, minPrice:null, maxPrice:null, inStockOnly:false };
 let categoryTree = [];
-let currentProductId = null; // 모달에 열린 상품 ID
 
-// ═══ 유틸 ═══════════════════════════════════════════════
-function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-function fmtMoney(n) { return Number(n).toLocaleString('ko-KR'); }
-
-// ═══ API 헬퍼 ════════════════════════════════════════════
-async function api(method, path, body) {
-  const headers = { 'Content-Type': 'application/json' };
-  const token = localStorage.getItem('shop_token');
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res  = await fetch(path, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+document.addEventListener('DOMContentLoaded', async () => {
+  initHeader();
+  const params = new URLSearchParams(location.search);
+  if (params.get('login') === '1') new bootstrap.Modal(document.getElementById('authModal')).show();
+  document.getElementById('loginOpenBtn').addEventListener('click', () => {
+    showAuthPane('loginPane');
+    new bootstrap.Modal(document.getElementById('authModal')).show();
   });
-  if (res.status === 204) return { success: true, data: null };
-  return res.json().catch(() => ({ success: false, message: '응답 파싱 오류' }));
-}
-
-// ═══ 인증 ════════════════════════════════════════════════
-const authModalInst = new bootstrap.Modal(document.getElementById('authModal'));
-
-function isLoggedIn() { return !!localStorage.getItem('shop_token'); }
-
-function updateAuthUI() {
-  const username = localStorage.getItem('shop_username') ?? '';
-  const loggedIn = isLoggedIn();
-  document.getElementById('loginOpenBtn').classList.toggle('d-none', loggedIn);
-  document.getElementById('userInfo').classList.toggle('d-none', !loggedIn);
-  document.getElementById('myPageBtn').classList.toggle('d-none', !loggedIn);
-  document.getElementById('userNameDisplay').textContent = username;
-}
-
-document.getElementById('loginOpenBtn').addEventListener('click', () => {
-  showAuthPane('loginPane');
-  authModalInst.show();
+  await loadCategories();
+  loadProducts();
 });
 
-document.getElementById('logoutBtn').addEventListener('click', async () => {
-  const token = localStorage.getItem('shop_token');
-  if (token) {
-    try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
-    } catch {}
-  }
-  localStorage.removeItem('shop_token');
-  localStorage.removeItem('shop_username');
-  updateAuthUI();
-  updateCartBadge(0);
-  showToast('로그아웃되었습니다');
-});
-
-// 인증 탭 전환
-document.querySelectorAll('.auth-tab').forEach(btn => {
-  btn.addEventListener('click', () => showAuthPane(btn.dataset.pane));
-});
-
+// 인증 모달
+document.querySelectorAll('.auth-tab').forEach(btn => btn.addEventListener('click', () => showAuthPane(btn.dataset.pane)));
 function showAuthPane(pane) {
   document.querySelectorAll('.auth-tab').forEach(b => b.classList.toggle('active', b.dataset.pane === pane));
   document.getElementById('loginPane').style.display  = pane === 'loginPane'  ? '' : 'none';
   document.getElementById('signupPane').style.display = pane === 'signupPane' ? '' : 'none';
-  document.getElementById('loginError').classList.add('d-none');
-  document.getElementById('signupError').classList.add('d-none');
+  ['loginError','signupError'].forEach(id => document.getElementById(id).classList.add('d-none'));
 }
 
-// 로그인
 document.getElementById('loginSubmitBtn').addEventListener('click', async () => {
   const username = document.getElementById('authUsername').value.trim();
   const password = document.getElementById('authPassword').value;
-  const errEl    = document.getElementById('loginError');
-  const btn      = document.getElementById('loginSubmitBtn');
-
+  const errEl = document.getElementById('loginError');
+  const btn   = document.getElementById('loginSubmitBtn');
   if (!username || !password) { errEl.textContent = '아이디와 비밀번호를 입력하세요'; errEl.classList.remove('d-none'); return; }
-  btn.disabled = true; btn.textContent = '로그인 중...';
-
+  setLoading(btn, true, '로그인 중...');
   try {
     const json = await api('POST', '/api/auth/login', { username, password });
     if (!json.success) throw new Error(json.message || '로그인 실패');
     localStorage.setItem('shop_token', json.data.accessToken);
     localStorage.setItem('shop_username', username);
-    authModalInst.hide();
-    updateAuthUI();
-    loadCartCount();
+    bootstrap.Modal.getInstance(document.getElementById('authModal'))?.hide();
+    initHeader();
     showToast(`${username}님, 환영합니다!`, 'success');
-  } catch (e) {
-    errEl.textContent = e.message;
-    errEl.classList.remove('d-none');
-  } finally {
-    btn.disabled = false; btn.textContent = '로그인';
-  }
+    const redirect = new URLSearchParams(location.search).get('redirect');
+    if (redirect) location.href = decodeURIComponent(redirect);
+  } catch(e) { errEl.textContent = e.message; errEl.classList.remove('d-none'); }
+  finally { setLoading(btn, false); }
 });
 
-// 회원가입
 document.getElementById('signupSubmitBtn').addEventListener('click', async () => {
   const username = document.getElementById('signUsername').value.trim();
   const email    = document.getElementById('signEmail').value.trim();
   const password = document.getElementById('signPassword').value;
-  const errEl    = document.getElementById('signupError');
-  const btn      = document.getElementById('signupSubmitBtn');
-
+  const errEl = document.getElementById('signupError');
+  const btn   = document.getElementById('signupSubmitBtn');
   if (!username || !email || !password) { errEl.textContent = '모든 항목을 입력하세요'; errEl.classList.remove('d-none'); return; }
-  btn.disabled = true; btn.textContent = '가입 중...';
-
+  setLoading(btn, true, '가입 중...');
   try {
     const json = await api('POST', '/api/auth/signup', { username, email, password });
     if (!json.success) throw new Error(json.message || '회원가입 실패');
     showToast('가입 완료! 로그인해주세요', 'success');
     showAuthPane('loginPane');
     document.getElementById('authUsername').value = username;
-  } catch (e) {
-    errEl.textContent = e.message;
-    errEl.classList.remove('d-none');
-  } finally {
-    btn.disabled = false; btn.textContent = '가입하기';
-  }
+  } catch(e) { errEl.textContent = e.message; errEl.classList.remove('d-none'); }
+  finally { setLoading(btn, false); }
 });
+['authUsername','authPassword'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('loginSubmitBtn').click(); }));
+['signUsername','signEmail','signPassword'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('signupSubmitBtn').click(); }));
 
-// Enter 키 로그인
-['authUsername', 'authPassword'].forEach(id => {
-  document.getElementById(id).addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('loginSubmitBtn').click();
-  });
-});
-['signUsername', 'signEmail', 'signPassword'].forEach(id => {
-  document.getElementById(id).addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('signupSubmitBtn').click();
-  });
-});
-
-// ═══ 카테고리 ════════════════════════════════════════════
+// 카테고리
 async function loadCategories() {
-  try {
-    const json = await api('GET', '/api/categories');
-    if (!json.success) return;
-    categoryTree = Array.isArray(json.data) ? json.data : (json.data?.content ?? []);
-    renderCatTabs();
-  } catch {}
-}
-
-function renderCatTabs() {
+  const json = await api('GET', '/api/categories').catch(() => null);
+  if (!json?.success) return;
+  categoryTree = Array.isArray(json.data) ? json.data : [];
   const tabs  = document.getElementById('catTabs');
-  const items = [{ id: '', name: '전체', children: [] }, ...categoryTree];
-
   tabs.innerHTML = '';
-  items.forEach(root => {
+  [{ id:'', name:'전체', children:[] }, ...categoryTree].forEach(root => {
     const el = document.createElement('div');
     el.className = 'cat-tab' + (root.id === '' ? ' active' : '');
-    el.dataset.id       = root.id;
-    el.dataset.children = JSON.stringify(root.children ?? []);
-    el.textContent      = root.name;
+    el.dataset.id = root.id; el.dataset.children = JSON.stringify(root.children ?? []); el.textContent = root.name;
     tabs.appendChild(el);
   });
 }
 
-// 카테고리 탭 이벤트 위임
 document.getElementById('catTabs').addEventListener('click', e => {
-  const tab = e.target.closest('.cat-tab');
-  if (!tab) return;
-  document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
-  tab.classList.add('active');
-
-  const id       = tab.dataset.id;
-  const name     = tab.textContent.trim();
+  const tab = e.target.closest('.cat-tab'); if (!tab) return;
+  document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active')); tab.classList.add('active');
   const children = JSON.parse(tab.dataset.children || '[]');
-
-  state.rootId     = id || null;
-  state.category   = name === '전체' ? '' : name;
-  state.categoryId = id || null;
-  state.page       = 0;
-
-  const bar   = document.getElementById('subcatBar');
-  const chips = document.getElementById('subcatChips');
+  state.category = tab.textContent.trim() === '전체' ? '' : tab.textContent.trim(); state.page = 0;
+  const bar = document.getElementById('subcatBar'), chips = document.getElementById('subcatChips');
   if (children.length) {
     chips.innerHTML = '';
-    children.forEach(c => {
-      const chip = document.createElement('div');
-      chip.className     = 'subcat-chip';
-      chip.dataset.id    = c.id;
-      chip.dataset.name  = c.name;
-      chip.textContent   = c.name;
-      chips.appendChild(chip);
-    });
+    children.forEach(c => { const chip = document.createElement('div'); chip.className='subcat-chip'; chip.dataset.name=c.name; chip.textContent=c.name; chips.appendChild(chip); });
     bar.classList.add('show');
-  } else {
-    bar.classList.remove('show');
-    chips.innerHTML = '';
-  }
+  } else { bar.classList.remove('show'); chips.innerHTML=''; }
   loadProducts();
 });
-
-// 서브 카테고리 이벤트 위임
 document.getElementById('subcatChips').addEventListener('click', e => {
-  const chip = e.target.closest('.subcat-chip');
-  if (!chip) return;
-  document.querySelectorAll('.subcat-chip').forEach(c => c.classList.remove('active'));
-  chip.classList.add('active');
-  state.category   = chip.dataset.name;
-  state.categoryId = chip.dataset.id;
-  state.page       = 0;
-  loadProducts();
+  const chip = e.target.closest('.subcat-chip'); if (!chip) return;
+  document.querySelectorAll('.subcat-chip').forEach(c => c.classList.remove('active')); chip.classList.add('active');
+  state.category = chip.dataset.name; state.page = 0; loadProducts();
 });
 
-// ═══ 정렬 ════════════════════════════════════════════════
+// 정렬/필터
 document.getElementById('sortTabs').addEventListener('click', e => {
-  const tab = e.target.closest('.sort-tab');
-  if (!tab) return;
-  document.querySelectorAll('.sort-tab').forEach(t => t.classList.remove('active'));
-  tab.classList.add('active');
-  state.sort = tab.dataset.val;
-  state.page = 0;
-  loadProducts();
+  const tab = e.target.closest('.sort-tab'); if (!tab) return;
+  document.querySelectorAll('.sort-tab').forEach(t => t.classList.remove('active')); tab.classList.add('active');
+  state.sort = tab.dataset.val; state.page = 0; loadProducts();
 });
-
-// ═══ 필터 ════════════════════════════════════════════════
 document.getElementById('stockBtn').addEventListener('click', () => {
-  state.inStockOnly = !state.inStockOnly;
-  state.page = 0;
-  document.getElementById('stockBtn').classList.toggle('active', state.inStockOnly);
-  loadProducts();
+  state.inStockOnly = !state.inStockOnly; state.page = 0;
+  document.getElementById('stockBtn').classList.toggle('active', state.inStockOnly); loadProducts();
 });
-
 document.getElementById('priceApplyBtn').addEventListener('click', () => {
-  const minVal = document.getElementById('priceMin').value;
-  const maxVal = document.getElementById('priceMax').value;
-  state.minPrice = minVal !== '' ? Number(minVal) : null;
-  state.maxPrice = maxVal !== '' ? Number(maxVal) : null;
-  state.page = 0;
-  loadProducts();
+  state.minPrice = document.getElementById('priceMin').value !== '' ? Number(document.getElementById('priceMin').value) : null;
+  state.maxPrice = document.getElementById('priceMax').value !== '' ? Number(document.getElementById('priceMax').value) : null;
+  state.page = 0; loadProducts();
 });
-
 document.getElementById('priceResetBtn').addEventListener('click', () => {
-  document.getElementById('priceMin').value = '';
-  document.getElementById('priceMax').value = '';
-  state.minPrice = null;
-  state.maxPrice = null;
-  state.page = 0;
-  loadProducts();
+  document.getElementById('priceMin').value = ''; document.getElementById('priceMax').value = '';
+  state.minPrice = null; state.maxPrice = null; state.page = 0; loadProducts();
 });
+['priceMin','priceMax'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('priceApplyBtn').click(); }));
 
-['priceMin', 'priceMax'].forEach(id => {
-  document.getElementById(id).addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('priceApplyBtn').click();
-  });
-});
-
-// ═══ 검색 ════════════════════════════════════════════════
+// 검색
 document.getElementById('searchBtn').addEventListener('click', doSearch);
-document.getElementById('navSearch').addEventListener('keydown', e => {
-  if (e.key === 'Enter') doSearch();
-});
-
+document.getElementById('navSearch').addEventListener('keydown', e => { if(e.key==='Enter') doSearch(); });
 function doSearch() {
-  state.keyword    = document.getElementById('navSearch').value.trim();
-  state.category   = '';
-  state.categoryId = null;
-  state.rootId     = null;
-  state.page       = 0;
+  state.keyword = document.getElementById('navSearch').value.trim(); state.category=''; state.page=0;
   document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
   document.querySelector('.cat-tab[data-id=""]')?.classList.add('active');
   document.getElementById('subcatBar').classList.remove('show');
   loadProducts();
 }
 
-// ═══ 상품 목록 ════════════════════════════════════════════
+// 상품 목록
 async function loadProducts() {
-  showLoading(true);
-
+  document.getElementById('loadingState').classList.remove('d-none');
+  document.getElementById('productGrid').classList.add('d-none');
+  document.getElementById('paginationWrap').classList.add('d-none');
+  document.getElementById('emptyState').classList.add('d-none');
   const params = new URLSearchParams({ page: state.page, size: state.size });
-  if (state.keyword)            params.set('q',        state.keyword);
-  if (state.category)           params.set('category', state.category);
-  if (state.sort)               params.set('sort',     state.sort);
-  if (state.minPrice !== null)  params.set('minPrice', state.minPrice);
-  if (state.maxPrice !== null)  params.set('maxPrice', state.maxPrice);
-
+  if (state.keyword)           params.set('q',        state.keyword);
+  if (state.category)          params.set('category', state.category);
+  if (state.sort)              params.set('sort',     state.sort);
+  if (state.minPrice !== null) params.set('minPrice', state.minPrice);
+  if (state.maxPrice !== null) params.set('maxPrice', state.maxPrice);
   try {
     const json = await api('GET', `/api/products?${params}`);
-    showLoading(false);
+    document.getElementById('loadingState').classList.add('d-none');
     if (!json.success) { showEmpty(); return; }
-
-    let products        = json.data.content ?? [];
-    const totalElements = json.data.totalElements ?? 0;
-    const totalPages    = json.data.totalPages ?? 1;
-
-    // 재고있음 필터: ACTIVE 상품만 (DISCONTINUED/INACTIVE 제외)
+    let products = json.data.content ?? [];
+    const totalElements = json.data.totalElements ?? 0, totalPages = json.data.totalPages ?? 1;
     if (state.inStockOnly) products = products.filter(p => p.status === 'ACTIVE');
     if (!products.length)  { showEmpty(); return; }
-
-    document.getElementById('resultCount').innerHTML =
-      `총 <strong>${totalElements.toLocaleString()}</strong>개`;
-
-    renderProducts(products);
-    renderPagination(totalPages);
-  } catch {
-    showLoading(false);
-    showToast('상품을 불러오지 못했습니다.', 'danger');
-  }
-}
-
-function renderProducts(products) {
-  document.getElementById('emptyState').classList.add('d-none');
-
-  const html = products.map(p => {
-    const isSoldOut = p.status === 'INACTIVE';
-    const isDisc    = p.status === 'DISCONTINUED';
-    const thumbHtml = p.thumbnailUrl
-      ? `<img src="${esc(p.thumbnailUrl)}" alt="${esc(p.name)}" loading="lazy">`
-      : `<div class="thumb-placeholder"><i class="bi bi-box-seam"></i><span>${esc((p.category || 'NO IMG').slice(0, 6))}</span></div>`;
-    const badge = isSoldOut
-      ? `<div class="card-status-badge badge-inactive-overlay">품절</div>`
-      : isDisc
-      ? `<div class="card-status-badge badge-disc-overlay">단종</div>`
-      : '';
-    return `
-      <div class="product-card" data-id="${p.id}">
-        <div class="thumb-wrap">
-          ${thumbHtml}
-          ${badge}
-          <button class="wish-btn" data-action="wish" data-id="${p.id}" title="찜하기">
-            <i class="bi bi-heart"></i>
-          </button>
+    document.getElementById('resultCount').innerHTML = `총 <strong>${totalElements.toLocaleString()}</strong>개`;
+    document.getElementById('productGrid').classList.remove('d-none');
+    document.getElementById('paginationWrap').classList.remove('d-none');
+    document.getElementById('productGrid').innerHTML = products.map(p => {
+      const thumb = p.thumbnailUrl
+        ? `<img src="${esc(p.thumbnailUrl)}" alt="${esc(p.name)}" loading="lazy">`
+        : `<div class="thumb-placeholder"><i class="bi bi-box-seam"></i></div>`;
+      const badge = p.status==='INACTIVE' ? `<div class="card-status-badge badge-inactive-overlay">품절</div>`
+                  : p.status==='DISCONTINUED' ? `<div class="card-status-badge badge-disc-overlay">단종</div>` : '';
+      const kw = state.keyword;
+      const name = kw ? esc(p.name).replace(new RegExp(`(${esc(kw).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'), '<mark>$1</mark>') : esc(p.name);
+      return `<div class="product-card" data-id="${p.id}">
+        <div class="thumb-wrap">${thumb}${badge}
+          <button class="wish-btn" data-action="wish" data-id="${p.id}"><i class="bi bi-heart"></i></button>
         </div>
         <div class="card-info">
-          <div class="card-mall">${esc(p.category || 'StockMall')}</div>
-          <div class="card-name">${highlight(p.name, state.keyword)}</div>
-          <div class="card-price">
-            ${fmtMoney(p.price)}<span class="card-price-won">원</span>
-          </div>
+          <div class="card-mall">${esc(p.category||'StockMall')}</div>
+          <div class="card-name">${name}</div>
+          <div class="card-price">${fmtMoney(p.price)}<span style="font-size:.7rem;color:#888;margin-left:1px">원</span></div>
           <div class="card-delivery"><i class="bi bi-truck" style="font-size:.72rem"></i> 무료배송</div>
         </div>
       </div>`;
-  }).join('');
-
-  document.getElementById('productGrid').innerHTML = html;
-}
-
-// 상품 그리드 이벤트 위임
-document.getElementById('productGrid').addEventListener('click', e => {
-  // 찜 버튼
-  const wishBtn = e.target.closest('[data-action="wish"]');
-  if (wishBtn) {
-    e.stopPropagation();
-    toggleWishlist(+wishBtn.dataset.id, wishBtn);
-    return;
-  }
-  // 카드 클릭 → 상세
-  const card = e.target.closest('.product-card');
-  if (card) openDetail(+card.dataset.id);
-});
-
-function renderPagination(totalPages) {
-  const wrap = document.getElementById('paginationWrap');
-  if (totalPages <= 1) { wrap.innerHTML = ''; return; }
-  const cur   = state.page;
-  const start = Math.max(0, cur - 4);
-  const end   = Math.min(totalPages - 1, cur + 4);
-  const btns  = [
-    `<button class="page-btn ${cur === 0 ? 'disabled' : ''}" data-page="${cur - 1}"><i class="bi bi-chevron-left"></i></button>`,
-    ...Array.from({ length: end - start + 1 }, (_, i) => {
-      const p = start + i;
-      return `<button class="page-btn ${p === cur ? 'active' : ''}" data-page="${p}">${p + 1}</button>`;
-    }),
-    `<button class="page-btn ${cur >= totalPages - 1 ? 'disabled' : ''}" data-page="${cur + 1}"><i class="bi bi-chevron-right"></i></button>`,
-  ];
-  wrap.innerHTML = btns.join('');
-}
-
-document.getElementById('paginationWrap').addEventListener('click', e => {
-  const btn = e.target.closest('.page-btn');
-  if (!btn || btn.classList.contains('disabled') || btn.classList.contains('active')) return;
-  state.page = +btn.dataset.page;
-  loadProducts();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-});
-
-// ═══ 상품 상세 ════════════════════════════════════════════
-const productModalInst = new bootstrap.Modal(document.getElementById('productModal'));
-
-async function openDetail(id) {
-  currentProductId = id;
-  // 탭 초기화 (상품정보 탭으로)
-  document.querySelectorAll('#productModalTabs .nav-link').forEach(b => b.classList.toggle('active', b.dataset.tab === 'info'));
-  document.getElementById('tabInfo').style.display   = '';
-  document.getElementById('tabReview').style.display = 'none';
-  // 장바구니 버튼 상태
-  const cartBtn = document.getElementById('modalCartBtn');
-  cartBtn.disabled = !isLoggedIn();
-  cartBtn.title    = isLoggedIn() ? '' : '로그인 후 이용 가능합니다';
-
-  try {
-    const [pJson, iJson, invJson] = await Promise.all([
-      api('GET', `/api/products/${id}`),
-      api('GET', `/api/products/${id}/images`),
-      api('GET', `/api/inventory/${id}`),
-    ]);
-    if (!pJson.success) return;
-
-    const p    = pJson.data;
-    const imgs = iJson.success ? (iJson.data ?? []) : [];
-    const inv  = invJson.success ? invJson.data : null;
-
-    document.getElementById('modalTitleHeader').textContent = p.name;
-    document.getElementById('modalName').textContent        = p.name;
-    document.getElementById('modalSku').textContent         = `SKU: ${p.sku}`;
-    document.getElementById('modalCategory').textContent    = p.category || '미분류';
-    document.getElementById('modalBadge').innerHTML         = statusBadge(p.status);
-    document.getElementById('modalPrice').innerHTML         = `${fmtMoney(p.price)}<span>원</span>`;
-    document.getElementById('modalDesc').textContent        = p.description || '상품 설명이 없습니다.';
-
-    if (inv) {
-      const available = inv.available ?? (inv.onHand - inv.reserved - inv.allocated);
-      document.getElementById('modalInventory').innerHTML = `
-        <span class="inv-chip"><i class="bi bi-box-seam"></i> 실재고 <strong>${fmtMoney(inv.onHand)}</strong></span>
-        <span class="inv-chip"><i class="bi bi-hourglass-split"></i> 예약 <strong>${inv.reserved}</strong></span>
-        <span class="inv-chip" style="color:#1a7f4b"><i class="bi bi-check-circle"></i> 가용 <strong>${fmtMoney(available)}</strong></span>`;
-    } else {
-      document.getElementById('modalInventory').innerHTML = '';
-    }
-
-    const mainEl  = document.getElementById('modalMainImg');
-    const thumbEl = document.getElementById('modalThumbList');
-    const mainImg = imgs.find(i => i.imageType === 'THUMBNAIL') || imgs[0];
-
-    if (mainImg) {
-      mainEl.innerHTML = `<img src="${esc(mainImg.imageUrl)}" alt="${esc(p.name)}">`;
-    } else if (p.thumbnailUrl) {
-      mainEl.innerHTML = `<img src="${esc(p.thumbnailUrl)}" alt="${esc(p.name)}">`;
-    } else {
-      mainEl.innerHTML = `<div style="font-size:3.5rem;color:#ddd"><i class="bi bi-image"></i></div>`;
-    }
-
-    thumbEl.innerHTML = '';
-    imgs.forEach(img => {
-      const el = document.createElement('img');
-      el.src       = img.imageUrl;
-      el.className = 'thumb-item' + (img === mainImg ? ' active' : '');
-      el.addEventListener('click', () => {
-        mainEl.innerHTML = `<img src="${esc(img.imageUrl)}" alt="">`;
-        document.querySelectorAll('.thumb-item').forEach(t => t.classList.remove('active'));
-        el.classList.add('active');
-      });
-      thumbEl.appendChild(el);
-    });
-
-    productModalInst.show();
-  } catch {
-    showToast('상품 정보를 불러오지 못했습니다.', 'danger');
-  }
-}
-
-// 상품 상세 모달 탭 전환
-document.getElementById('productModalTabs').addEventListener('click', e => {
-  const btn = e.target.closest('[data-tab]');
-  if (!btn) return;
-  document.querySelectorAll('#productModalTabs .nav-link').forEach(b => b.classList.toggle('active', b === btn));
-  const tab = btn.dataset.tab;
-  document.getElementById('tabInfo').style.display   = tab === 'info'   ? '' : 'none';
-  document.getElementById('tabReview').style.display = tab === 'review' ? '' : 'none';
-  if (tab === 'review' && currentProductId) loadReviews(currentProductId, 0);
-});
-
-// 장바구니 담기 (모달)
-document.getElementById('modalCartBtn').addEventListener('click', async () => {
-  if (!isLoggedIn()) { authModalInst.show(); return; }
-  const btn = document.getElementById('modalCartBtn');
-  btn.disabled = true;
-  const json = await api('POST', '/api/cart/items', { productId: currentProductId, quantity: 1 });
-  btn.disabled = false;
-  if (!json.success) { showToast(json.message || '장바구니 담기 실패', 'danger'); return; }
-  showToast('장바구니에 담았습니다', 'success');
-  loadCartCount();
-});
-
-// 바로구매
-document.getElementById('modalBuyBtn').addEventListener('click', () => {
-  if (!isLoggedIn()) { authModalInst.show(); return; }
-  productModalInst.hide();
-  openCheckoutDirect(currentProductId);
-});
-
-// ═══ 장바구니 ════════════════════════════════════════════
-const cartModalInst = new bootstrap.Modal(document.getElementById('cartModal'));
-
-document.getElementById('cartBtn').addEventListener('click', () => {
-  if (!isLoggedIn()) { showAuthPane('loginPane'); authModalInst.show(); return; }
-  openCartModal();
-});
-
-async function openCartModal() {
-  document.getElementById('cartBody').innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm"></div></div>';
-  document.getElementById('cartTotal').textContent = '';
-  cartModalInst.show();
-
-  const json = await api('GET', '/api/cart');
-  if (!json.success) { document.getElementById('cartBody').innerHTML = '<div class="text-center text-muted py-3">불러오기 실패</div>'; return; }
-
-  const items = json.data?.items ?? [];
-  if (!items.length) {
-    document.getElementById('cartBody').innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-cart3 d-block fs-3 mb-2"></i>장바구니가 비어있습니다</div>';
-    document.getElementById('cartTotal').textContent = '';
-    return;
-  }
-
-  const total = items.reduce((s, i) => s + Number(i.unitPrice ?? i.price ?? 0) * i.quantity, 0);
-  document.getElementById('cartBody').innerHTML = items.map(i => {
-    const price = Number(i.unitPrice ?? i.price ?? 0);
-    return `
-    <div class="d-flex align-items-center gap-2 py-2 border-bottom">
-      <div class="flex-grow-1">
-        <div class="fw-semibold small">${esc(i.productName)}</div>
-        <div class="text-muted" style="font-size:.75rem">${fmtMoney(price)}원 × ${i.quantity}</div>
-      </div>
-      <div class="fw-bold small">${fmtMoney(price * i.quantity)}원</div>
-      <button class="btn btn-link p-0 text-danger" data-action="cart-remove" data-pid="${i.productId}" style="font-size:.9rem">
-        <i class="bi bi-x-circle"></i>
-      </button>
-    </div>`;
-  }).join('');
-  document.getElementById('cartTotal').innerHTML = `합계 <strong style="color:var(--primary)">${fmtMoney(total)}원</strong>`;
-}
-
-document.getElementById('cartBody').addEventListener('click', async e => {
-  const btn = e.target.closest('[data-action="cart-remove"]');
-  if (!btn) return;
-  const json = await api('DELETE', `/api/cart/items/${btn.dataset.pid}`);
-  if (!json.success) { showToast('삭제 실패', 'danger'); return; }
-  loadCartCount();
-  openCartModal();
-});
-
-document.getElementById('cartCheckoutBtn').addEventListener('click', () => {
-  if (!isLoggedIn()) { showAuthPane('loginPane'); authModalInst.show(); return; }
-  cartModalInst.hide();
-  openCheckout();
-});
-
-async function loadCartCount() {
-  if (!isLoggedIn()) { updateCartBadge(0); return; }
-  try {
-    const json = await api('GET', '/api/cart');
-    const cnt  = json.success ? (json.data?.items?.length ?? 0) : 0;
-    updateCartBadge(cnt);
-  } catch { updateCartBadge(0); }
-}
-
-function updateCartBadge(count) {
-  const badge = document.getElementById('cartBadge');
-  badge.textContent = count;
-  badge.classList.toggle('show', count > 0);
-}
-
-// ═══ 찜 목록 ════════════════════════════════════════════
-const wishlistModalInst = new bootstrap.Modal(document.getElementById('wishlistModal'));
-
-document.getElementById('wishBtn').addEventListener('click', () => {
-  if (!isLoggedIn()) { showAuthPane('loginPane'); authModalInst.show(); return; }
-  openWishlistModal();
-});
-
-async function openWishlistModal() {
-  document.getElementById('wishlistBody').innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm"></div></div>';
-  wishlistModalInst.show();
-
-  const json = await api('GET', '/api/wishlist');
-  if (!json.success) { document.getElementById('wishlistBody').innerHTML = '<div class="text-center text-muted py-3">불러오기 실패</div>'; return; }
-
-  const items = Array.isArray(json.data) ? json.data : (json.data?.content ?? []);
-  if (!items.length) {
-    document.getElementById('wishlistBody').innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-heart d-block fs-3 mb-2"></i>찜한 상품이 없습니다</div>';
-    return;
-  }
-
-  document.getElementById('wishlistBody').innerHTML = items.map(i => `
-    <div class="d-flex align-items-center gap-2 py-2 border-bottom">
-      <div class="flex-grow-1">
-        <div class="fw-semibold small">${esc(i.productName ?? i.name)}</div>
-        <div class="text-muted" style="font-size:.75rem">${fmtMoney(i.price ?? 0)}원</div>
-      </div>
-      <button class="btn btn-outline-primary btn-sm" data-action="wish-detail" data-id="${i.productId ?? i.id}">상세</button>
-      <button class="btn btn-link p-0 text-danger" data-action="wish-remove" data-id="${i.productId ?? i.id}" style="font-size:.9rem">
-        <i class="bi bi-x-circle"></i>
-      </button>
-    </div>`).join('');
-}
-
-document.getElementById('wishlistBody').addEventListener('click', async e => {
-  const detailBtn = e.target.closest('[data-action="wish-detail"]');
-  if (detailBtn) { wishlistModalInst.hide(); openDetail(+detailBtn.dataset.id); return; }
-
-  const removeBtn = e.target.closest('[data-action="wish-remove"]');
-  if (removeBtn) {
-    const json = await api('DELETE', `/api/wishlist/${removeBtn.dataset.id}`);
-    if (!json.success) { showToast('삭제 실패', 'danger'); return; }
-    openWishlistModal();
-  }
-});
-
-async function toggleWishlist(productId, btn) {
-  if (!isLoggedIn()) { showAuthPane('loginPane'); authModalInst.show(); return; }
-  const isActive = btn.classList.contains('active');
-  const json = isActive
-    ? await api('DELETE', `/api/wishlist/${productId}`)
-    : await api('POST',   `/api/wishlist/${productId}`);
-  if (!json.success) { showToast(json.message || '오류가 발생했습니다', 'danger'); return; }
-  btn.classList.toggle('active', !isActive);
-  showToast(isActive ? '찜 해제되었습니다' : '찜 목록에 추가되었습니다', 'success');
-}
-
-// ═══ 유틸 ════════════════════════════════════════════════
-function statusBadge(status) {
-  if (status === 'ACTIVE')       return `<span style="font-size:.72rem;color:#1a7f4b;font-weight:700">● 판매중</span>`;
-  if (status === 'INACTIVE')     return `<span style="font-size:.72rem;color:#e65c00;font-weight:700">● 품절</span>`;
-  if (status === 'DISCONTINUED') return `<span style="font-size:.72rem;color:#888;font-weight:700">● 단종</span>`;
-  return '';
-}
-
-function showLoading(show) {
-  document.getElementById('loadingState').classList.toggle('d-none', !show);
-  document.getElementById('productGrid').classList.toggle('d-none', show);
-  document.getElementById('paginationWrap').classList.toggle('d-none', show);
-  if (show) document.getElementById('emptyState').classList.add('d-none');
-}
-
-function showEmpty() {
-  document.getElementById('productGrid').innerHTML    = '';
-  document.getElementById('emptyState').classList.remove('d-none');
-  document.getElementById('paginationWrap').innerHTML = '';
-  document.getElementById('resultCount').innerHTML    = '총 <strong>0</strong>개';
-}
-
-function highlight(text, keyword) {
-  if (!keyword) return esc(text);
-  const escaped = esc(text);
-  const kw = esc(keyword).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return escaped.replace(new RegExp(`(${kw})`, 'gi'), '<mark>$1</mark>');
-}
-
-function showToast(msg, type = 'info') {
-  const el = document.createElement('div');
-  el.className = `my-toast${type === 'danger' ? ' danger' : type === 'success' ? ' success' : ''}`;
-  el.textContent = msg;
-  document.getElementById('toast-container').appendChild(el);
-  setTimeout(() => el.remove(), 3000);
-}
-
-// ═══ 마이페이지 ══════════════════════════════════════════
-const myPageModalInst     = new bootstrap.Modal(document.getElementById('myPageModal'));
-const orderDetailModalInst= new bootstrap.Modal(document.getElementById('orderDetailModal'));
-let mpOrderPage = 0, mpPointPage = 0;
-
-document.getElementById('myPageBtn').addEventListener('click', () => { myPageModalInst.show(); loadMyOrders(0); });
-document.getElementById('ocMyPageBtn').addEventListener('click', () => {
-  bootstrap.Modal.getInstance(document.getElementById('orderCompleteModal'))?.hide();
-  myPageModalInst.show(); loadMyOrders(0);
-});
-
-// 마이페이지 탭 전환
-document.getElementById('myPageModal').addEventListener('click', e => {
-  const tab = e.target.closest('[data-mp]');
-  if (!tab) return;
-  document.querySelectorAll('.mypage-tab').forEach(b => b.classList.toggle('active', b === tab));
-  const mp = tab.dataset.mp;
-  document.getElementById('mpOrders').style.display = mp === 'orders' ? '' : 'none';
-  document.getElementById('mpPoints').style.display = mp === 'points' ? '' : 'none';
-  document.getElementById('mpCoupons').style.display= mp === 'coupons'? '' : 'none';
-  if (mp === 'points')  { loadPointBalance(); loadPointHistory(0); }
-  if (mp === 'coupons') loadMyCoupons();
-});
-
-async function loadMyOrders(page) {
-  mpOrderPage = page;
-  document.getElementById('mpOrderList').innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
-  const json = await api('GET', `/api/users/me/orders?page=${page}&size=5&sort=createdAt,desc`);
-  if (!json.success) { document.getElementById('mpOrderList').innerHTML = '<div class="text-muted small text-center py-3">불러오기 실패</div>'; return; }
-  const orders = json.data?.content ?? [];
-  const total  = json.data?.totalPages ?? 1;
-  if (!orders.length) {
-    document.getElementById('mpOrderList').innerHTML = '<div class="text-center text-muted py-4 small"><i class="bi bi-bag d-block fs-3 mb-2"></i>주문 내역이 없습니다</div>';
-    document.getElementById('mpOrderPager').innerHTML = '';
-    return;
-  }
-  document.getElementById('mpOrderList').innerHTML = orders.map(o => `
-    <div class="order-row" data-action="order-detail" data-id="${o.id}">
-      <div class="d-flex justify-content-between align-items-start">
-        <div>
-          <div class="small fw-bold">${esc(o.items?.[0]?.productName ?? '상품')}${o.items?.length > 1 ? ` 외 ${o.items.length-1}건` : ''}</div>
-          <div class="order-id mt-1">주문 #${o.id} · ${fmtDate(o.createdAt)}</div>
-        </div>
-        <div class="text-end">
-          <span class="status-badge badge-${o.status}">${orderStatusLabel(o.status)}</span>
-          <div class="order-total mt-1">${fmtMoney(o.totalAmount)}원</div>
-        </div>
-      </div>
-    </div>`).join('');
-  renderMpPager('mpOrderPager', page, total, loadMyOrders);
-}
-
-document.getElementById('mpOrders').addEventListener('click', e => {
-  const row = e.target.closest('[data-action="order-detail"]');
-  if (row) openOrderDetail(+row.dataset.id);
-});
-
-async function openOrderDetail(orderId) {
-  document.getElementById('orderDetailBody').innerHTML = '<div class="text-center py-4"><div class="spinner-border" style="color:var(--primary)"></div></div>';
-  document.getElementById('orderDetailFooter').innerHTML = '';
-  orderDetailModalInst.show();
-  const json = await api('GET', `/api/orders/${orderId}/detail`);
-  if (!json.success) { document.getElementById('orderDetailBody').innerHTML = '<div class="text-muted text-center py-3">불러오기 실패</div>'; return; }
-  const { order, payment, shipment } = json.data;
-  const canCancel = order.status === 'PENDING';
-  document.getElementById('orderDetailBody').innerHTML = `
-    <div class="order-detail-section">
-      <h6>주문 정보</h6>
-      <div class="d-flex justify-content-between small mb-1"><span class="text-muted">주문 번호</span><span>#${order.id}</span></div>
-      <div class="d-flex justify-content-between small mb-1"><span class="text-muted">주문 일시</span><span>${fmtDate(order.createdAt)}</span></div>
-      <div class="d-flex justify-content-between small mb-1"><span class="text-muted">상태</span><span class="status-badge badge-${order.status}">${orderStatusLabel(order.status)}</span></div>
-      ${order.discountAmount > 0 ? `<div class="d-flex justify-content-between small mb-1"><span class="text-muted">쿠폰 할인</span><span class="text-danger">-${fmtMoney(order.discountAmount)}원</span></div>` : ''}
-      ${order.usedPoints > 0 ? `<div class="d-flex justify-content-between small mb-1"><span class="text-muted">포인트 사용</span><span class="text-danger">-${fmtMoney(order.usedPoints)}P</span></div>` : ''}
-      <div class="d-flex justify-content-between small fw-bold border-top pt-2 mt-1"><span>결제 금액</span><span style="color:var(--primary)">${fmtMoney(order.totalAmount)}원</span></div>
-    </div>
-    <div class="order-detail-section">
-      <h6>주문 상품</h6>
-      ${(order.items ?? []).map(i => `
-        <div class="d-flex justify-content-between small py-1 border-bottom">
-          <span>${esc(i.productName)} × ${i.quantity}</span>
-          <span class="fw-bold">${fmtMoney(i.subtotal)}원</span>
-        </div>`).join('')}
-    </div>
-    ${payment ? `
-    <div class="order-detail-section">
-      <h6>결제 정보</h6>
-      <div class="d-flex justify-content-between small mb-1"><span class="text-muted">상태</span><span class="status-badge badge-${payment.status}">${payment.status}</span></div>
-      <div class="d-flex justify-content-between small mb-1"><span class="text-muted">금액</span><span>${fmtMoney(payment.amount)}원</span></div>
-      ${payment.approvedAt ? `<div class="d-flex justify-content-between small"><span class="text-muted">승인 일시</span><span>${fmtDate(payment.approvedAt)}</span></div>` : ''}
-    </div>` : ''}
-    ${shipment ? `
-    <div class="order-detail-section">
-      <h6>배송 정보</h6>
-      <div class="d-flex justify-content-between small mb-1"><span class="text-muted">상태</span><span class="status-badge badge-${shipment.status}">${shipmentStatusLabel(shipment.status)}</span></div>
-      ${shipment.carrier ? `<div class="d-flex justify-content-between small mb-1"><span class="text-muted">택배사</span><span>${esc(shipment.carrier)}</span></div>` : ''}
-      ${shipment.trackingNumber ? `<div class="d-flex justify-content-between small mb-1"><span class="text-muted">운송장 번호</span><span>${esc(shipment.trackingNumber)}</span></div>` : ''}
-      ${shipment.shippedAt ? `<div class="d-flex justify-content-between small mb-1"><span class="text-muted">출고 일시</span><span>${fmtDate(shipment.shippedAt)}</span></div>` : ''}
-      ${shipment.deliveredAt ? `<div class="d-flex justify-content-between small"><span class="text-muted">배송 완료</span><span>${fmtDate(shipment.deliveredAt)}</span></div>` : ''}
-    </div>` : ''}`;
-  if (canCancel) {
-    document.getElementById('orderDetailFooter').innerHTML =
-      `<button class="btn btn-sm btn-outline-danger" data-action="cancel-order" data-id="${order.id}">주문 취소</button>`;
-  }
-  if (payment && payment.status === 'PENDING') {
-    document.getElementById('orderDetailFooter').innerHTML +=
-      `<button class="btn btn-sm fw-bold ms-auto" style="background:var(--primary);color:#fff" data-action="pay-order" data-id="${order.id}" data-amount="${order.totalAmount}">결제하기</button>`;
-  }
-}
-
-document.getElementById('orderDetailFooter').addEventListener('click', async e => {
-  const cancelBtn = e.target.closest('[data-action="cancel-order"]');
-  if (cancelBtn) {
-    cancelBtn.disabled = true;
-    const json = await api('POST', `/api/orders/${cancelBtn.dataset.id}/cancel`);
-    cancelBtn.disabled = false;
-    if (!json.success) { showToast(json.message || '취소 실패', 'danger'); return; }
-    showToast('주문이 취소되었습니다', 'success');
-    orderDetailModalInst.hide();
-    loadMyOrders(mpOrderPage);
-  }
-  const payBtn = e.target.closest('[data-action="pay-order"]');
-  if (payBtn) openPaymentModal(+payBtn.dataset.id, +payBtn.dataset.amount);
-});
-
-// ═══ 포인트 ══════════════════════════════════════════════
-async function loadPointBalance() {
-  const json = await api('GET', '/api/points/balance');
-  const bal  = json.success ? (json.data?.balance ?? 0) : 0;
-  document.getElementById('mpPointBalance').textContent = `${fmtMoney(bal)} P`;
-}
-
-async function loadPointHistory(page) {
-  mpPointPage = page;
-  const json = await api('GET', `/api/points/history?page=${page}&size=10`);
-  if (!json.success) { document.getElementById('mpPointList').innerHTML = '<div class="text-muted small text-center py-2">불러오기 실패</div>'; return; }
-  const items = json.data?.content ?? [];
-  const total = json.data?.totalPages ?? 1;
-  if (!items.length) { document.getElementById('mpPointList').innerHTML = '<div class="text-muted small text-center py-3">포인트 내역이 없습니다</div>'; return; }
-  document.getElementById('mpPointList').innerHTML = items.map(tx => {
-    const isEarn = tx.amount > 0;
-    return `<div class="point-tx-row">
-      <div><div class="fw-semibold small">${esc(tx.description || tx.type)}</div><div style="font-size:.72rem;color:#aaa">${fmtDate(tx.createdAt)}</div></div>
-      <div class="tx-amount ${isEarn ? 'earn' : 'use'}">${isEarn ? '+' : ''}${fmtMoney(tx.amount)}P</div>
-    </div>`;
-  }).join('');
-  renderMpPager('mpPointPager', page, total, loadPointHistory);
-}
-
-// ═══ 쿠폰 ════════════════════════════════════════════════
-async function loadMyCoupons() {
-  document.getElementById('mpCouponList').innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
-  const json = await api('GET', '/api/coupons/my');
-  if (!json.success) { document.getElementById('mpCouponList').innerHTML = '<div class="text-muted small text-center py-3">불러오기 실패</div>'; return; }
-  const coupons = Array.isArray(json.data) ? json.data : [];
-  if (!coupons.length) { document.getElementById('mpCouponList').innerHTML = '<div class="text-center text-muted py-4 small"><i class="bi bi-ticket-perforated d-block fs-3 mb-2"></i>보유 쿠폰이 없습니다</div>'; return; }
-  document.getElementById('mpCouponList').innerHTML = coupons.map(c => {
-    const disc = c.discountType === 'PERCENTAGE' ? `${c.discountValue}% 할인` : `${fmtMoney(c.discountValue)}원 할인`;
-    return `<div class="coupon-card ${!c.isUsable ? 'opacity-50' : ''}">
-      <div class="d-flex justify-content-between align-items-start">
-        <div class="coupon-name">${esc(c.name)}</div>
-        <div class="fw-bold" style="color:var(--primary)">${disc}</div>
-      </div>
-      <div class="coupon-desc">${esc(c.code)}${c.minimumOrderAmount ? ` · ${fmtMoney(c.minimumOrderAmount)}원 이상` : ''}</div>
-      <div class="coupon-expire">유효기간: ${fmtDate(c.validUntil)} ${!c.isUsable ? '(사용불가)' : ''}</div>
-    </div>`;
-  }).join('');
-}
-
-// ═══ 배송지 ══════════════════════════════════════════════
-const addressModalInst = new bootstrap.Modal(document.getElementById('addressModal'));
-let addrList = [];
-
-async function loadAddresses() {
-  const json = await api('GET', '/api/delivery-addresses');
-  addrList   = json.success ? (Array.isArray(json.data) ? json.data : []) : [];
-  return addrList;
-}
-
-async function renderAddrList(containerId, selectMode = false) {
-  const list = await loadAddresses();
-  const el   = document.getElementById(containerId);
-  if (!list.length) { el.innerHTML = ''; return; }
-  el.innerHTML = list.map(a => `
-    <div class="addr-card ${a.isDefault && !selectMode ? 'selected' : ''}" data-addr-id="${a.id}">
-      <div class="d-flex justify-content-between align-items-center">
-        <div class="addr-alias">${esc(a.alias)} ${a.isDefault ? '<span class="addr-default">기본</span>' : ''}</div>
-        <div class="d-flex gap-1">
-          ${!a.isDefault ? `<button class="btn btn-link btn-sm p-0 text-muted" data-action="set-default" data-id="${a.id}" style="font-size:.72rem">기본 설정</button>` : ''}
-          <button class="btn btn-link btn-sm p-0 text-danger ms-1" data-action="del-addr" data-id="${a.id}" style="font-size:.72rem"><i class="bi bi-trash"></i></button>
-        </div>
-      </div>
-      <div class="addr-detail">${esc(a.recipient)} · ${esc(a.phone)}<br>${esc(a.address1)} ${esc(a.address2 ?? '')}</div>
-    </div>`).join('');
-}
-
-document.getElementById('addrList').addEventListener('click', async e => {
-  const defBtn = e.target.closest('[data-action="set-default"]');
-  if (defBtn) {
-    const json = await api('POST', `/api/delivery-addresses/${defBtn.dataset.id}/default`);
-    if (!json.success) { showToast(json.message || '설정 실패', 'danger'); return; }
-    renderAddrList('addrList');
-  }
-  const delBtn = e.target.closest('[data-action="del-addr"]');
-  if (delBtn) {
-    const json = await api('DELETE', `/api/delivery-addresses/${delBtn.dataset.id}`);
-    if (!json.success) { showToast(json.message || '삭제 실패', 'danger'); return; }
-    showToast('삭제되었습니다');
-    renderAddrList('addrList');
-  }
-});
-
-document.getElementById('addrSaveBtn').addEventListener('click', async () => {
-  const body = {
-    alias:     document.getElementById('addrAlias').value.trim(),
-    recipient: document.getElementById('addrRecipient').value.trim(),
-    phone:     document.getElementById('addrPhone').value.trim().replace(/\D/g,''),
-    zipCode:   document.getElementById('addrZip').value.trim(),
-    address1:  document.getElementById('addrAddr1').value.trim(),
-    address2:  document.getElementById('addrAddr2').value.trim() || null,
-  };
-  const errEl = document.getElementById('addrError');
-  if (!body.alias || !body.recipient || !body.phone || !body.zipCode || !body.address1) {
-    errEl.textContent = '상세주소를 제외한 모든 항목을 입력하세요'; errEl.classList.remove('d-none'); return;
-  }
-  errEl.classList.add('d-none');
-  const btn  = document.getElementById('addrSaveBtn');
-  btn.disabled = true;
-  const json = await api('POST', '/api/delivery-addresses', body);
-  btn.disabled = false;
-  if (!json.success) { errEl.textContent = json.message || '저장 실패'; errEl.classList.remove('d-none'); return; }
-  ['addrAlias','addrRecipient','addrPhone','addrZip','addrAddr1','addrAddr2'].forEach(id => document.getElementById(id).value = '');
-  showToast('배송지가 저장되었습니다', 'success');
-  renderAddrList('addrList');
-});
-
-// ═══ 체크아웃 ════════════════════════════════════════════
-const checkoutModalInst   = new bootstrap.Modal(document.getElementById('checkoutModal'));
-const paymentModalInst    = new bootstrap.Modal(document.getElementById('paymentModal'));
-const orderCompleteModalInst = new bootstrap.Modal(document.getElementById('orderCompleteModal'));
-let checkoutCart = null, selectedAddrId = null, coDiscount = 0, coPointBal = 0;
-
-async function openCheckout() {
-  coDiscount = 0; selectedAddrId = null;
-  document.getElementById('coError').classList.add('d-none');
-  document.getElementById('coCouponPreview').style.display = 'none';
-  document.getElementById('coUsePoints').value = '';
-  checkoutModalInst.show();
-
-  const [cartJson, addrJson, couponJson, pointJson] = await Promise.all([
-    api('GET', '/api/cart'),
-    api('GET', '/api/delivery-addresses'),
-    api('GET', '/api/coupons/my'),
-    api('GET', '/api/points/balance'),
-  ]);
-
-  // 상품 목록
-  checkoutCart   = cartJson.success ? cartJson.data : null;
-  const items    = checkoutCart?.items ?? [];
-  const itemTotal= items.reduce((s, i) => s + Number(i.unitPrice ?? i.price ?? 0) * i.quantity, 0);
-  document.getElementById('coItems').innerHTML = items.map(i =>
-    `<div class="d-flex justify-content-between small py-1"><span>${esc(i.productName)} × ${i.quantity}</span><span>${fmtMoney(Number(i.unitPrice ?? i.price ?? 0) * i.quantity)}원</span></div>`
-  ).join('');
-  document.getElementById('coItemTotal').textContent = `${fmtMoney(itemTotal)}원`;
-  document.getElementById('coFinalBase').textContent  = `${fmtMoney(itemTotal)}원`;
-
-  // 배송지
-  addrList = addrJson.success ? (Array.isArray(addrJson.data) ? addrJson.data : []) : [];
-  renderCoAddrList();
-  document.getElementById('coNoAddr').classList.toggle('d-none', addrList.length > 0);
-  const defaultAddr = addrList.find(a => a.isDefault) ?? addrList[0];
-  if (defaultAddr) selectedAddrId = defaultAddr.id;
-
-  // 쿠폰
-  const coupons  = couponJson.success ? (Array.isArray(couponJson.data) ? couponJson.data : []) : [];
-  const sel      = document.getElementById('coCouponSelect');
-  sel.innerHTML  = '<option value="">쿠폰 사용 안함</option>' +
-    coupons.filter(c => c.isUsable).map(c => {
-      const disc = c.discountType === 'PERCENTAGE' ? `${c.discountValue}%` : `${fmtMoney(c.discountValue)}원`;
-      return `<option value="${esc(c.code)}">[${disc}] ${esc(c.name)}</option>`;
     }).join('');
-
-  // 포인트
-  coPointBal = pointJson.success ? (pointJson.data?.balance ?? 0) : 0;
-  document.getElementById('coPointBalance').textContent = fmtMoney(coPointBal);
-  document.getElementById('coUseAllPoints').onclick = () => {
-    document.getElementById('coUsePoints').value = Math.min(coPointBal, itemTotal);
-    updateCoTotal();
-  };
-
-  updateCoTotal();
-}
-
-async function openCheckoutDirect(productId) {
-  // 먼저 장바구니에 추가 후 체크아웃
-  const json = await api('POST', '/api/cart/items', { productId, quantity: 1 });
-  if (!json.success) { showToast(json.message || '담기 실패', 'danger'); return; }
-  loadCartCount();
-  openCheckout();
-}
-
-function renderCoAddrList() {
-  const el = document.getElementById('coAddrList');
-  el.innerHTML = addrList.map(a => `
-    <div class="addr-card ${a.id === selectedAddrId ? 'selected' : ''}" data-action="select-addr" data-id="${a.id}">
-      <div class="addr-alias">${esc(a.alias)} ${a.isDefault ? '<span class="addr-default">기본</span>' : ''}</div>
-      <div class="addr-detail">${esc(a.recipient)} · ${esc(a.phone)}<br>${esc(a.address1)} ${esc(a.address2 ?? '')}</div>
-    </div>`).join('');
-}
-
-document.getElementById('coAddrList').addEventListener('click', e => {
-  const card = e.target.closest('[data-action="select-addr"]');
-  if (!card) return;
-  selectedAddrId = +card.dataset.id;
-  renderCoAddrList();
-});
-
-document.getElementById('coManageAddrBtn').addEventListener('click', () => {
-  checkoutModalInst.hide();
-  addressModalInst.show();
-  renderAddrList('addrList');
-  document.getElementById('addressModal').addEventListener('hidden.bs.modal', () => {
-    checkoutModalInst.show();
-    loadAddresses().then(() => { renderCoAddrList(); document.getElementById('coNoAddr').classList.toggle('d-none', addrList.length > 0); });
-  }, { once: true });
-});
-
-document.getElementById('coCouponSelect').addEventListener('change', async () => {
-  const code   = document.getElementById('coCouponSelect').value;
-  const prev   = document.getElementById('coCouponPreview');
-  coDiscount   = 0;
-  if (!code) { prev.style.display = 'none'; updateCoTotal(); return; }
-  const items  = checkoutCart?.items ?? [];
-  const total  = items.reduce((s, i) => s + Number(i.unitPrice ?? i.price ?? 0) * i.quantity, 0);
-  const json   = await api('POST', '/api/coupons/validate', { couponCode: code, orderAmount: total });
-  if (json.success) {
-    coDiscount = Number(json.data.discountAmount ?? 0);
-    prev.textContent = `${esc(json.data.couponName)}: -${fmtMoney(coDiscount)}원 할인`;
-    prev.style.display = '';
-  } else {
-    prev.textContent = json.message || '쿠폰 조회 실패';
-    prev.style.display = '';
+    renderPager('paginationWrap', state.page, totalPages, p => { state.page=p; loadProducts(); window.scrollTo({top:0,behavior:'smooth'}); });
+  } catch {
+    document.getElementById('loadingState').classList.add('d-none');
+    showToast('상품을 불러오지 못했습니다.', 'danger');
   }
-  updateCoTotal();
-});
-
-document.getElementById('coUsePoints').addEventListener('input', updateCoTotal);
-
-function updateCoTotal() {
-  const items     = checkoutCart?.items ?? [];
-  const base      = items.reduce((s, i) => s + Number(i.unitPrice ?? i.price ?? 0) * i.quantity, 0);
-  const usePoints = Math.min(Math.max(0, +document.getElementById('coUsePoints').value || 0), coPointBal, base);
-  const final     = Math.max(0, base - coDiscount - usePoints);
-  document.getElementById('coFinalBase').textContent = `${fmtMoney(base)}원`;
-  const discRow = document.getElementById('coDiscountRow');
-  const ptRow   = document.getElementById('coPointRow');
-  discRow.style.display = coDiscount > 0 ? '' : 'none';
-  ptRow.style.display   = usePoints > 0  ? '' : 'none';
-  document.getElementById('coDiscountAmt').textContent = `-${fmtMoney(coDiscount)}원`;
-  document.getElementById('coPointAmt').textContent    = `-${fmtMoney(usePoints)}P`;
-  document.getElementById('coFinalTotal').textContent  = `${fmtMoney(final)}원`;
+}
+function showEmpty() {
+  document.getElementById('productGrid').innerHTML=''; document.getElementById('paginationWrap').innerHTML='';
+  document.getElementById('emptyState').classList.remove('d-none');
+  document.getElementById('resultCount').innerHTML='총 <strong>0</strong>개';
 }
 
-document.getElementById('coPlaceBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('coPlaceBtn');
-  btn.disabled = true; btn.textContent = '처리 중...';
-  const couponCode  = document.getElementById('coCouponSelect').value || null;
-  const usePoints   = Math.max(0, +document.getElementById('coUsePoints').value || 0);
-  const body = {
-    idempotencyKey: `shop-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
-    couponCode:     couponCode || undefined,
-    usePoints:      usePoints || undefined,
-    deliveryAddressId: selectedAddrId || undefined,
-  };
-  const json = await api('POST', '/api/cart/checkout', body);
-  btn.disabled = false; btn.textContent = '주문 확인';
-  if (!json.success) {
-    document.getElementById('coError').textContent = json.message || '주문 생성 실패';
-    document.getElementById('coError').classList.remove('d-none');
-    return;
-  }
-  const order = json.data;
-  checkoutModalInst.hide();
-  loadCartCount();
-  openPaymentModal(order.id, order.totalAmount);
+document.getElementById('productGrid').addEventListener('click', e => {
+  const wishBtn = e.target.closest('[data-action="wish"]');
+  if (wishBtn) { e.stopPropagation(); toggleWish(+wishBtn.dataset.id, wishBtn); return; }
+  const card = e.target.closest('.product-card');
+  if (card) location.href = `/shop/product.html?id=${card.dataset.id}`;
 });
 
-// ═══ 결제 ════════════════════════════════════════════════
-let pmOrderId = null, pmTossOrderId = null, pmAmount = null;
-
-async function openPaymentModal(orderId, amount) {
-  pmOrderId = orderId; pmAmount = amount;
-  document.getElementById('pmOrderId').textContent   = `#${orderId}`;
-  document.getElementById('pmAmount').textContent    = `${fmtMoney(amount)}원`;
-  document.getElementById('pmTossOrderId').textContent = '준비 중...';
-  document.getElementById('pmPaymentKey').value      = '';
-  document.getElementById('pmError').classList.add('d-none');
-  paymentModalInst.show();
-
-  const json = await api('POST', '/api/payments/prepare', { orderId, amount });
-  if (!json.success) {
-    document.getElementById('pmError').textContent = json.message || '결제 준비 실패';
-    document.getElementById('pmError').classList.remove('d-none');
-    return;
-  }
-  pmTossOrderId = json.data.tossOrderId;
-  document.getElementById('pmTossOrderId').textContent = pmTossOrderId;
-  // 테스트용 paymentKey 자동 생성
-  document.getElementById('pmPaymentKey').value = `test_pk_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+async function toggleWish(productId, btn) {
+  if (!isLoggedIn()) { showAuthPane('loginPane'); new bootstrap.Modal(document.getElementById('authModal')).show(); return; }
+  const isActive = btn.classList.contains('active');
+  const json = isActive ? await api('DELETE', `/api/wishlist/${productId}`) : await api('POST', `/api/wishlist/${productId}`);
+  if (!json.success) { showToast(json.message || '오류', 'danger'); return; }
+  btn.classList.toggle('active', !isActive);
+  showToast(isActive ? '찜 해제' : '찜 추가', 'success');
 }
-
-document.getElementById('pmConfirmBtn').addEventListener('click', async () => {
-  const btn        = document.getElementById('pmConfirmBtn');
-  const paymentKey = document.getElementById('pmPaymentKey').value.trim();
-  if (!paymentKey) { document.getElementById('pmError').textContent = 'paymentKey를 입력하세요'; document.getElementById('pmError').classList.remove('d-none'); return; }
-  btn.disabled = true; btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>처리 중...';
-  const json = await api('POST', '/api/payments/confirm', { paymentKey, tossOrderId: pmTossOrderId, amount: pmAmount });
-  btn.disabled = false; btn.innerHTML = '<i class="bi bi-credit-card me-1"></i>결제 완료 처리';
-  if (!json.success) {
-    document.getElementById('pmError').textContent = json.message || '결제 실패';
-    document.getElementById('pmError').classList.remove('d-none');
-    return;
-  }
-  paymentModalInst.hide();
-  document.getElementById('ocOrderId').textContent = pmOrderId;
-  orderCompleteModalInst.show();
-});
-
-document.getElementById('pmCancelBtn').addEventListener('click', async () => {
-  if (!pmOrderId) return;
-  const json = await api('POST', `/api/orders/${pmOrderId}/cancel`);
-  paymentModalInst.hide();
-  showToast(json.success ? '주문이 취소되었습니다' : (json.message || '취소 실패'), json.success ? 'info' : 'danger');
-});
-
-// ═══ 리뷰 ════════════════════════════════════════════════
-let reviewPage = 0, reviewRating = 5;
-
-async function loadReviews(productId, page) {
-  reviewPage = page;
-  document.getElementById('reviewList').innerHTML = '<div class="text-center py-3 text-muted small"><div class="spinner-border spinner-border-sm"></div></div>';
-  const [rvJson, myJson] = await Promise.all([
-    api('GET', `/api/products/${productId}/reviews?page=${page}&size=5`),
-    isLoggedIn() ? api('GET', `/api/orders?status=CONFIRMED`) : Promise.resolve(null),
-  ]);
-  if (!rvJson.success) { document.getElementById('reviewList').innerHTML = '<div class="text-muted small text-center py-3">불러오기 실패</div>'; return; }
-  const reviews   = rvJson.data?.content ?? [];
-  const totalPages= rvJson.data?.totalPages ?? 1;
-  const avgRating = reviews.length ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) : 0;
-
-  document.getElementById('reviewAvgScore').textContent = reviews.length ? avgRating.toFixed(1) : '-';
-  document.getElementById('reviewStarDisplay').innerHTML = starHtml(Math.round(avgRating));
-  document.getElementById('reviewCountBadge').textContent = rvJson.data?.totalElements ?? 0;
-
-  // 리뷰 작성 폼: 로그인 + 구매 확정 상품 소유 확인
-  const hasPurchased = myJson?.success && (myJson.data?.content ?? []).some(
-    o => (o.items ?? []).some(i => i.productId === productId)
-  );
-  document.getElementById('reviewFormWrap').style.display = (isLoggedIn() && hasPurchased) ? '' : 'none';
-
-  if (!reviews.length) {
-    document.getElementById('reviewList').innerHTML = '<div class="text-muted small text-center py-4">아직 리뷰가 없습니다</div>';
-    document.getElementById('reviewPager').innerHTML = '';
-    return;
-  }
-  document.getElementById('reviewList').innerHTML = reviews.map(r => `
-    <div class="review-item">
-      <div class="d-flex justify-content-between align-items-center">
-        <div class="review-stars">${starHtml(r.rating)}</div>
-        <div class="review-meta">${fmtDate(r.createdAt)}</div>
-      </div>
-      <div class="review-title mt-1">${esc(r.title)}</div>
-      <div class="review-content">${esc(r.content)}</div>
-    </div>`).join('');
-  renderMpPager('reviewPager', page, totalPages, p => loadReviews(productId, p));
-}
-
-// 별점 입력
-document.getElementById('writeStars').addEventListener('mouseover', e => {
-  const star = e.target.closest('[data-val]');
-  if (!star) return;
-  const val = +star.dataset.val;
-  document.querySelectorAll('#writeStars i').forEach(i => i.classList.toggle('active', +i.dataset.val <= val));
-});
-document.getElementById('writeStars').addEventListener('mouseleave', () => {
-  document.querySelectorAll('#writeStars i').forEach(i => i.classList.toggle('active', +i.dataset.val <= reviewRating));
-});
-document.getElementById('writeStars').addEventListener('click', e => {
-  const star = e.target.closest('[data-val]');
-  if (!star) return;
-  reviewRating = +star.dataset.val;
-  document.querySelectorAll('#writeStars i').forEach(i => i.classList.toggle('active', +i.dataset.val <= reviewRating));
-});
-
-document.getElementById('submitReviewBtn').addEventListener('click', async () => {
-  const title   = document.getElementById('reviewTitle').value.trim();
-  const content = document.getElementById('reviewContent').value.trim();
-  if (!title || !content) { showToast('제목과 내용을 입력하세요', 'danger'); return; }
-  const btn = document.getElementById('submitReviewBtn');
-  btn.disabled = true;
-  const json = await api('POST', `/api/products/${currentProductId}/reviews`, { rating: reviewRating, title, content });
-  btn.disabled = false;
-  if (!json.success) { showToast(json.message || '리뷰 등록 실패', 'danger'); return; }
-  showToast('리뷰가 등록되었습니다', 'success');
-  document.getElementById('reviewTitle').value   = '';
-  document.getElementById('reviewContent').value = '';
-  reviewRating = 5;
-  document.querySelectorAll('#writeStars i').forEach(i => i.classList.toggle('active', +i.dataset.val <= 5));
-  loadReviews(currentProductId, 0);
-});
-
-// ═══ 공통 유틸 ═══════════════════════════════════════════
-function starHtml(n) {
-  return Array.from({length:5}, (_,i) => `<i class="bi bi-star${i < n ? '-fill' : ''}" style="color:${i < n ? '#f5a623':'#ddd'}"></i>`).join('');
-}
-function fmtDate(d) {
-  if (!d) return '';
-  return new Date(d).toLocaleDateString('ko-KR', { year:'2-digit', month:'2-digit', day:'2-digit' });
-}
-function orderStatusLabel(s) {
-  return { PENDING:'결제대기', CONFIRMED:'결제완료', CANCELLED:'취소됨' }[s] ?? s;
-}
-function shipmentStatusLabel(s) {
-  return { PREPARING:'배송준비', SHIPPED:'배송중', DELIVERED:'배송완료', RETURNED:'반품' }[s] ?? s;
-}
-function renderMpPager(wrapperId, page, total, cb) {
-  const el = document.getElementById(wrapperId);
-  if (total <= 1) { el.innerHTML = ''; return; }
-  el.innerHTML = `
-    <button class="page-btn ${page===0?'disabled':''}" data-p="${page-1}"><i class="bi bi-chevron-left"></i></button>
-    <span class="page-btn active" style="cursor:default">${page+1}/${total}</span>
-    <button class="page-btn ${page>=total-1?'disabled':''}" data-p="${page+1}"><i class="bi bi-chevron-right"></i></button>`;
-  el.querySelectorAll('.page-btn[data-p]').forEach(btn => {
-    if (!btn.classList.contains('disabled')) btn.addEventListener('click', () => cb(+btn.dataset.p));
-  });
-}
-
-// ═══ 초기화 ══════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', async () => {
-  updateAuthUI();
-  if (isLoggedIn()) loadCartCount();
-  await loadCategories();
-  loadProducts();
-});
 </script>
 </body>
 </html>
