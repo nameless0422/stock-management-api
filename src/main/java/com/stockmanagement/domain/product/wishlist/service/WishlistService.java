@@ -55,6 +55,12 @@ public class WishlistService {
         wishlistRepository.delete(item);
     }
 
+    /** 특정 상품의 위시리스트 추가 여부를 반환한다 (상품 상세 페이지 하트 아이콘용). */
+    public boolean isWishlisted(Long productId, String username) {
+        User user = findUser(username);
+        return wishlistRepository.existsByUserIdAndProductId(user.getId(), productId);
+    }
+
     /** 사용자의 위시리스트 목록을 조회한다. */
     public List<WishlistResponse> getList(String username) {
         User user = findUser(username);

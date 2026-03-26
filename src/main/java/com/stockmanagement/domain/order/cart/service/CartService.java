@@ -11,6 +11,8 @@ import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.service.OrderService;
+import com.stockmanagement.domain.inventory.entity.Inventory;
+import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
 import com.stockmanagement.domain.product.repository.ProductRepository;
@@ -19,7 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 장바구니 비즈니스 로직 서비스.
@@ -40,12 +44,19 @@ public class CartService {
 
     private final CartRepository cartRepository;
     private final ProductRepository productRepository;
+    private final InventoryRepository inventoryRepository;
     private final OrderService orderService;
 
-    /** 사용자의 장바구니 전체를 조회한다. */
+    /** 사용자의 장바구니 전체를 재고 상태 포함하여 조회한다. */
     public CartResponse getCart(Long userId) {
         List<CartItem> items = cartRepository.findByUserId(userId);
-        return CartResponse.from(userId, items);
+        if (items.isEmpty()) {
+            return CartResponse.from(userId, items, null);
+        }
+        List<Long> productIds = items.stream().map(i -> i.getProduct().getId()).toList();
+        Map<Long, Integer> availabilityMap = inventoryRepository.findAllByProductIdIn(productIds).stream()
+                .collect(Collectors.toMap(inv -> inv.getProduct().getId(), Inventory::getAvailable));
+        return CartResponse.from(userId, items, availabilityMap);
     }
 
     /**

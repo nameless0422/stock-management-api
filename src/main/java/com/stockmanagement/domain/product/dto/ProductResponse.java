@@ -2,12 +2,14 @@ package com.stockmanagement.domain.product.dto;
 
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
+import com.stockmanagement.domain.product.image.dto.ProductImageResponse;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.jackson.Jacksonized;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 상품 조회 응답 DTO.
@@ -38,8 +40,30 @@ public class ProductResponse {
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
 
-    /** Product 엔티티를 응답 DTO로 변환하는 정적 팩토리 메서드 */
+    /** 현재 가용 재고 수량 — null이면 재고 정보 미포함 */
+    private final Integer availableQuantity;
+    /** 상품 평균 별점 (0.0~5.0) — null이면 리뷰 없음 */
+    private final Double avgRating;
+    /** 총 리뷰 수 — null이면 리뷰 정보 미포함 */
+    private final Long reviewCount;
+    /** 상품 이미지 목록 — null이면 이미지 정보 미포함 (상세 조회 시만 포함) */
+    private final List<ProductImageResponse> images;
+
+    /** Product 엔티티만으로 변환 (재고·리뷰 통계 미포함). */
     public static ProductResponse from(Product product) {
+        return from(product, null, null, null, null);
+    }
+
+    /** Product 엔티티 + 재고·리뷰 통계를 포함한 전체 응답으로 변환 (이미지 미포함). */
+    public static ProductResponse from(Product product, Integer availableQuantity,
+                                       Double avgRating, Long reviewCount) {
+        return from(product, availableQuantity, avgRating, reviewCount, null);
+    }
+
+    /** Product 엔티티 + 재고·리뷰 통계 + 이미지 목록을 포함한 전체 응답으로 변환. */
+    public static ProductResponse from(Product product, Integer availableQuantity,
+                                       Double avgRating, Long reviewCount,
+                                       List<ProductImageResponse> images) {
         return ProductResponse.builder()
                 .id(product.getId())
                 .name(product.getName())
@@ -52,6 +76,10 @@ public class ProductResponse {
                 .status(product.getStatus())
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())
+                .availableQuantity(availableQuantity)
+                .avgRating(avgRating != null ? Math.round(avgRating * 10.0) / 10.0 : null)
+                .reviewCount(reviewCount)
+                .images(images)
                 .build();
     }
 }

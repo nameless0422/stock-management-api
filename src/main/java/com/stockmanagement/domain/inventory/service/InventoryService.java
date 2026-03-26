@@ -20,6 +20,7 @@ import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -101,7 +102,10 @@ public class InventoryService {
      */
     @DistributedLock(key = "'inventory:' + #productId")
     @Transactional
-    @CacheEvict(cacheNames = "inventory", key = "#productId")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "inventory", key = "#productId"),
+            @CacheEvict(cacheNames = "products",  key = "#productId")
+    })
     public InventoryResponse receive(Long productId, InventoryReceiveRequest request) {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
@@ -124,7 +128,10 @@ public class InventoryService {
      */
     @DistributedLock(key = "'inventory:' + #productId")
     @Transactional
-    @CacheEvict(cacheNames = "inventory", key = "#productId")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "inventory", key = "#productId"),
+            @CacheEvict(cacheNames = "products",  key = "#productId")
+    })
     public InventoryResponse adjust(Long productId, InventoryAdjustRequest request) {
         if (request.getQuantity() == 0) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
@@ -143,7 +150,10 @@ public class InventoryService {
      */
     @DistributedLock(key = "'inventory:' + #productId")
     @Transactional
-    @CacheEvict(cacheNames = "inventory", key = "#productId")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "inventory", key = "#productId"),
+            @CacheEvict(cacheNames = "products",  key = "#productId")
+    })
     public void reserve(Long productId, int quantity) {
         Inventory inventory = findByProductIdWithLock(productId);
         int availableBefore = inventory.getAvailable() + quantity; // reserve 전 가용 재고
@@ -162,7 +172,10 @@ public class InventoryService {
     /** 주문 취소 또는 결제 실패 시 예약을 해제한다. */
     @DistributedLock(key = "'inventory:' + #productId")
     @Transactional
-    @CacheEvict(cacheNames = "inventory", key = "#productId")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "inventory", key = "#productId"),
+            @CacheEvict(cacheNames = "products",  key = "#productId")
+    })
     public void releaseReservation(Long productId, int quantity) {
         Inventory inventory = findByProductIdWithLock(productId);
         inventory.releaseReservation(quantity);
@@ -172,7 +185,10 @@ public class InventoryService {
     /** 결제 완료 시 예약을 확정(allocated)으로 전환한다. */
     @DistributedLock(key = "'inventory:' + #productId")
     @Transactional
-    @CacheEvict(cacheNames = "inventory", key = "#productId")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "inventory", key = "#productId"),
+            @CacheEvict(cacheNames = "products",  key = "#productId")
+    })
     public void confirmAllocation(Long productId, int quantity) {
         Inventory inventory = findByProductIdWithLock(productId);
         inventory.confirmAllocation(quantity);
@@ -185,7 +201,10 @@ public class InventoryService {
      */
     @DistributedLock(key = "'inventory:' + #productId")
     @Transactional
-    @CacheEvict(cacheNames = "inventory", key = "#productId")
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "inventory", key = "#productId"),
+            @CacheEvict(cacheNames = "products",  key = "#productId")
+    })
     public void releaseAllocation(Long productId, int quantity) {
         Inventory inventory = findByProductIdWithLock(productId);
         inventory.releaseAllocation(quantity);

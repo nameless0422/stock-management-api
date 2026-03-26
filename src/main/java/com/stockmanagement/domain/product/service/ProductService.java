@@ -2,6 +2,8 @@ package com.stockmanagement.domain.product.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.inventory.entity.Inventory;
+import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.category.entity.Category;
 import com.stockmanagement.domain.product.category.repository.CategoryRepository;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
@@ -12,6 +14,10 @@ import com.stockmanagement.domain.product.dto.ProductUpdateRequest;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.product.image.dto.ProductImageResponse;
+import com.stockmanagement.domain.product.image.repository.ProductImageRepository;
+import com.stockmanagement.domain.product.review.repository.ReviewRepository;
+import com.stockmanagement.domain.product.review.repository.ReviewStatsProjection;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -23,6 +29,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 상품 비즈니스 로직 서비스.
@@ -42,6 +52,9 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final ProductSearchService productSearchService;
     private final CategoryRepository categoryRepository;
+    private final InventoryRepository inventoryRepository;
+    private final ReviewRepository reviewRepository;
+    private final ProductImageRepository productImageRepository;
 
     /**
      * 상품을 등록한다.
@@ -66,10 +79,10 @@ public class ProductService {
         return ProductResponse.from(saved);
     }
 
-    /** 단건 조회 — 캐시 hit 시 Redis에서 반환, miss 시 DB 조회 후 캐싱 */
+    /** 단건 조회 — 캐시 hit 시 Redis에서 반환, miss 시 DB + 재고·리뷰 통계 + 이미지 목록 조회 후 캐싱 */
     @Cacheable(cacheNames = "products", key = "#id")
     public ProductResponse getById(Long id) {
-        return ProductResponse.from(findById(id));
+        return buildProductResponseWithImages(findById(id));
     }
 
     /**
@@ -90,12 +103,13 @@ public class ProductService {
         // ES 미사용 또는 fallback: sort/keyword를 MySQL에서 처리
         Pageable effectivePageable = toSortedPageable(pageable, request);
         String keyword = request != null ? request.getQ() : null;
+        Page<Product> products;
         if (keyword != null && !keyword.isBlank()) {
-            return productRepository.searchByStatus(ProductStatus.ACTIVE, keyword, effectivePageable)
-                    .map(ProductResponse::from);
+            products = productRepository.searchByStatus(ProductStatus.ACTIVE, keyword, effectivePageable);
+        } else {
+            products = productRepository.findByStatus(ProductStatus.ACTIVE, effectivePageable);
         }
-        return productRepository.findByStatus(ProductStatus.ACTIVE, effectivePageable)
-                .map(ProductResponse::from);
+        return enrichPage(products);
     }
 
     /** sort 파라미터를 Pageable의 Sort로 변환 (MySQL fallback용) */
@@ -114,10 +128,10 @@ public class ProductService {
 
     /** 전체 상품 페이징 조회 (ACTIVE + DISCONTINUED, 관리자 전용). search가 있으면 상품명/SKU로 필터링 */
     public Page<ProductResponse> getListAll(Pageable pageable, String search) {
-        if (search != null && !search.isBlank()) {
-            return productRepository.searchAll(search, pageable).map(ProductResponse::from);
-        }
-        return productRepository.findAll(pageable).map(ProductResponse::from);
+        Page<Product> products = (search != null && !search.isBlank())
+                ? productRepository.searchAll(search, pageable)
+                : productRepository.findAll(pageable);
+        return enrichPage(products);
     }
 
     /**
@@ -132,7 +146,7 @@ public class ProductService {
         Category category = resolveCategory(request.getCategoryId());
         product.update(request.getName(), request.getDescription(), request.getPrice(), category);
         safeIndex(product);
-        return ProductResponse.from(product);
+        return buildProductResponse(product);
     }
 
     /**
@@ -154,16 +168,75 @@ public class ProductService {
     public ProductResponse changeStatus(Long id, ProductStatusRequest request) {
         Product product = findById(id);
         product.changeStatus(request.getStatus());
-        // ACTIVE → 색인, DISCONTINUED → 색인 삭제
         if (request.getStatus() == ProductStatus.ACTIVE) {
             safeIndex(product);
         } else {
             safeDeleteFromIndex(id);
         }
-        return ProductResponse.from(product);
+        return buildProductResponse(product);
     }
 
     // ===== 내부 헬퍼 =====
+
+    /**
+     * 단일 상품에 재고·리뷰 통계를 포함한 응답을 생성한다 (이미지 미포함).
+     * 재고 레코드가 없으면 availableQuantity=0, 리뷰가 없으면 avgRating=null, reviewCount=0.
+     */
+    private ProductResponse buildProductResponse(Product product) {
+        Integer available = inventoryRepository.findByProductId(product.getId())
+                .map(Inventory::getAvailable)
+                .orElse(0);
+        double avgRating = reviewRepository.avgRatingByProductId(product.getId());
+        long reviewCount = reviewRepository.countByProductId(product.getId());
+        return ProductResponse.from(product, available,
+                reviewCount > 0 ? avgRating : null,
+                reviewCount > 0 ? reviewCount : 0L);
+    }
+
+    /**
+     * 단일 상품에 재고·리뷰 통계 + 이미지 목록을 포함한 응답을 생성한다 (상세 조회용).
+     */
+    private ProductResponse buildProductResponseWithImages(Product product) {
+        Integer available = inventoryRepository.findByProductId(product.getId())
+                .map(Inventory::getAvailable)
+                .orElse(0);
+        double avgRating = reviewRepository.avgRatingByProductId(product.getId());
+        long reviewCount = reviewRepository.countByProductId(product.getId());
+        List<ProductImageResponse> images = productImageRepository
+                .findByProductIdOrderByDisplayOrderAsc(product.getId()).stream()
+                .map(ProductImageResponse::from)
+                .toList();
+        return ProductResponse.from(product, available,
+                reviewCount > 0 ? avgRating : null,
+                reviewCount > 0 ? reviewCount : 0L,
+                images);
+    }
+
+    /**
+     * 상품 페이지에 재고·리뷰 통계를 배치로 보강한다 (N+1 방지).
+     * 재고/리뷰 없는 상품은 0으로 처리한다.
+     */
+    private Page<ProductResponse> enrichPage(Page<Product> products) {
+        if (products.isEmpty()) return products.map(ProductResponse::from);
+
+        List<Long> ids = products.stream().map(Product::getId).toList();
+
+        Map<Long, Integer> availableMap = inventoryRepository.findAllByProductIdIn(ids).stream()
+                .collect(Collectors.toMap(i -> i.getProduct().getId(), Inventory::getAvailable));
+
+        Map<Long, ReviewStatsProjection> statsMap = reviewRepository
+                .findReviewStatsByProductIdIn(ids).stream()
+                .collect(Collectors.toMap(ReviewStatsProjection::getProductId, s -> s));
+
+        return products.map(p -> {
+            ReviewStatsProjection stats = statsMap.get(p.getId());
+            return ProductResponse.from(
+                    p,
+                    availableMap.getOrDefault(p.getId(), 0),
+                    stats != null ? stats.getAvgRating() : null,
+                    stats != null ? stats.getReviewCount() : 0L);
+        });
+    }
 
     /** 공통 조회 헬퍼 — 없으면 PRODUCT_NOT_FOUND 예외 발생 */
     private Product findById(Long id) {

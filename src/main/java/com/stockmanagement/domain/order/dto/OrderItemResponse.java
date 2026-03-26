@@ -33,8 +33,16 @@ public class OrderItemResponse {
     /** 소계 = unitPrice × quantity */
     private final BigDecimal subtotal;
 
-    /** OrderItem 엔티티를 응답 DTO로 변환하는 정적 팩토리 메서드 */
+    /** 리뷰 작성 여부 — null이면 정보 미포함, true/false면 작성 여부 */
+    private final Boolean hasReview;
+
+    /** OrderItem 엔티티를 응답 DTO로 변환 (hasReview 미포함). */
     public static OrderItemResponse from(OrderItem item) {
+        return from(item, null);
+    }
+
+    /** OrderItem 엔티티를 hasReview 포함 응답 DTO로 변환. */
+    public static OrderItemResponse from(OrderItem item, Boolean hasReview) {
         return OrderItemResponse.builder()
                 .id(item.getId())
                 .productId(item.getProduct().getId())
@@ -42,6 +50,7 @@ public class OrderItemResponse {
                 .quantity(item.getQuantity())
                 .unitPrice(item.getUnitPrice())
                 .subtotal(item.getSubtotal())
+                .hasReview(hasReview)
                 .build();
     }
 }

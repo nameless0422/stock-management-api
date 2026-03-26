@@ -3,6 +3,7 @@ package com.stockmanagement.domain.product.review.controller;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.product.review.dto.ReviewCreateRequest;
 import com.stockmanagement.domain.product.review.dto.ReviewResponse;
+import com.stockmanagement.domain.product.review.dto.ReviewUpdateRequest;
 import com.stockmanagement.domain.product.review.service.ReviewService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -39,6 +40,16 @@ public class ReviewController {
             @PathVariable Long productId,
             @PageableDefault(size = 20) Pageable pageable) {
         return ApiResponse.ok(reviewService.getList(productId, pageable));
+    }
+
+    @Operation(summary = "리뷰 수정 (작성자 본인)")
+    @PutMapping("/{reviewId}")
+    public ApiResponse<ReviewResponse> update(
+            @PathVariable Long productId,
+            @PathVariable Long reviewId,
+            @AuthenticationPrincipal String username,
+            @Valid @RequestBody ReviewUpdateRequest request) {
+        return ApiResponse.ok(reviewService.update(productId, reviewId, username, request));
     }
 
     @Operation(summary = "리뷰 삭제 (작성자 본인)")

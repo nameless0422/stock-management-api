@@ -52,4 +52,11 @@ public class Review {
         this.title = title;
         this.content = content;
     }
+
+    /** 별점·제목·내용을 수정한다. */
+    public void update(int rating, String title, String content) {
+        this.rating = rating;
+        this.title = title;
+        this.content = content;
+    }
 }

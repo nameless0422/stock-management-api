@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,6 +40,9 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long>, Jpa
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT i FROM Inventory i WHERE i.product.id = :productId")
     Optional<Inventory> findByProductIdWithLock(@Param("productId") Long productId);
+
+    /** 여러 상품의 재고를 한 번에 조회한다 (목록 조회 N+1 방지). */
+    List<Inventory> findAllByProductIdIn(Collection<Long> productIds);
 
     /** available(= onHand - reserved - allocated)이 threshold 미만인 저재고 목록 (대시보드용) */
     @Query("SELECT i FROM Inventory i JOIN FETCH i.product WHERE (i.onHand - i.reserved - i.allocated) < :threshold")

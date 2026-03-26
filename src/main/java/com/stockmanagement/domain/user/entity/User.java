@@ -64,6 +64,16 @@ public class User {
         this.role = role;
     }
 
+    /** 이메일을 변경한다. */
+    public void updateEmail(String email) {
+        this.email = email;
+    }
+
+    /** 비밀번호를 변경한다 (이미 인코딩된 값을 전달해야 한다). */
+    public void updatePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
     /** 회원 탈퇴 처리 — @SQLDelete가 DELETE → UPDATE로 변환하므로 직접 호출 불필요. JPA 표준 delete()와 함께 사용. */
     public void softDelete() {
         this.deletedAt = LocalDateTime.now();

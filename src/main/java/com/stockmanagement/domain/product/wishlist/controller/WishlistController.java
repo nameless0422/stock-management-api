@@ -38,6 +38,16 @@ public class WishlistController {
         wishlistService.remove(productId, username);
     }
 
+    @Operation(summary = "특정 상품의 위시리스트 추가 여부 조회",
+               description = "상품 상세 페이지의 하트 아이콘 상태에 사용. { \"wishlisted\": true/false } 반환.")
+    @GetMapping("/{productId}")
+    public ApiResponse<java.util.Map<String, Boolean>> isWishlisted(
+            @PathVariable Long productId,
+            @AuthenticationPrincipal String username) {
+        boolean wishlisted = wishlistService.isWishlisted(productId, username);
+        return ApiResponse.ok(java.util.Map.of("wishlisted", wishlisted));
+    }
+
     @Operation(summary = "내 위시리스트 목록 조회")
     @GetMapping
     public ApiResponse<List<WishlistResponse>> getList(

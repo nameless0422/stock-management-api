@@ -3,11 +3,15 @@ package com.stockmanagement.domain.user.service;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.dto.OrderResponse;
+import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.product.review.repository.ReviewRepository;
+import com.stockmanagement.domain.user.dto.ChangePasswordRequest;
 import com.stockmanagement.domain.user.dto.LoginRequest;
 import com.stockmanagement.domain.user.dto.LoginResponse;
 import com.stockmanagement.domain.user.dto.RefreshRequest;
 import com.stockmanagement.domain.user.dto.SignupRequest;
+import com.stockmanagement.domain.user.dto.UpdateProfileRequest;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
@@ -22,6 +26,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 /**
  * 유저 비즈니스 로직 서비스.
  *
@@ -34,6 +43,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
+    private final ReviewRepository reviewRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final LoginRateLimiter loginRateLimiter;
@@ -122,11 +132,43 @@ public class UserService {
         refreshTokenStore.revokeAll(username);
     }
 
-    /** 현재 인증된 사용자의 주문 목록 페이징 조회. */
+    /** 프로필(이메일) 수정. 이메일 변경 시 중복 여부 검증. */
+    @Transactional
+    public UserResponse updateProfile(String username, UpdateProfileRequest request) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (request.getEmail() != null && !request.getEmail().equals(user.getEmail())) {
+            if (userRepository.existsByEmail(request.getEmail())) {
+                throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+            }
+            user.updateEmail(request.getEmail());
+        }
+        return UserResponse.from(user);
+    }
+
+    /** 비밀번호 변경. 현재 비밀번호 확인 후 새 비밀번호로 교체. */
+    @Transactional
+    public void changePassword(String username, ChangePasswordRequest request) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+        }
+        user.updatePassword(passwordEncoder.encode(request.getNewPassword()));
+    }
+
+    /** 현재 인증된 사용자의 주문 목록 페이징 조회. hasReview 정보 포함. */
     public Page<OrderResponse> getMyOrders(String username, Pageable pageable) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        return orderRepository.findByUserId(user.getId(), pageable)
-                .map(OrderResponse::from);
+        Page<Order> orders = orderRepository.findByUserId(user.getId(), pageable);
+        // 페이지 내 전체 상품 ID를 한 번에 조회 (N+1 방지)
+        List<Long> allProductIds = orders.getContent().stream()
+                .flatMap(o -> o.getItems().stream().map(i -> i.getProduct().getId()))
+                .collect(Collectors.toList());
+        Set<Long> reviewedIds = allProductIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(reviewRepository.findReviewedProductIdsByUserId(user.getId(), allProductIds));
+        return orders.map(o -> OrderResponse.from(o, reviewedIds));
     }
 }
