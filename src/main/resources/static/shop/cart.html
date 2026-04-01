@@ -4,29 +4,28 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>장바구니 - StockMall</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="/shop/js/bootstrap.min.css" rel="stylesheet">
+  <link href="/shop/js/bootstrap-icons.min.css" rel="stylesheet">
   <link href="/shop/js/common.css" rel="stylesheet">
   <style>
     .content-wrap { max-width:760px; margin:0 auto; padding:1.5rem 1rem; }
     .page-title { font-size:1.15rem; font-weight:800; margin-bottom:1.2rem; }
     .cart-item { background:#fff; border:1px solid var(--border); border-radius:4px; padding:1rem; margin-bottom:.6rem; display:flex; align-items:center; gap:1rem; }
-    .item-thumb { width:72px; height:72px; border-radius:3px; background:#f5f5f5; overflow:hidden; flex-shrink:0; cursor:pointer; }
+    .item-thumb { width:72px; height:72px; border-radius:3px; background:#f5f5f5; overflow:hidden; flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#ccc; font-size:1.4rem; }
     .item-thumb img { width:100%; height:100%; object-fit:cover; }
-    .item-thumb-empty { width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#ccc; font-size:1.4rem; }
     .item-name { font-size:.88rem; font-weight:600; margin-bottom:.2rem; cursor:pointer; }
     .item-name:hover { color:var(--primary); }
     .item-price { font-size:.82rem; color:#888; }
     .qty-ctrl { display:flex; align-items:center; gap:6px; }
-    .qty-btn { width:26px; height:26px; border:1px solid #ddd; border-radius:2px; background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:.9rem; }
+    .qty-btn { width:28px; height:28px; border:1px solid #ddd; border-radius:2px; background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:.9rem; transition:all .12s; }
     .qty-btn:hover { border-color:var(--primary); color:var(--primary); }
-    .qty-val { min-width:28px; text-align:center; font-size:.88rem; font-weight:600; }
-    .item-subtotal { font-weight:800; font-size:.95rem; color:var(--primary); white-space:nowrap; }
-    .item-del { background:none; border:none; color:#ccc; cursor:pointer; font-size:1.1rem; padding:.2rem; }
+    .qty-val { min-width:32px; text-align:center; font-size:.88rem; font-weight:700; }
+    .item-subtotal { font-weight:800; font-size:.95rem; color:var(--primary); white-space:nowrap; min-width:70px; text-align:right; }
+    .item-del { background:none; border:none; color:#ccc; cursor:pointer; font-size:1.1rem; padding:.2rem; transition:color .12s; }
     .item-del:hover { color:#e74c3c; }
-    .unavail-badge { font-size:.7rem; color:#e65c00; font-weight:600; }
+    .unavail-badge { font-size:.7rem; color:#e65c00; font-weight:600; margin-top:2px; }
     .summary-box { background:#fff; border:1px solid var(--border); border-radius:4px; padding:1.2rem; margin-top:1rem; }
-    .summary-row { display:flex; justify-content:space-between; font-size:.85rem; margin-bottom:.5rem; }
+    .summary-row { display:flex; justify-content:space-between; font-size:.85rem; margin-bottom:.5rem; color:#555; }
     .summary-total { display:flex; justify-content:space-between; font-size:1.05rem; font-weight:800; padding-top:.75rem; border-top:2px solid var(--border); margin-top:.5rem; }
     .summary-total span:last-child { color:var(--primary); }
     .empty-cart { text-align:center; padding:5rem 0; color:#bbb; }
@@ -76,7 +75,7 @@
     <div id="cartItems"></div>
     <div class="summary-box">
       <div class="summary-row"><span>상품 합계</span><span id="sumBase"></span></div>
-      <div class="summary-row text-success"><span><i class="bi bi-truck me-1"></i>배송비</span><span>무료</span></div>
+      <div class="summary-row" style="color:#1a7f4b"><span><i class="bi bi-truck me-1"></i>배송비</span><span>무료</span></div>
       <div class="summary-total"><span>총 결제 예상금액</span><span id="sumTotal"></span></div>
     </div>
     <div class="d-flex gap-2 mt-3">
@@ -89,7 +88,7 @@
 </div>
 
 <div id="toast-container"></div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/shop/js/bootstrap.bundle.min.js"></script>
 <script src="/shop/js/common.js"></script>
 <script>
 'use strict';
@@ -113,23 +112,23 @@ async function loadCart() {
   cartItems = json.data?.items ?? [];
 
   if (!cartItems.length) { document.getElementById('emptyCart').style.display = ''; return; }
-
   document.getElementById('cartArea').style.display = '';
-  document.getElementById('itemCountLabel').textContent = `총 ${cartItems.length}개 상품`;
-  renderCartItems();
-  renderSummary();
-  loadCartCount();
+  renderCart();
+  updateCartBadge(cartItems.length);
 }
 
-function renderCartItems() {
+function renderCart() {
+  document.getElementById('itemCountLabel').textContent = `총 ${cartItems.length}개 상품`;
   document.getElementById('cartItems').innerHTML = cartItems.map(item => {
-    const price   = Number(item.unitPrice ?? 0);
-    const subtotal= price * item.quantity;
-    const unavail = item.isAvailable === false;
-    const thumb   = `<div class="item-thumb-empty"><i class="bi bi-box-seam"></i></div>`;
+    const price    = Number(item.unitPrice ?? 0);
+    const subtotal = price * item.quantity;
+    const unavail  = item.isAvailable === false;
+    const thumb    = item.thumbnailUrl
+      ? `<img src="${esc(item.thumbnailUrl)}" alt="${esc(item.productName)}">`
+      : `<i class="bi bi-box-seam"></i>`;
     return `<div class="cart-item" data-pid="${item.productId}">
       <div class="item-thumb" data-action="go-product" data-id="${item.productId}">${thumb}</div>
-      <div class="flex-grow-1">
+      <div class="flex-grow-1" style="min-width:0">
         <div class="item-name" data-action="go-product" data-id="${item.productId}">${esc(item.productName)}</div>
         <div class="item-price">${fmtMoney(price)}원</div>
         ${unavail ? `<div class="unavail-badge"><i class="bi bi-exclamation-circle me-1"></i>현재 구매 불가</div>` : ''}
@@ -143,41 +142,63 @@ function renderCartItems() {
       <button class="item-del" data-action="remove" data-pid="${item.productId}"><i class="bi bi-x-lg"></i></button>
     </div>`;
   }).join('');
-}
 
-function renderSummary() {
   const total = cartItems.reduce((s, i) => s + Number(i.unitPrice ?? 0) * i.quantity, 0);
   document.getElementById('sumBase').textContent  = `${fmtMoney(total)}원`;
   document.getElementById('sumTotal').textContent = `${fmtMoney(total)}원`;
 }
 
+function showEmpty() {
+  cartItems = [];
+  document.getElementById('cartArea').style.display  = 'none';
+  document.getElementById('emptyCart').style.display = '';
+  updateCartBadge(0);
+}
+
 document.getElementById('cartItems').addEventListener('click', async e => {
-  const goBtn  = e.target.closest('[data-action="go-product"]');
-  if (goBtn) { location.href = `/shop/product.html?id=${goBtn.dataset.id}`; return; }
+  if (e.target.closest('[data-action="go-product"]')) {
+    location.href = `/shop/product.html?id=${e.target.closest('[data-id]').dataset.id}`;
+    return;
+  }
 
   const remBtn = e.target.closest('[data-action="remove"]');
   if (remBtn) {
-    const json = await api('DELETE', `/api/cart/items/${remBtn.dataset.pid}`);
+    const pid  = +remBtn.dataset.pid;
+    const json = await api('DELETE', `/api/cart/items/${pid}`);
     if (!json.success) { showToast('삭제 실패', 'danger'); return; }
-    await loadCart();
+    cartItems = cartItems.filter(i => i.productId !== pid);
+    if (!cartItems.length) { showEmpty(); return; }
+    renderCart();
+    updateCartBadge(cartItems.length);
     return;
   }
 
   const minusBtn = e.target.closest('[data-action="qty-minus"]');
   if (minusBtn) {
-    const item = cartItems.find(i => i.productId === +minusBtn.dataset.pid);
+    const pid  = +minusBtn.dataset.pid;
+    const item = cartItems.find(i => i.productId === pid);
     if (!item) return;
-    if (item.quantity <= 1) { const json = await api('DELETE', `/api/cart/items/${item.productId}`); if (json.success) await loadCart(); return; }
-    await api('POST', '/api/cart/items', { productId: item.productId, quantity: item.quantity - 1 });
-    await loadCart(); return;
+    if (item.quantity <= 1) {
+      const json = await api('DELETE', `/api/cart/items/${pid}`);
+      if (json.success) { cartItems = cartItems.filter(i => i.productId !== pid); if (!cartItems.length) { showEmpty(); return; } renderCart(); updateCartBadge(cartItems.length); }
+      return;
+    }
+    item.quantity--;
+    renderCart();
+    const json = await api('POST', '/api/cart/items', { productId: pid, quantity: item.quantity });
+    if (!json.success) { item.quantity++; renderCart(); showToast('수량 변경 실패', 'danger'); }
+    return;
   }
 
   const plusBtn = e.target.closest('[data-action="qty-plus"]');
   if (plusBtn) {
-    const item = cartItems.find(i => i.productId === +plusBtn.dataset.pid);
+    const pid  = +plusBtn.dataset.pid;
+    const item = cartItems.find(i => i.productId === pid);
     if (!item) return;
-    await api('POST', '/api/cart/items', { productId: item.productId, quantity: item.quantity + 1 });
-    await loadCart();
+    item.quantity++;
+    renderCart();
+    const json = await api('POST', '/api/cart/items', { productId: pid, quantity: item.quantity });
+    if (!json.success) { item.quantity--; renderCart(); showToast('수량 변경 실패', 'danger'); }
   }
 });
 
@@ -185,7 +206,7 @@ document.getElementById('clearAllBtn').addEventListener('click', async () => {
   if (!confirm('장바구니를 비우시겠습니까?')) return;
   const json = await api('DELETE', '/api/cart');
   if (!json.success) { showToast('실패', 'danger'); return; }
-  await loadCart();
+  showEmpty();
 });
 </script>
 </body>
