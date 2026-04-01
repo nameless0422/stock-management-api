@@ -15,6 +15,7 @@ import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -42,9 +43,12 @@ public class ShipmentService {
      * 결제 완료된 주문에 대해 배송을 생성한다.
      * PaymentService.confirm()에서 호출된다.
      *
+     * <p>{@code REQUIRES_NEW}: 결제 확정 트랜잭션과 독립적으로 커밋/롤백된다.
+     * 배송 생성 실패가 결제 확정 트랜잭션을 rollback-only로 오염시키지 않도록 하기 위함.
+     *
      * @throws BusinessException 주문이 CONFIRMED 상태가 아닌 경우, 또는 이미 배송이 존재하는 경우
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public ShipmentResponse createForOrder(Long orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));

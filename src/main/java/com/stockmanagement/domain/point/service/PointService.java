@@ -16,14 +16,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 포인트 적립/사용/환불을 처리하는 서비스.
  *
- * <p>잔액 변경 메서드({@code earn}, {@code use}, {@code refundByOrder})는
- * {@code @Transactional}(REQUIRED)로 선언되어 있으므로,
- * 호출 측 트랜잭션이 있으면 참여하고 없으면 새 트랜잭션을 시작한다.
+ * <p>트랜잭션 전략:
+ * <ul>
+ *   <li>{@code earn} — {@code REQUIRES_NEW}: 결제 확정 트랜잭션과 독립 커밋 (실패해도 결제 롤백 방지)
+ *   <li>{@code use}, {@code refundByOrder} — {@code REQUIRED}: 주문 생성/취소 트랜잭션에 참여 (원자성 보장)
+ * </ul>
  */
 @Slf4j
 @Service
@@ -56,16 +59,19 @@ public class PointService {
                 .map(PointTransactionResponse::from);
     }
 
-    // ===== 변경 (호출 측 트랜잭션 필요) =====
+    // ===== 변경 =====
 
     /**
      * 결제 완료 시 포인트를 적립한다 (결제금액의 1%).
      *
-     * @param userId    수혜 사용자 ID
+     * <p>{@code REQUIRES_NEW}: 결제 확정 트랜잭션과 독립적으로 커밋/롤백된다.
+     * 포인트 적립 실패가 결제 확정 트랜잭션을 rollback-only로 오염시키지 않도록 하기 위함.
+     *
+     * @param userId     수혜 사용자 ID
      * @param paidAmount 실 결제 금액 (포인트/쿠폰 차감 후)
-     * @param orderId   연관 주문 ID
+     * @param orderId    연관 주문 ID
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void earn(Long userId, long paidAmount, Long orderId) {
         long earnAmount = Math.max(1L, Math.round(paidAmount * EARN_RATE));
         UserPoint userPoint = getOrCreate(userId);
