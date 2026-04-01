@@ -176,7 +176,12 @@ public class OrderService {
         // 5. Order 저장 (cascade로 OrderItems도 함께 저장)
         Order savedOrder = orderRepository.save(order);
 
-        // 6. 쿠폰 적용 — 쿠폰 코드가 있으면 할인 금액 계산 및 사용 기록
+        // 6. 재고 예약 (fail-fast: 재고 부족이 가장 빈번한 실패 원인이므로 쿠폰/포인트 처리 전에 검증)
+        for (OrderItem item : savedOrder.getItems()) {
+            inventoryService.reserve(item.getProduct().getId(), item.getQuantity());
+        }
+
+        // 7. 쿠폰 적용 — 쿠폰 코드가 있으면 할인 금액 계산 및 사용 기록
         if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
             var result = couponService.applyCoupon(
                     request.getCouponCode(), userId,
@@ -184,14 +189,9 @@ public class OrderService {
             savedOrder.applyDiscount(result.getCouponId(), result.getDiscountAmount());
         }
 
-        // 7. 포인트 차감 (사용 포인트가 있으면)
+        // 8. 포인트 차감 (사용 포인트가 있으면)
         if (usePointsLong > 0) {
             pointService.use(savedOrder.getUserId(), usePointsLong, savedOrder.getId());
-        }
-
-        // 8. 재고 예약 — 예외 발생 시 전체 트랜잭션 롤백
-        for (OrderItem item : savedOrder.getItems()) {
-            inventoryService.reserve(item.getProduct().getId(), item.getQuantity());
         }
 
         // 9. 상태 이력 기록 (최초 생성: fromStatus=null, toStatus=PENDING)
@@ -226,13 +226,7 @@ public class OrderService {
     public OrderResponse getByIdForUser(Long id, String username, boolean isAdmin) {
         Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        if (!isAdmin) {
-            Long userId = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
-            if (!order.getUserId().equals(userId)) {
-                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
-            }
-        }
+        validateOrderOwnership(order, username, isAdmin);
         return OrderResponse.from(order);
     }
 
@@ -243,13 +237,7 @@ public class OrderService {
     public OrderDetailResponse getDetail(Long id, String username, boolean isAdmin) {
         Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        if (!isAdmin) {
-            Long userId = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
-            if (!order.getUserId().equals(userId)) {
-                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
-            }
-        }
+        validateOrderOwnership(order, username, isAdmin);
         PaymentResponse payment = paymentRepository.findByOrderId(order.getId())
                 .map(PaymentResponse::from)
                 .orElse(null);
@@ -299,13 +287,7 @@ public class OrderService {
     public List<OrderStatusHistoryResponse> getHistory(Long orderId, String username, boolean isAdmin) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        if (!isAdmin) {
-            Long userId = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
-            if (!order.getUserId().equals(userId)) {
-                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
-            }
-        }
+        validateOrderOwnership(order, username, isAdmin);
         return historyRepository.findByOrderIdOrderByCreatedAtAsc(orderId)
                 .stream().map(OrderStatusHistoryResponse::from).toList();
     }
@@ -331,13 +313,7 @@ public class OrderService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
         // 요청자가 주문 소유자인지 검증 (ADMIN은 모든 주문 취소 가능)
-        if (!isAdmin) {
-            Long userId = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
-            if (!order.getUserId().equals(userId)) {
-                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
-            }
-        }
+        validateOrderOwnership(order, username, isAdmin);
 
         // 상태 검증 + CANCELLED 전환 (PENDING이 아니면 INVALID_ORDER_STATUS 예외)
         order.cancel();
@@ -415,6 +391,22 @@ public class OrderService {
     }
 
     // ===== 내부 헬퍼 =====
+
+    /**
+     * 주문 소유권을 검증한다.
+     * ADMIN은 모든 주문에 접근 가능하고, USER는 본인 주문만 접근할 수 있다.
+     *
+     * @throws BusinessException USER가 타인 주문에 접근 시 {@code ORDER_ACCESS_DENIED}
+     */
+    private void validateOrderOwnership(Order order, String username, boolean isAdmin) {
+        if (!isAdmin) {
+            Long userId = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
+            if (!order.getUserId().equals(userId)) {
+                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
+            }
+        }
+    }
 
     /** 주문 항목들의 상품 ID 중 사용자가 리뷰를 작성한 ID 집합을 반환한다. */
     private Set<Long> reviewedProductIds(Long userId, List<OrderItem> items) {
