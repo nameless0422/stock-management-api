@@ -35,7 +35,9 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException e) {
-        log.warn("BusinessException: {}", e.getMessage());
+        // errorCode.name()으로 로깅 — getMessage()에는 사용자 입력 유래 데이터가 포함될 수 있으므로 DEBUG로 격리
+        log.warn("BusinessException: [{}]", e.getErrorCode().name());
+        log.debug("BusinessException detail: {}", e.getMessage());
         ErrorCode errorCode = e.getErrorCode();
         return ResponseEntity
                 .status(errorCode.getHttpStatus())
@@ -75,7 +77,9 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException e) {
-        log.warn("DataIntegrityViolationException: {}", e.getMostSpecificCause().getMessage());
+        // DB 스키마·제약조건명이 노출되지 않도록 상세 메시지는 DEBUG로만 기록
+        log.warn("DataIntegrityViolationException: [{}]", e.getMostSpecificCause().getClass().getSimpleName());
+        log.debug("DataIntegrityViolationException detail: {}", e.getMostSpecificCause().getMessage());
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error("데이터 무결성 제약 조건을 위반했습니다."));

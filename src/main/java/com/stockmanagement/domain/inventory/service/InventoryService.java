@@ -18,6 +18,7 @@ import com.stockmanagement.common.event.LowStockEvent;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
@@ -43,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>비관적 락({@code findByProductIdWithLock}): 단일 인스턴스 DB 레벨 보조 락
  * </ul>
  */
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -178,6 +180,10 @@ public class InventoryService {
     })
     public void releaseReservation(Long productId, int quantity) {
         Inventory inventory = findByProductIdWithLock(productId);
+        if (inventory.getReserved() < quantity) {
+            log.warn("[Inventory] 예약 해제 수량이 현재 reserved보다 큽니다 (데이터 불일치): " +
+                    "productId={}, reserved={}, 요청={}", productId, inventory.getReserved(), quantity);
+        }
         inventory.releaseReservation(quantity);
         recordTransaction(inventory, InventoryTransactionType.RELEASE_RESERVATION, quantity);
     }
@@ -207,6 +213,10 @@ public class InventoryService {
     })
     public void releaseAllocation(Long productId, int quantity) {
         Inventory inventory = findByProductIdWithLock(productId);
+        if (inventory.getAllocated() < quantity) {
+            log.warn("[Inventory] 배분 해제 수량이 현재 allocated보다 큽니다 (데이터 불일치): " +
+                    "productId={}, allocated={}, 요청={}", productId, inventory.getAllocated(), quantity);
+        }
         inventory.releaseAllocation(quantity);
         recordTransaction(inventory, InventoryTransactionType.RELEASE_ALLOCATION, quantity);
     }
