@@ -3,6 +3,7 @@ package com.stockmanagement.domain.product.entity;
 import com.stockmanagement.domain.product.category.entity.Category;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -21,6 +22,7 @@ import java.time.LocalDateTime;
  *   <li>JPA 프록시 생성을 위해 기본 생성자는 PROTECTED로 제한한다.
  * </ul>
  */
+@BatchSize(size = 50)
 @Entity
 @Table(name = "products")
 @Getter

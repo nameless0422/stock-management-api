@@ -4,6 +4,7 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
+import org.hibernate.annotations.BatchSize;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -64,6 +65,7 @@ public class Order {
      * cascade = ALL: Order 저장/삭제 시 items도 함께 처리
      * orphanRemoval = true: items 컬렉션에서 제거되면 DB에서도 삭제
      */
+    @BatchSize(size = 50)
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private final List<OrderItem> items = new ArrayList<>();
 
