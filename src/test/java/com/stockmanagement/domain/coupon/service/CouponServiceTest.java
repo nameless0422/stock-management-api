@@ -272,7 +272,7 @@ class CouponServiceTest {
         UserCoupon userCoupon = UserCoupon.builder().userId(USER_ID).coupon(coupon).build();
 
         given(userCouponRepository.findByUserId(USER_ID)).willReturn(List.of(userCoupon));
-        given(couponUsageRepository.countByCoupon_IdAndUserId(any(), eq(USER_ID))).willReturn(0);
+        given(couponUsageRepository.countByCouponIdsAndUserId(any(), eq(USER_ID))).willReturn(List.of());
 
         var result = couponService.getMyCoupons(USER_ID);
 
@@ -295,6 +295,7 @@ class CouponServiceTest {
         UserCoupon userCoupon = UserCoupon.builder().userId(USER_ID).coupon(expired).build();
 
         given(userCouponRepository.findByUserId(USER_ID)).willReturn(List.of(userCoupon));
+        given(couponUsageRepository.countByCouponIdsAndUserId(any(), eq(USER_ID))).willReturn(List.of());
 
         var result = couponService.getMyCoupons(USER_ID);
 
