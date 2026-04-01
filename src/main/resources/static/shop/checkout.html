@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>주문하기 - StockMall</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="/shop/js/bootstrap.min.css" rel="stylesheet">
+  <link href="/shop/js/bootstrap-icons.min.css" rel="stylesheet">
   <link href="/shop/js/common.css" rel="stylesheet">
   <style>
     .content-wrap { max-width:840px; margin:0 auto; padding:1.5rem 1rem; }
@@ -139,7 +139,7 @@
 </div>
 
 <div id="toast-container"></div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/shop/js/bootstrap.bundle.min.js"></script>
 <script src="/shop/js/common.js"></script>
 <script>
 'use strict';
@@ -198,7 +198,10 @@ async function loadAll() {
   document.getElementById('clearPointsBtn').addEventListener('click', () => {
     document.getElementById('usePoints').value = ''; updateSummary();
   });
-  document.getElementById('usePoints').addEventListener('input', updateSummary);
+  document.getElementById('usePoints').addEventListener('input', () => {
+    document.getElementById('placeError').classList.add('d-none');
+    updateSummary();
+  });
 
   document.getElementById('checkoutArea').style.display = '';
   updateSummary();
@@ -288,7 +291,8 @@ function calcBase() {
 }
 function updateSummary() {
   const base      = calcBase();
-  const usePoints = Math.min(Math.max(0, +document.getElementById('usePoints').value || 0), pointBal, base);
+  const raw       = parseInt(document.getElementById('usePoints').value, 10);
+  const usePoints = Math.min(Math.max(0, isNaN(raw) ? 0 : raw), pointBal, base);
   const final     = Math.max(0, base - discount - usePoints);
   document.getElementById('priceBase').textContent     = `${fmtMoney(base)}원`;
   document.getElementById('priceDiscount').textContent = `-${fmtMoney(discount)}원`;
@@ -302,7 +306,8 @@ function updateSummary() {
 document.getElementById('placeOrderBtn').addEventListener('click', async () => {
   const errEl = document.getElementById('placeError');
   errEl.classList.add('d-none');
-  const usePoints = Math.min(Math.max(0, +document.getElementById('usePoints').value || 0), pointBal);
+  const rawPts    = parseInt(document.getElementById('usePoints').value, 10);
+  const usePoints = Math.min(Math.max(0, isNaN(rawPts) ? 0 : rawPts), pointBal, calcBase());
   const couponCode = document.getElementById('couponSelect').value || null;
   const body = {
     idempotencyKey:    `order-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,

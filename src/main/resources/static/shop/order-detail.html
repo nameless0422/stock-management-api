@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>주문 상세 - StockMall</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="/shop/js/bootstrap.min.css" rel="stylesheet">
+  <link href="/shop/js/bootstrap-icons.min.css" rel="stylesheet">
   <link href="/shop/js/common.css" rel="stylesheet">
   <style>
     .content-wrap { max-width:720px; margin:0 auto; padding:1.5rem 1rem; }
@@ -96,7 +96,7 @@
 </div>
 
 <div id="toast-container"></div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/shop/js/bootstrap.bundle.min.js"></script>
 <script src="/shop/js/common.js"></script>
 <script>
 'use strict';
@@ -148,12 +148,13 @@ async function loadOrderDetail() {
 
   // 결제 정보
   if (payment) {
+    const payLabel = { PENDING:'결제대기', DONE:'결제완료', FAILED:'결제실패', CANCELLED:'취소됨' }[payment.status] ?? payment.status;
     document.getElementById('paymentSection').style.display = '';
     document.getElementById('paymentRows').innerHTML = `
-      <div class="info-row"><span class="label">상태</span><span class="value"><span class="status-badge badge-${payment.status}">${payment.status}</span></span></div>
+      <div class="info-row"><span class="label">상태</span><span class="value"><span class="status-badge badge-${payment.status}">${payLabel}</span></span></div>
       <div class="info-row"><span class="label">결제 금액</span><span class="value">${fmtMoney(payment.amount)}원</span></div>
       ${payment.method ? `<div class="info-row"><span class="label">결제 수단</span><span class="value">${esc(payment.method)}</span></div>` : ''}
-      ${payment.approvedAt ? `<div class="info-row"><span class="label">승인 일시</span><span class="value">${fmtDate(payment.approvedAt)}</span></div>` : ''}
+      ${payment.approvedAt ? `<div class="info-row"><span class="label">승인 일시</span><span class="value">${fmtDateTime(payment.approvedAt)}</span></div>` : ''}
       ${payment.failureMessage ? `<div class="info-row"><span class="label">실패 사유</span><span class="value text-danger">${esc(payment.failureMessage)}</span></div>` : ''}`;
   }
 
@@ -182,10 +183,11 @@ async function loadOrderDetail() {
     }).join('');
   }
 
-  // 액션 버튼
+  // 액션 버튼 (결제 없거나 결제 실패 시 결제하기 노출, PENDING 상태면 취소 가능)
   const btns = [];
-  if (order.status === 'PENDING' && !payment) {
-    btns.push(`<button class="btn-primary-custom" id="payBtn">결제하기</button>`);
+  const needsPay = order.status === 'PENDING' && (!payment || payment.status === 'FAILED');
+  if (needsPay) {
+    btns.push(`<button class="btn-primary-custom" id="payBtn"><i class="bi bi-credit-card me-1"></i>결제하기</button>`);
   }
   if (order.status === 'PENDING') {
     btns.push(`<button class="btn btn-outline-danger btn-sm fw-bold" id="cancelBtn">주문 취소</button>`);
