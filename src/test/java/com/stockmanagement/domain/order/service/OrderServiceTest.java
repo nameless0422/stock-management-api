@@ -335,7 +335,7 @@ class OrderServiceTest {
         @DisplayName("PENDING 주문 취소 — CANCELLED 전환 및 재고 예약 해제 호출")
         void cancelsPendingOrder() {
             given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L)));
-            given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(order));
+            given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
             OrderResponse response = orderService.cancel(1L, "user1", false);
 
@@ -349,7 +349,7 @@ class OrderServiceTest {
         void throwsWhenCancellingConfirmedOrder() {
             order.confirm(); // PENDING → CONFIRMED
             given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L)));
-            given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(order));
+            given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
             assertThatThrownBy(() -> orderService.cancel(1L, "user1", false))
                     .isInstanceOf(BusinessException.class)
@@ -362,7 +362,7 @@ class OrderServiceTest {
         @Test
         @DisplayName("주문이 존재하지 않으면 ORDER_NOT_FOUND 예외를 발생시킨다")
         void throwsWhenNotFound() {
-            given(orderRepository.findByIdWithItems(99L)).willReturn(Optional.empty());
+            given(orderRepository.findByIdWithItemsForUpdate(99L)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> orderService.cancel(99L, "user1", false))
                     .isInstanceOf(BusinessException.class)
@@ -380,7 +380,7 @@ class OrderServiceTest {
         @Test
         @DisplayName("PENDING 주문 확정 — CONFIRMED 전환 및 재고 confirmAllocation 호출")
         void confirmsPendingOrder() {
-            given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(order));
+            given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
             orderService.confirm(1L);
 
@@ -391,7 +391,7 @@ class OrderServiceTest {
         @Test
         @DisplayName("주문이 존재하지 않으면 ORDER_NOT_FOUND 예외를 발생시킨다")
         void throwsWhenNotFound() {
-            given(orderRepository.findByIdWithItems(99L)).willReturn(Optional.empty());
+            given(orderRepository.findByIdWithItemsForUpdate(99L)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> orderService.confirm(99L))
                     .isInstanceOf(BusinessException.class)
@@ -410,7 +410,7 @@ class OrderServiceTest {
         @DisplayName("CONFIRMED 주문 환불 — CANCELLED 전환 및 재고 releaseAllocation 호출")
         void refundsConfirmedOrder() {
             order.confirm(); // PENDING → CONFIRMED
-            given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(order));
+            given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
             orderService.refund(1L);
 
@@ -422,7 +422,7 @@ class OrderServiceTest {
         @DisplayName("PENDING 주문 환불 시도 — INVALID_ORDER_STATUS 예외 발생")
         void throwsWhenRefundingPendingOrder() {
             // order는 기본 PENDING 상태
-            given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(order));
+            given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
             assertThatThrownBy(() -> orderService.refund(1L))
                     .isInstanceOf(BusinessException.class)
@@ -435,7 +435,7 @@ class OrderServiceTest {
         @Test
         @DisplayName("주문이 존재하지 않으면 ORDER_NOT_FOUND 예외를 발생시킨다")
         void throwsWhenNotFound() {
-            given(orderRepository.findByIdWithItems(99L)).willReturn(Optional.empty());
+            given(orderRepository.findByIdWithItemsForUpdate(99L)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> orderService.refund(99L))
                     .isInstanceOf(BusinessException.class)

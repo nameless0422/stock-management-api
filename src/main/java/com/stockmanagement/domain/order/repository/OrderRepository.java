@@ -4,9 +4,13 @@ import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
@@ -33,6 +37,16 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
      */
     @Query("SELECT o FROM Order o JOIN FETCH o.items i JOIN FETCH i.product WHERE o.id = :id")
     Optional<Order> findByIdWithItems(@Param("id") Long id);
+
+    /**
+     * 주문과 항목을 비관적 락(SELECT ... FOR UPDATE)으로 조회한다.
+     * 상태 변이 메서드(cancel/confirm/refund)에서 사용하여
+     * 만료 스케줄러와 결제 확정이 동시에 동일 주문을 수정하는 경쟁 조건을 방지한다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
+    @Query("SELECT o FROM Order o JOIN FETCH o.items i JOIN FETCH i.product WHERE o.id = :id")
+    Optional<Order> findByIdWithItemsForUpdate(@Param("id") Long id);
 
     /**
      * 특정 사용자의 주문 목록을 페이징 조회한다.
