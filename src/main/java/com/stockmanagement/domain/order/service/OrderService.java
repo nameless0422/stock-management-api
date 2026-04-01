@@ -309,7 +309,9 @@ public class OrderService {
     @Transactional
     @CacheEvict(cacheNames = "orders", key = "#id")
     public OrderResponse cancel(Long id, String username, boolean isAdmin) {
-        Order order = orderRepository.findByIdWithItems(id)
+        // 비관적 락: 만료 스케줄러(cancel)와 결제 확정(confirm)의 동시 실행으로 인한
+        // 재고 상태 불일치(allocated 누수)를 방지한다.
+        Order order = orderRepository.findByIdWithItemsForUpdate(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
         // 요청자가 주문 소유자인지 검증 (ADMIN은 모든 주문 취소 가능)
@@ -345,7 +347,7 @@ public class OrderService {
     @Transactional
     @CacheEvict(cacheNames = "orders", key = "#id")
     public void confirm(Long id) {
-        Order order = orderRepository.findByIdWithItems(id)
+        Order order = orderRepository.findByIdWithItemsForUpdate(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
         order.confirm();
@@ -371,7 +373,7 @@ public class OrderService {
     @Transactional
     @CacheEvict(cacheNames = "orders", key = "#id")
     public void refund(Long id) {
-        Order order = orderRepository.findByIdWithItems(id)
+        Order order = orderRepository.findByIdWithItemsForUpdate(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
         order.refund();
