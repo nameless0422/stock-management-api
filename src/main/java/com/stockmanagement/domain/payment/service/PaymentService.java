@@ -6,7 +6,6 @@ import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderItem;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.OrderRepository;
-import com.stockmanagement.domain.order.service.OrderService;
 import com.stockmanagement.domain.payment.dto.*;
 import com.stockmanagement.domain.payment.entity.Payment;
 import com.stockmanagement.domain.payment.entity.PaymentStatus;
@@ -17,18 +16,13 @@ import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmRequest;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmResponse;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
-import com.stockmanagement.common.event.PaymentConfirmedEvent;
-import com.stockmanagement.common.outbox.OutboxEventStore;
-import com.stockmanagement.domain.point.service.PointService;
-import com.stockmanagement.domain.shipment.service.ShipmentService;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -59,13 +53,10 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
-    private final OrderService orderService;
     private final TossPaymentsClient tossPaymentsClient;
     private final PaymentIdempotencyManager idempotencyManager;
-    private final ShipmentService shipmentService;
-    private final PointService pointService;
-    private final OutboxEventStore outboxEventStore;
     private final UserRepository userRepository;
+    private final PaymentTransactionHelper transactionHelper;
 
     /**
      * Prepares a payment session for the given order.
@@ -129,115 +120,51 @@ public class PaymentService {
      * <ol>
      *   <li>Redis 완료 캐시 확인 → 있으면 즉시 반환 (idempotency)
      *   <li>Redis SETNX로 PROCESSING 상태 선점 → 실패 시 처리 중 예외
-     *   <li>DB 상태 재확인 (Redis TTL 만료 후 재요청 대비 이중 안전장치)
-     *   <li>Calls TossPayments confirmation API
-     *   <li>Transitions Payment to DONE or FAILED
-     *   <li>Calls {@link OrderService#confirm(Long)} → Order CONFIRMED + Inventory allocated
+     *   <li>[Short TX] DB 검증 — {@link PaymentTransactionHelper#loadAndValidateForConfirm}
+     *   <li>Toss API 호출 (DB 커넥션 미점유)
+     *   <li>[Short TX] 확정 결과 반영 — {@link PaymentTransactionHelper#applyConfirmResult}
      *   <li>결과를 Redis에 캐싱 (24h TTL)
      * </ol>
+     *
+     * <p>{@code NOT_SUPPORTED} propagation으로 클래스 레벨 readOnly TX를 억제한다.
+     * 내부 DB 연산은 각각 헬퍼의 독립 트랜잭션으로 처리된다.
      *
      * @param request paymentKey, tossOrderId, and amount forwarded from the checkout widget
      * @return updated payment details
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public PaymentResponse confirm(PaymentConfirmRequest request, String username) {
         String idempotencyKey = "confirm:" + request.getTossOrderId();
 
-        // 1. Redis 완료 캐시 확인 (이전 성공 요청의 결과가 있으면 즉시 반환)
+        // 1. Redis 완료 캐시 확인
         Optional<PaymentResponse> cached = idempotencyManager.getIfCompleted(idempotencyKey);
         if (cached.isPresent()) {
             return cached.get();
         }
 
-        // 2. PROCESSING으로 원자적 선점 (SETNX) — 동시 요청 중 하나만 통과
+        // 2. PROCESSING으로 원자적 선점 (SETNX)
         if (!idempotencyManager.tryAcquire(idempotencyKey)) {
             throw new BusinessException(ErrorCode.PAYMENT_PROCESSING_IN_PROGRESS);
         }
 
         try {
-            Payment payment = paymentRepository.findByTossOrderId(request.getTossOrderId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-
-            // 요청자가 해당 결제의 주문 소유자인지 검증
-            Long userId = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
-            Order paymentOrder = orderRepository.findById(payment.getOrderId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-            if (!paymentOrder.getUserId().equals(userId)) {
-                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
+            // 3. Short TX: 소유권·상태·금액 검증 (DB 커넥션 즉시 반환)
+            Optional<PaymentResponse> existing = transactionHelper.loadAndValidateForConfirm(
+                    request.getTossOrderId(), request.getAmount(), username);
+            if (existing.isPresent()) {
+                idempotencyManager.complete(idempotencyKey, existing.get());
+                return existing.get();
             }
 
-            // 3. DB 상태 재확인 (Redis TTL 만료 후 재요청 시 이중 안전장치)
-            if (payment.getStatus() == PaymentStatus.DONE) {
-                PaymentResponse response = PaymentResponse.from(payment);
-                idempotencyManager.complete(idempotencyKey, response);
-                return response;
-            }
-
-            // Reject requests for already-processed (non-PENDING) payments
-            if (payment.getStatus() != PaymentStatus.PENDING) {
-                throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED);
-            }
-
-            // Server-side amount re-verification (prevents client-side amount manipulation)
-            if (payment.getAmount().compareTo(request.getAmount()) != 0) {
-                throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
-            }
-
-            // 4. Call TossPayments confirmation API
+            // 4. Toss API 호출 (DB 커넥션 미점유 — 커넥션 풀 고갈 방지)
             TossConfirmResponse tossResponse = tossPaymentsClient.confirm(
                     new TossConfirmRequest(request.getPaymentKey(), request.getTossOrderId(), request.getAmount())
             );
 
-            // Handle payment failure
-            if (!"DONE".equals(tossResponse.getStatus())) {
-                String failureCode = null;
-                String failureMessage = null;
-                if (tossResponse.getFailure() != null) {
-                    failureCode = tossResponse.getFailure().getCode();
-                    failureMessage = tossResponse.getFailure().getMessage();
-                }
-                payment.fail(failureCode, failureMessage);
-                log.warn("Payment failed: tossOrderId={}, code={}, message={}",
-                        request.getTossOrderId(), failureCode, failureMessage);
-                throw new BusinessException(ErrorCode.TOSS_PAYMENTS_ERROR,
-                        failureMessage != null ? failureMessage : "결제 승인 실패");
-            }
-
-            // 5. Transition payment to DONE
-            payment.approve(
-                    tossResponse.getPaymentKey(),
-                    tossResponse.getMethod(),
-                    parseDateTime(tossResponse.getRequestedAt()),
-                    parseDateTime(tossResponse.getApprovedAt())
-            );
-
-            // Confirm order: PENDING → CONFIRMED, and move inventory: reserved → allocated
-            orderService.confirm(payment.getOrderId());
-
-            // 배송 레코드 자동 생성 (PREPARING 상태)
-            shipmentService.createForOrder(payment.getOrderId());
-
-            // 결제 완료 포인트 적립 (실 결제금액의 1%)
-            Order confirmedOrder = orderRepository.findById(payment.getOrderId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-            long paidAmount = confirmedOrder.getTotalAmount()
-                    .subtract(confirmedOrder.getDiscountAmount()).longValue()
-                    - confirmedOrder.getUsedPoints();
-            if (paidAmount > 0) {
-                pointService.earn(confirmedOrder.getUserId(), paidAmount, confirmedOrder.getId());
-            }
-
-            // 6. 결과를 Redis에 캐싱 (24h TTL)
-            PaymentResponse response = PaymentResponse.from(payment);
+            // 5. Short TX: 확정 결과 반영
+            PaymentResponse response = transactionHelper.applyConfirmResult(
+                    request.getTossOrderId(), tossResponse);
             idempotencyManager.complete(idempotencyKey, response);
-
-            // 결제 완료 이벤트 저장 (Outbox — 같은 트랜잭션 안에서 원자적 저장)
-            outboxEventStore.save(new PaymentConfirmedEvent(
-                    payment.getId(), payment.getOrderId(), payment.getAmount()));
-
-            log.info("Payment confirmed: paymentKey={}, orderId={}, amount={}",
-                    payment.getPaymentKey(), payment.getOrderId(), payment.getAmount());
             return response;
 
         } catch (Exception e) {
@@ -254,10 +181,9 @@ public class PaymentService {
      * <ol>
      *   <li>Redis 완료 캐시 확인 → 있으면 즉시 반환 (idempotency)
      *   <li>Redis SETNX로 PROCESSING 상태 선점 → 실패 시 처리 중 예외
-     *   <li>DB 상태 재확인 (Redis TTL 만료 후 재요청 대비 이중 안전장치)
-     *   <li>Calls TossPayments cancellation API
-     *   <li>Transitions Payment to CANCELLED
-     *   <li>Calls {@link OrderService#refund(Long)} → Order CANCELLED + Inventory allocated released
+     *   <li>[Short TX] DB 검증 — {@link PaymentTransactionHelper#loadAndValidateForCancel}
+     *   <li>Toss API 호출 (DB 커넥션 미점유)
+     *   <li>[Short TX] 취소 결과 반영 — {@link PaymentTransactionHelper#applyCancelResult}
      *   <li>결과를 Redis에 캐싱 (24h TTL)
      * </ol>
      *
@@ -265,7 +191,7 @@ public class PaymentService {
      * @param request    cancellation reason and optional partial amount
      * @return updated payment details
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public PaymentResponse cancel(String paymentKey, PaymentCancelRequest request) {
         String idempotencyKey = "cancel:" + paymentKey;
 
@@ -281,37 +207,21 @@ public class PaymentService {
         }
 
         try {
-            Payment payment = paymentRepository.findByPaymentKey(paymentKey)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-
-            // 3. DB 상태 재확인 (이중 안전장치)
-            if (payment.getStatus() == PaymentStatus.CANCELLED) {
-                PaymentResponse response = PaymentResponse.from(payment);
-                idempotencyManager.complete(idempotencyKey, response);
-                return response;
+            // 3. Short TX: 상태 검증 (DB 커넥션 즉시 반환)
+            Optional<PaymentResponse> existing = transactionHelper.loadAndValidateForCancel(paymentKey);
+            if (existing.isPresent()) {
+                idempotencyManager.complete(idempotencyKey, existing.get());
+                return existing.get();
             }
 
-            // Only DONE payments can be cancelled/refunded
-            if (payment.getStatus() != PaymentStatus.DONE) {
-                throw new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS);
-            }
-
-            // 4. Call TossPayments cancellation API
+            // 4. Toss API 호출 (DB 커넥션 미점유)
             tossPaymentsClient.cancel(paymentKey,
                     new TossCancelRequest(request.getCancelReason(), request.getCancelAmount()));
 
-            // Transition payment to CANCELLED
-            payment.cancel(request.getCancelReason());
-
-            // Refund order: CONFIRMED → CANCELLED, and release inventory: allocated → freed
-            orderService.refund(payment.getOrderId());
-
-            // 5. 결과를 Redis에 캐싱 (24h TTL)
-            PaymentResponse response = PaymentResponse.from(payment);
+            // 5. Short TX: 취소 결과 반영
+            PaymentResponse response = transactionHelper.applyCancelResult(
+                    paymentKey, request.getCancelReason());
             idempotencyManager.complete(idempotencyKey, response);
-
-            log.info("Payment cancelled: paymentKey={}, orderId={}, reason={}",
-                    paymentKey, payment.getOrderId(), request.getCancelReason());
             return response;
 
         } catch (Exception e) {
@@ -428,12 +338,5 @@ public class PaymentService {
         return firstName + " 외 " + (items.size() - 1) + "건";
     }
 
-    /**
-     * Parses an ISO-8601 datetime string (with timezone offset) into {@link LocalDateTime}.
-     * TossPayments returns timestamps in the format {@code 2024-01-01T00:00:00+09:00}.
-     */
-    private LocalDateTime parseDateTime(String dateTimeStr) {
-        if (dateTimeStr == null) return null;
-        return OffsetDateTime.parse(dateTimeStr).toLocalDateTime();
-    }
 }
+
