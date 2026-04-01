@@ -6,6 +6,7 @@ import com.stockmanagement.domain.admin.dto.LowStockThresholdRequest;
 import com.stockmanagement.domain.admin.dto.LowStockThresholdResponse;
 import com.stockmanagement.domain.admin.setting.repository.SystemSettingRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>설정값은 "settings" 캐시(1시간 TTL)에 저장되어 매 요청마다 DB를 조회하지 않는다.
  * 값을 변경하면 즉시 캐시를 무효화하여 다음 조회 시 최신값을 반환한다.
  */
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -38,6 +40,7 @@ public class SystemSettingService {
                     try {
                         return Integer.parseInt(s.getSettingValue());
                     } catch (NumberFormatException e) {
+                        log.warn("[SystemSetting] 저재고 임계값 파싱 실패, 기본값 사용: value={}", s.getSettingValue());
                         return DEFAULT_LOW_STOCK_THRESHOLD;
                     }
                 })

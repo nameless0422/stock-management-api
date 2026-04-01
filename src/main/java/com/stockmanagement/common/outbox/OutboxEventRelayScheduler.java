@@ -90,10 +90,12 @@ public class OutboxEventRelayScheduler {
     }
 
     private Long toLong(Object v) {
+        if (v == null) throw new IllegalArgumentException("Outbox payload 필드 null — 이벤트 데이터 손상");
         return v instanceof Number n ? n.longValue() : Long.parseLong(v.toString());
     }
 
     private BigDecimal toBigDecimal(Object v) {
+        if (v == null) throw new IllegalArgumentException("Outbox payload 필드 null — 이벤트 데이터 손상");
         return v instanceof BigDecimal bd ? bd : new BigDecimal(v.toString());
     }
 }
