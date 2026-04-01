@@ -23,7 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 쿠폰 비즈니스 로직.
@@ -95,10 +97,37 @@ public class CouponService {
     /**
      * 나에게 발급된 쿠폰 목록을 반환한다.
      * 각 쿠폰의 현재 사용 가능 여부({@code isUsable})를 함께 계산한다.
+     *
+     * <p>쿼리 최적화:
+     * <ul>
+     *   <li>@EntityGraph로 Coupon을 JOIN FETCH → UserCoupon N+1 방지
+     *   <li>사용 횟수를 배치 쿼리로 한 번에 로드 → isUsable() 내 count 쿼리 N+1 방지
+     * </ul>
      */
     public List<MyCouponResponse> getMyCoupons(Long userId) {
-        return userCouponRepository.findByUserId(userId).stream()
-                .map(uc -> MyCouponResponse.from(uc, isUsable(uc.getCoupon(), userId)))
+        List<UserCoupon> userCoupons = userCouponRepository.findByUserId(userId);
+        if (userCoupons.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> couponIds = userCoupons.stream()
+                .map(uc -> uc.getCoupon().getId())
+                .toList();
+
+        // 배치 조회: couponId → 이 사용자의 사용 횟수
+        Map<Long, Integer> usedCountMap = couponUsageRepository
+                .countByCouponIdsAndUserId(couponIds, userId).stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> ((Long) row[1]).intValue()
+                ));
+
+        LocalDateTime now = LocalDateTime.now();
+        return userCoupons.stream()
+                .map(uc -> {
+                    int usedCount = usedCountMap.getOrDefault(uc.getCoupon().getId(), 0);
+                    return MyCouponResponse.from(uc, isUsable(uc.getCoupon(), usedCount, now));
+                })
                 .toList();
     }
 
@@ -163,13 +192,16 @@ public class CouponService {
 
     // ===== 내부 검증 헬퍼 =====
 
-    /** 쿠폰이 현재 사용 가능한지 여부를 반환한다 (예외 없이 boolean 반환). */
-    private boolean isUsable(Coupon coupon, Long userId) {
+    /**
+     * 쿠폰이 현재 사용 가능한지 여부를 반환한다 (예외 없이 boolean 반환).
+     *
+     * @param usedCount 이미 로드된 이 사용자의 해당 쿠폰 사용 횟수
+     * @param now       일관된 현재 시각 (getMyCoupons에서 1회 생성하여 전달)
+     */
+    private boolean isUsable(Coupon coupon, int usedCount, LocalDateTime now) {
         if (!coupon.isActive()) return false;
-        LocalDateTime now = LocalDateTime.now();
         if (now.isBefore(coupon.getValidFrom()) || now.isAfter(coupon.getValidUntil())) return false;
         if (coupon.getMaxUsageCount() != null && coupon.getUsageCount() >= coupon.getMaxUsageCount()) return false;
-        int usedCount = couponUsageRepository.countByCoupon_IdAndUserId(coupon.getId(), userId);
         return usedCount < coupon.getMaxUsagePerUser();
     }
 
