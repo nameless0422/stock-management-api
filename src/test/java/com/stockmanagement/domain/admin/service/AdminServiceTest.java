@@ -13,6 +13,7 @@ import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.DailyOrderStatsRepository;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.User;
@@ -50,6 +51,7 @@ class AdminServiceTest {
     @Mock private InventoryRepository inventoryRepository;
     @Mock private DailyInventorySnapshotRepository snapshotRepository;
     @Mock private ProductRepository productRepository;
+    @Mock private SystemSettingService systemSettingService;
 
     @InjectMocks
     private AdminService adminService;
@@ -76,6 +78,7 @@ class AdminServiceTest {
             given(inventory.getAllocated()).willReturn(1);
             given(inventory.getAvailable()).willReturn(3);
 
+            given(systemSettingService.getLowStockThreshold()).willReturn(10);
             given(orderRepository.count()).willReturn(100L);
             given(orderRepository.countByStatus(OrderStatus.PENDING)).willReturn(10L);
             given(orderRepository.countByStatus(OrderStatus.CONFIRMED)).willReturn(80L);
@@ -100,6 +103,7 @@ class AdminServiceTest {
         @Test
         @DisplayName("저재고 없으면 빈 목록 반환")
         void emptyLowStock() {
+            given(systemSettingService.getLowStockThreshold()).willReturn(10);
             given(orderRepository.count()).willReturn(0L);
             given(orderRepository.countByStatus(any())).willReturn(0L);
             given(orderRepository.sumTotalAmountByStatus(any())).willReturn(BigDecimal.ZERO);

@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.product.dto;
 
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -24,6 +25,7 @@ import java.math.BigDecimal;
 public class ProductSearchRequest {
 
     /** 키워드 — name, description, category, sku에 대해 multi_match 검색 */
+    @Size(max = 200, message = "검색어는 200자 이하여야 합니다.")
     private String q;
 
     /** 최소 가격 (포함) */

@@ -64,7 +64,9 @@ public class CacheConfig {
                         // 재고: 주문마다 변경 → 5분 + 명시적 evict
                         "inventory", base.entryTtl(Duration.ofMinutes(5)),
                         // 주문: 상태 변경 가능 → 5분 + 명시적 evict
-                        "orders", base.entryTtl(Duration.ofMinutes(5))
+                        "orders", base.entryTtl(Duration.ofMinutes(5)),
+                        // 시스템 설정: 변경 빈도 매우 낮음 → 1시간 + 명시적 evict
+                        "settings", base.entryTtl(Duration.ofHours(1))
                 ))
                 .build();
     }

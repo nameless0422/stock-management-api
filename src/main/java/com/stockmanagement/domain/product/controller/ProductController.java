@@ -46,7 +46,7 @@ public class ProductController {
                        "- `sort`: relevance(기본) | price_asc | price_desc | newest")
     @GetMapping
     public ApiResponse<Page<ProductResponse>> getList(
-            @ModelAttribute ProductSearchRequest request,
+            @ModelAttribute @Valid ProductSearchRequest request,
             @PageableDefault(size = 20, sort = "id") Pageable pageable) {
         return ApiResponse.ok(productService.getList(pageable, request));
     }

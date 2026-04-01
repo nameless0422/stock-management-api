@@ -5,6 +5,7 @@ import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.admin.dto.AdminOrderResponse;
 import com.stockmanagement.domain.admin.dto.DashboardResponse;
 import com.stockmanagement.domain.admin.service.AdminService;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.dto.DailyInventorySnapshotResponse;
 import com.stockmanagement.domain.order.dto.DailyOrderStatsResponse;
 import com.stockmanagement.domain.product.dto.ProductResponse;
@@ -42,6 +43,7 @@ class AdminControllerTest {
     private MockMvc mockMvc;
 
     @MockBean private AdminService adminService;
+    @MockBean private SystemSettingService systemSettingService;
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtBlacklist jwtBlacklist;
 

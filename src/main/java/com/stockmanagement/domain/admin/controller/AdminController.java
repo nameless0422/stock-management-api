@@ -3,8 +3,11 @@ package com.stockmanagement.domain.admin.controller;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.admin.dto.AdminOrderResponse;
 import com.stockmanagement.domain.admin.dto.DashboardResponse;
+import com.stockmanagement.domain.admin.dto.LowStockThresholdRequest;
+import com.stockmanagement.domain.admin.dto.LowStockThresholdResponse;
 import com.stockmanagement.domain.admin.dto.RoleUpdateRequest;
 import com.stockmanagement.domain.admin.service.AdminService;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.dto.DailyInventorySnapshotResponse;
 import com.stockmanagement.domain.order.dto.DailyOrderStatsResponse;
 import com.stockmanagement.domain.order.entity.OrderStatus;
@@ -14,6 +17,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -43,6 +47,7 @@ import java.util.List;
 public class AdminController {
 
     private final AdminService adminService;
+    private final SystemSettingService systemSettingService;
 
     @Operation(summary = "관리자 대시보드", description = "주문 통계, 매출(CONFIRMED 기준), 사용자 수, 저재고(available<10) 목록 반환.")
     @GetMapping("/dashboard")
@@ -99,5 +104,21 @@ public class AdminController {
     public ApiResponse<List<DailyInventorySnapshotResponse>> getInventorySnapshot(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return ApiResponse.ok(adminService.getInventorySnapshot(date));
+    }
+
+    @Operation(summary = "저재고 임계값 조회",
+               description = "현재 저재고 경보 기준값을 반환한다. available < threshold 인 상품이 대시보드에 표시됨.")
+    @GetMapping("/settings/low-stock-threshold")
+    public ApiResponse<LowStockThresholdResponse> getLowStockThreshold() {
+        return ApiResponse.ok(systemSettingService.getLowStockThresholdDetails());
+    }
+
+    @Operation(summary = "저재고 임계값 변경",
+               description = "저재고 기준값을 변경한다. 변경 즉시 대시보드에 반영된다.")
+    @PutMapping("/settings/low-stock-threshold")
+    public ApiResponse<LowStockThresholdResponse> updateLowStockThreshold(
+            @RequestBody @Valid LowStockThresholdRequest request,
+            @AuthenticationPrincipal String username) {
+        return ApiResponse.ok(systemSettingService.updateLowStockThreshold(request, username));
     }
 }

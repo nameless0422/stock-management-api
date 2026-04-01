@@ -6,6 +6,7 @@ import com.stockmanagement.domain.admin.dto.AdminOrderResponse;
 import com.stockmanagement.domain.admin.dto.DashboardResponse;
 import com.stockmanagement.domain.admin.dto.LowStockItem;
 import com.stockmanagement.domain.admin.dto.RoleUpdateRequest;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.dto.DailyInventorySnapshotResponse;
 import com.stockmanagement.domain.inventory.repository.DailyInventorySnapshotRepository;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
@@ -37,15 +38,13 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class AdminService {
 
-    /** 저재고 경보 기준: available < 이 값이면 경보 목록에 포함 */
-    private static final int LOW_STOCK_THRESHOLD = 10;
-
     private final OrderRepository orderRepository;
     private final DailyOrderStatsRepository dailyOrderStatsRepository;
     private final UserRepository userRepository;
     private final InventoryRepository inventoryRepository;
     private final DailyInventorySnapshotRepository snapshotRepository;
     private final ProductRepository productRepository;
+    private final SystemSettingService systemSettingService;
 
     /** 관리자 대시보드 — 주문 통계, 매출, 사용자 수, 저재고 목록 */
     public DashboardResponse getDashboard() {
@@ -57,7 +56,7 @@ public class AdminService {
         long totalUsers      = userRepository.count();
 
         List<LowStockItem> lowStockItems = inventoryRepository
-                .findLowStock(LOW_STOCK_THRESHOLD)
+                .findLowStock(systemSettingService.getLowStockThreshold())
                 .stream()
                 .map(LowStockItem::from)
                 .toList();
