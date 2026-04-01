@@ -9,14 +9,14 @@ Spring Boot 기반 **쇼핑몰 백엔드 포트폴리오 프로젝트**.
 
 | 주제 | 내용 |
 |---|---|
-| **동시성 제어** | 재고 뮤테이션에 분산 락(Redisson) + 비관적 락(DB) 2중 적용 — 멀티 인스턴스 환경의 overselling 원천 차단 |
+| **동시성 제어** | 재고 뮤테이션에 분산 락(Redisson) + 비관적 락(DB) 2중 적용 — 멀티 인스턴스 환경의 overselling 원천 차단. 주문 상태 변이(cancel/confirm/refund)에도 비관적 락 적용 — 만료 스케줄러와 결제 확정의 경쟁으로 인한 재고 누수 방지 |
 | **결제 멱등성** | `prepare`·`confirm`·`cancel` 3단계에 레이어별 멱등 전략 — DB UNIQUE, Redis SETNX, Toss `Idempotency-Key` 헤더 |
 | **쿠폰 동시성** | 한정 수량 쿠폰 차감 시 `PESSIMISTIC_WRITE` + TOCTOU 재검증 — 이중 사용 및 초과 발급 방지 |
 | **ES 검색 + Fallback** | 상품 키워드·가격·카테고리 복합 검색(Elasticsearch), 장애 시 자동 MySQL fallback |
 | **Circuit Breaker** | TossPayments HTTP 호출 실패 누적 시 회로 차단 → 빠른 실패 응답 |
 | **배치 처리** | 쿠폰 만료 비활성화·일별 재고 스냅샷·일별 주문 통계 스케줄러 (`@Scheduled`, `@ConditionalOnProperty`, 멱등성 보장) |
 | **IDOR 방어** | 주문·결제·배송·환불 전 엔드포인트에 소유자 검증 (username + isAdmin 파라미터 패턴) |
-| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **580개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
+| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **594개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
 
 ---
 
@@ -71,7 +71,7 @@ docker compose -f docker/docker-compose.yml up -d mysql redis elasticsearch
 ./gradlew bootRun
 ```
 
-Flyway가 기동 시 V1~V21 마이그레이션을 자동 실행합니다.
+Flyway가 기동 시 V1~V24 마이그레이션을 자동 실행합니다.
 
 ### 환경 변수
 
@@ -113,7 +113,7 @@ Flyway가 기동 시 V1~V21 마이그레이션을 자동 실행합니다.
 | 통합 | `integration/` | Testcontainers (MySQL + Redis + ES), Flyway 실행, 실제 HTTP 흐름 E2E |
 | 동시성 | `integration/InventoryConcurrencyTest` | 동시 입고 lost update · 재고 예약 overselling 검증 |
 
-현재 총 **580개** 테스트 전체 통과.
+현재 총 **594개** 테스트 전체 통과.
 
 ---
 
@@ -152,6 +152,7 @@ com.stockmanagement/
 │   ├── user/            # 회원가입·로그인, ADMIN/USER 역할, Refresh Token
 │   │   └── address/     # 배송지 관리 (기본 배송지, 주문 연동)
 │   └── admin/           # 관리자 대시보드, 사용자 관리, 전체 주문 조회, 배치 통계 조회
+│       └── setting/     # 시스템 설정 (저재고 임계값 동적 관리)
 └── security/            # JwtTokenProvider, JwtAuthenticationFilter
 ```
 
@@ -352,6 +353,16 @@ erDiagram
         varchar reason
         varchar status "PENDING|COMPLETED|FAILED"
         datetime completed_at
+    }
+
+    %% ── SYSTEM ───────────────────────────────────────────
+    system_settings {
+        bigint id PK
+        varchar setting_key UK
+        varchar setting_value
+        varchar description
+        datetime updated_at
+        varchar updated_by
     }
 
     %% ── RELATIONSHIPS ────────────────────────────────────
@@ -700,6 +711,9 @@ available = onHand - reserved - allocated
 | V19 | `reviews`, `wishlist_items` — 리뷰 · 위시리스트 |
 | V20 | `user_points`, `point_transactions`, `orders.used_points` — 포인트 |
 | V21 | `refunds` — 환불 이력 |
+| V22 | `user_coupons` — 관리자 쿠폰 발급 이력 |
+| V23 | `orders` 복합 인덱스 추가 (성능) |
+| V24 | `system_settings` — 동적 시스템 설정 (저재고 임계값 등) |
 
 ---
 
@@ -861,6 +875,8 @@ ADMIN JWT 인증 필요.
 | GET | `/api/admin/products` | 전체 상품 목록 (ACTIVE + DISCONTINUED) |
 | GET | `/api/admin/stats/orders` | 기간별 일별 주문·매출 통계 (`?from=&to=`) |
 | GET | `/api/admin/stats/inventory` | 특정 날짜 전체 재고 스냅샷 (`?date=`) |
+| GET | `/api/admin/settings/low-stock-threshold` | 저재고 경보 임계값 조회 |
+| PUT | `/api/admin/settings/low-stock-threshold` | 저재고 경보 임계값 변경 |
 
 ---
 
