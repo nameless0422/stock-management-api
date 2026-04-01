@@ -8,6 +8,4 @@ import java.util.Optional;
 public interface RefundRepository extends JpaRepository<Refund, Long> {
 
     Optional<Refund> findByPaymentId(Long paymentId);
-
-    boolean existsByPaymentId(Long paymentId);
 }

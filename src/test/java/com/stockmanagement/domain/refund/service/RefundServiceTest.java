@@ -88,7 +88,7 @@ class RefundServiceTest {
             Payment payment = mockPayment(10L, 100L);
             given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
             given(orderRepository.findById(100L)).willReturn(Optional.of(mockOrder(100L, 1L)));
-            given(refundRepository.existsByPaymentId(10L)).willReturn(false);
+            given(refundRepository.findByPaymentId(10L)).willReturn(Optional.empty());
 
             Refund saved = Refund.builder()
                     .paymentId(10L).orderId(100L)
@@ -105,16 +105,45 @@ class RefundServiceTest {
         }
 
         @Test
-        @DisplayName("중복 환불 요청 → REFUND_ALREADY_EXISTS")
+        @DisplayName("중복 환불 요청 (COMPLETED) → REFUND_ALREADY_EXISTS")
         void duplicate() {
             given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L)));
             given(paymentRepository.findById(10L)).willReturn(Optional.of(mockPayment(10L, 100L)));
             given(orderRepository.findById(100L)).willReturn(Optional.of(mockOrder(100L, 1L)));
-            given(refundRepository.existsByPaymentId(10L)).willReturn(true);
+            // 이미 COMPLETED 상태의 환불이 존재 → 재시도 불가
+            Refund completed = Refund.builder()
+                    .paymentId(10L).orderId(100L)
+                    .amount(BigDecimal.valueOf(50000)).reason("변심")
+                    .build();
+            completed.complete();
+            given(refundRepository.findByPaymentId(10L)).willReturn(Optional.of(completed));
 
             assertThatThrownBy(() -> refundService.requestRefund(mockRequest(10L), "user1"))
                     .isInstanceOf(BusinessException.class)
                     .hasFieldOrPropertyWithValue("errorCode", ErrorCode.REFUND_ALREADY_EXISTS);
+        }
+
+        @Test
+        @DisplayName("이전 환불이 FAILED → 재시도 허용, COMPLETED 상태로 전이")
+        void retryAfterFailed() {
+            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L)));
+            Payment payment = mockPayment(10L, 100L);
+            given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
+            given(orderRepository.findById(100L)).willReturn(Optional.of(mockOrder(100L, 1L)));
+
+            // 기존 FAILED 환불 레코드 (paymentId UNIQUE로 새 레코드 생성 불가)
+            Refund failedRefund = Refund.builder()
+                    .paymentId(10L).orderId(100L)
+                    .amount(BigDecimal.valueOf(50000)).reason("이전 사유")
+                    .build();
+            failedRefund.fail();
+            ReflectionTestUtils.setField(failedRefund, "id", 5L);
+            given(refundRepository.findByPaymentId(10L)).willReturn(Optional.of(failedRefund));
+
+            refundService.requestRefund(mockRequest(10L), "user1");
+
+            verify(paymentService).cancel(eq("pk_test_abc123"), any());
+            assertThat(failedRefund.getStatus()).isEqualTo(RefundStatus.COMPLETED);
         }
 
         @Test
@@ -124,7 +153,7 @@ class RefundServiceTest {
             Payment payment = mockPayment(10L, 100L);
             given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
             given(orderRepository.findById(100L)).willReturn(Optional.of(mockOrder(100L, 1L)));
-            given(refundRepository.existsByPaymentId(10L)).willReturn(false);
+            given(refundRepository.findByPaymentId(10L)).willReturn(Optional.empty());
 
             Refund saved = Refund.builder()
                     .paymentId(10L).orderId(100L)

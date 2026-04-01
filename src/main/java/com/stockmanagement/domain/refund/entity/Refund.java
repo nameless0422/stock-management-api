@@ -62,4 +62,13 @@ public class Refund {
     public void fail() {
         this.status = RefundStatus.FAILED;
     }
+
+    /**
+     * 이전 실패 이력을 재활용하여 재시도 준비 상태로 초기화한다.
+     * FAILED 상태에서만 호출해야 한다.
+     */
+    public void reset(String newReason) {
+        this.reason = newReason;
+        this.status = RefundStatus.PENDING;
+    }
 }

@@ -6,11 +6,13 @@ import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.payment.dto.PaymentCancelRequest;
 import com.stockmanagement.domain.payment.entity.Payment;
+import com.stockmanagement.domain.payment.entity.PaymentStatus;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
 import com.stockmanagement.domain.payment.service.PaymentService;
 import com.stockmanagement.domain.refund.dto.RefundRequest;
 import com.stockmanagement.domain.refund.dto.RefundResponse;
 import com.stockmanagement.domain.refund.entity.Refund;
+import com.stockmanagement.domain.refund.entity.RefundStatus;
 import com.stockmanagement.domain.refund.repository.RefundRepository;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.repository.UserRepository;
@@ -49,11 +51,11 @@ public class RefundService {
      *   <li>성공 시 COMPLETED, 실패 시 FAILED 전이
      * </ol>
      *
-     * <p>{@code noRollbackFor}: 예외 발생 시에도 트랜잭션을 커밋하여
+     * <p>{@code noRollbackFor}: paymentService.cancel() 실패 시에도 트랜잭션을 커밋하여
      * Refund FAILED 상태(Dirty Checking)가 DB에 반영되도록 한다.
-     * Toss HTTP 호출 실패 시점에는 paymentService 내 DB 변경이 없으므로 부분 커밋 위험이 없다.
+     * RuntimeException으로 범위를 한정하여 Error 계열(OOM 등)은 여전히 롤백된다.
      */
-    @Transactional(noRollbackFor = Exception.class)
+    @Transactional(noRollbackFor = RuntimeException.class)
     public RefundResponse requestRefund(RefundRequest request, String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
@@ -68,16 +70,28 @@ public class RefundService {
             throw new BusinessException(ErrorCode.REFUND_ACCESS_DENIED);
         }
 
-        if (refundRepository.existsByPaymentId(payment.getId())) {
-            throw new BusinessException(ErrorCode.REFUND_ALREADY_EXISTS);
+        // DONE 상태가 아닌 결제는 환불 불가 (paymentKey가 null이면 NPE 발생 방지)
+        if (payment.getStatus() != PaymentStatus.DONE || payment.getPaymentKey() == null) {
+            throw new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS);
         }
 
-        Refund refund = refundRepository.save(Refund.builder()
-                .paymentId(payment.getId())
-                .orderId(payment.getOrderId())
-                .amount(payment.getAmount())
-                .reason(request.getReason())
-                .build());
+        // 기존 환불 레코드 조회
+        // - PENDING/COMPLETED: 중복 환불 → 예외
+        // - FAILED: 이전 시도 실패 → 재시도 허용 (paymentId UNIQUE 제약으로 새 레코드 생성 불가 → 기존 레코드 재사용)
+        Refund refund = refundRepository.findByPaymentId(payment.getId())
+                .map(existing -> {
+                    if (existing.getStatus() != RefundStatus.FAILED) {
+                        throw new BusinessException(ErrorCode.REFUND_ALREADY_EXISTS);
+                    }
+                    existing.reset(request.getReason());
+                    return existing;
+                })
+                .orElseGet(() -> refundRepository.save(Refund.builder()
+                        .paymentId(payment.getId())
+                        .orderId(payment.getOrderId())
+                        .amount(payment.getAmount())
+                        .reason(request.getReason())
+                        .build()));
 
         try {
             paymentService.cancel(payment.getPaymentKey(),
