@@ -2,6 +2,7 @@ package com.stockmanagement.domain.order.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.common.ratelimit.RateLimit;
+import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderDetailResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
@@ -66,8 +67,7 @@ public class OrderController {
             @PathVariable Long id,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
         return ApiResponse.ok(orderService.getByIdForUser(id, username, isAdmin));
     }
 
@@ -78,8 +78,7 @@ public class OrderController {
             @PathVariable Long id,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
         return ApiResponse.ok(orderService.getDetail(id, username, isAdmin));
     }
 
@@ -92,8 +91,7 @@ public class OrderController {
             @ModelAttribute OrderSearchRequest request,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
         return ApiResponse.ok(orderService.getList(username, isAdmin, request, pageable));
     }
 
@@ -103,8 +101,7 @@ public class OrderController {
             @PathVariable Long id,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
         return ApiResponse.ok(orderService.cancel(id, username, isAdmin));
     }
 
@@ -114,8 +111,7 @@ public class OrderController {
             @PathVariable Long id,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
         return ApiResponse.ok(orderService.getHistory(id, username, isAdmin));
     }
 }

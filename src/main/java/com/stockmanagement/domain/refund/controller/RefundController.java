@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.refund.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.refund.dto.RefundRequest;
 import com.stockmanagement.domain.refund.dto.RefundResponse;
 import com.stockmanagement.domain.refund.service.RefundService;
@@ -36,8 +37,7 @@ public class RefundController {
             @PathVariable Long refundId,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
         return ApiResponse.ok(refundService.getById(refundId, username, isAdmin));
     }
 
@@ -47,8 +47,7 @@ public class RefundController {
             @PathVariable Long paymentId,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
         return ApiResponse.ok(refundService.getByPaymentId(paymentId, username, isAdmin));
     }
 }

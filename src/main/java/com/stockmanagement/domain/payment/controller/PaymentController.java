@@ -11,7 +11,9 @@ import com.stockmanagement.domain.payment.service.PaymentService;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.stockmanagement.common.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -86,9 +88,8 @@ public class PaymentController {
     public ApiResponse<PaymentResponse> getByOrderId(
             @PathVariable Long orderId,
             @AuthenticationPrincipal String username,
-            org.springframework.security.core.Authentication authentication) {
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+            Authentication authentication) {
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
         return ApiResponse.ok(paymentService.getByOrderId(orderId, username, isAdmin).orElse(null));
     }
 }

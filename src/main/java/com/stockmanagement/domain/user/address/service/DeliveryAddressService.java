@@ -93,8 +93,8 @@ public class DeliveryAddressService {
      */
     @Transactional
     public DeliveryAddressResponse setDefault(Long id, Long userId) {
-        // 기존 기본 배송지 해제
-        repository.findByUserIdAndIsDefaultTrue(userId)
+        // 비관적 락으로 기존 기본 배송지 조회 — 동시 호출 시 isDefault=true 중복 방지
+        repository.findByUserIdAndIsDefaultTrueForUpdate(userId)
                 .ifPresent(DeliveryAddress::unsetDefault);
 
         DeliveryAddress target = findAndVerifyOwnership(id, userId);

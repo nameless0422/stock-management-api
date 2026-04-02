@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.shipment.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.shipment.dto.ShipmentResponse;
 import com.stockmanagement.domain.shipment.dto.ShipmentUpdateRequest;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
@@ -39,8 +40,7 @@ public class ShipmentController {
             @PathVariable Long orderId,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
         return ApiResponse.ok(shipmentService.getByOrderId(orderId, username, isAdmin));
     }
 
