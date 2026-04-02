@@ -2,6 +2,7 @@ package com.stockmanagement.domain.coupon.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.common.lock.DistributedLock;
 import com.stockmanagement.domain.coupon.dto.CouponCreateRequest;
 import com.stockmanagement.domain.coupon.dto.CouponIssueRequest;
 import com.stockmanagement.domain.coupon.dto.CouponResponse;
@@ -148,8 +149,13 @@ public class CouponService {
      * 쿠폰 실제 적용 — 비관적 락으로 usageCount 원자적 증가.
      * OrderService.create() 트랜잭션 내에서 호출된다.
      *
+     * <p>쿠폰 행 비관적 락(findByCodeWithLock)으로 전체 usageCount 동시성을 제어하고,
+     * 사용자+쿠폰 분산 락(@DistributedLock)으로 동일 사용자의 동시 요청에 의한
+     * maxUsagePerUser 우회(TOCTOU)를 방지한다.
+     *
      * @return 쿠폰 ID와 실제 할인 금액을 담은 응답 (couponId, discountAmount)
      */
+    @DistributedLock(key = "'coupon:user:' + #couponCode + ':' + #userId", leaseTime = 5)
     @Transactional
     public CouponValidateResponse applyCoupon(String couponCode, Long userId, Long orderId, BigDecimal orderAmount) {
         Coupon coupon = couponRepository.findByCodeWithLock(couponCode)
