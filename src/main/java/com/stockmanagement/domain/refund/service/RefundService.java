@@ -94,8 +94,9 @@ public class RefundService {
                         .build()));
 
         try {
+            // 소유권은 이미 위에서 검증했으므로 username 전달 (isAdmin=false)
             paymentService.cancel(payment.getPaymentKey(),
-                    PaymentCancelRequest.of(request.getReason()));
+                    PaymentCancelRequest.of(request.getReason()), username, false);
             refund.complete();
             log.info("[Refund] 환불 완료: refundId={}, paymentId={}", refund.getId(), payment.getId());
         } catch (Exception e) {

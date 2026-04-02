@@ -366,13 +366,13 @@ class PaymentServiceTest {
             given(request.getCancelReason()).willReturn("고객 요청");
             given(request.getCancelAmount()).willReturn(null);
 
-            given(transactionHelper.loadAndValidateForCancel("pk-001")).willReturn(Optional.empty());
+            given(transactionHelper.loadAndValidateForCancel(eq("pk-001"), any(), anyBoolean())).willReturn(Optional.empty());
 
             donePayment.cancel("고객 요청");
             PaymentResponse cancelledResponse = PaymentResponse.from(donePayment);
             given(transactionHelper.applyCancelResult(eq("pk-001"), eq("고객 요청"))).willReturn(cancelledResponse);
 
-            PaymentResponse response = paymentService.cancel("pk-001", request);
+            PaymentResponse response = paymentService.cancel("pk-001", request, "user1", false);
 
             verify(tossPaymentsClient).cancel(eq("pk-001"), any());
             verify(transactionHelper).applyCancelResult(eq("pk-001"), eq("고객 요청"));
@@ -384,10 +384,10 @@ class PaymentServiceTest {
         void returnsExistingCancelledPaymentWithoutApiCall() {
             donePayment.cancel("이미 취소됨");
             PaymentResponse cancelledResponse = PaymentResponse.from(donePayment);
-            given(transactionHelper.loadAndValidateForCancel("pk-001"))
+            given(transactionHelper.loadAndValidateForCancel(eq("pk-001"), any(), anyBoolean()))
                     .willReturn(Optional.of(cancelledResponse));
 
-            PaymentResponse response = paymentService.cancel("pk-001", mock(PaymentCancelRequest.class));
+            PaymentResponse response = paymentService.cancel("pk-001", mock(PaymentCancelRequest.class), "user1", false);
 
             verifyNoInteractions(tossPaymentsClient);
             verify(transactionHelper, never()).applyCancelResult(any(), any());
@@ -401,7 +401,7 @@ class PaymentServiceTest {
             given(idempotencyManager.getIfCompleted("cancel:pk-001"))
                     .willReturn(Optional.of(cached));
 
-            PaymentResponse response = paymentService.cancel("pk-001", mock(PaymentCancelRequest.class));
+            PaymentResponse response = paymentService.cancel("pk-001", mock(PaymentCancelRequest.class), "user1", false);
 
             assertThat(response).isSameAs(cached);
             verifyNoInteractions(transactionHelper, tossPaymentsClient);
@@ -412,7 +412,7 @@ class PaymentServiceTest {
         void throwsWhenProcessingInProgress() {
             given(idempotencyManager.tryAcquire("cancel:pk-001")).willReturn(false);
 
-            assertThatThrownBy(() -> paymentService.cancel("pk-001", mock(PaymentCancelRequest.class)))
+            assertThatThrownBy(() -> paymentService.cancel("pk-001", mock(PaymentCancelRequest.class), "user1", false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_PROCESSING_IN_PROGRESS));
@@ -423,10 +423,10 @@ class PaymentServiceTest {
         @Test
         @DisplayName("DONE이 아닌 상태(PENDING)는 INVALID_PAYMENT_STATUS 예외 발생")
         void throwsWhenPaymentNotDone() {
-            given(transactionHelper.loadAndValidateForCancel("pk-x"))
+            given(transactionHelper.loadAndValidateForCancel(eq("pk-x"), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS));
 
-            assertThatThrownBy(() -> paymentService.cancel("pk-x", mock(PaymentCancelRequest.class)))
+            assertThatThrownBy(() -> paymentService.cancel("pk-x", mock(PaymentCancelRequest.class), "user1", false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_PAYMENT_STATUS));
@@ -437,10 +437,10 @@ class PaymentServiceTest {
         @Test
         @DisplayName("결제가 존재하지 않으면 PAYMENT_NOT_FOUND 예외 발생")
         void throwsWhenPaymentNotFound() {
-            given(transactionHelper.loadAndValidateForCancel("unknown-pk"))
+            given(transactionHelper.loadAndValidateForCancel(eq("unknown-pk"), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
-            assertThatThrownBy(() -> paymentService.cancel("unknown-pk", mock(PaymentCancelRequest.class)))
+            assertThatThrownBy(() -> paymentService.cancel("unknown-pk", mock(PaymentCancelRequest.class), "user1", false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND));
