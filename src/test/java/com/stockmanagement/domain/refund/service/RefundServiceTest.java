@@ -100,7 +100,7 @@ class RefundServiceTest {
             RefundResponse response = refundService.requestRefund(mockRequest(10L), "user1");
 
             assertThat(response.getPaymentId()).isEqualTo(10L);
-            verify(paymentService).cancel(eq("pk_test_abc123"), any());
+            verify(paymentService).cancel(eq("pk_test_abc123"), any(), eq("user1"), eq(false));
             assertThat(saved.getStatus()).isEqualTo(RefundStatus.COMPLETED);
         }
 
@@ -142,7 +142,7 @@ class RefundServiceTest {
 
             refundService.requestRefund(mockRequest(10L), "user1");
 
-            verify(paymentService).cancel(eq("pk_test_abc123"), any());
+            verify(paymentService).cancel(eq("pk_test_abc123"), any(), eq("user1"), eq(false));
             assertThat(failedRefund.getStatus()).isEqualTo(RefundStatus.COMPLETED);
         }
 
@@ -161,7 +161,7 @@ class RefundServiceTest {
                     .build();
             given(refundRepository.save(any())).willReturn(saved);
             doThrow(new BusinessException(ErrorCode.TOSS_PAYMENTS_ERROR))
-                    .when(paymentService).cancel(any(), any());
+                    .when(paymentService).cancel(any(), any(), any(), anyBoolean());
 
             assertThatThrownBy(() -> refundService.requestRefund(mockRequest(10L), "user1"))
                     .isInstanceOf(BusinessException.class);

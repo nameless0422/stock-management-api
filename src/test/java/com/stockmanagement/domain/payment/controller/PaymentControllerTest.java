@@ -149,7 +149,7 @@ class PaymentControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 결제 취소 성공 → 200")
         void cancelsPayment() throws Exception {
-            given(paymentService.cancel(eq("pk-test"), any())).willReturn(mock(PaymentResponse.class));
+            given(paymentService.cancel(eq("pk-test"), any(), any(), anyBoolean())).willReturn(mock(PaymentResponse.class));
 
             mockMvc.perform(post("/api/payments/pk-test/cancel")
                             .contentType(MediaType.APPLICATION_JSON)

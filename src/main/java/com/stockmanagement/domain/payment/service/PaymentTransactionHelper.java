@@ -190,17 +190,30 @@ class PaymentTransactionHelper {
     /**
      * 결제 취소 전 DB 검증 트랜잭션 (짧게 끝난다).
      *
-     * <p>비관적 락({@code SELECT ... FOR UPDATE})으로 payment 행을 잠그고 상태를 검증한다.
+     * <p>비관적 락({@code SELECT ... FOR UPDATE})으로 payment 행을 잠그고 소유권·상태를 검증한다.
      * Redis 장애 등으로 분산 락이 우회된 경우에도 DB 레벨에서 중복 취소를 방지한다.
      * 메서드가 반환되면 DB 커넥션은 즉시 반환된다.
      *
      * @param paymentKey Toss paymentKey
+     * @param username   요청자 username (IDOR 방지용 소유권 검증)
+     * @param isAdmin    ADMIN 권한 여부 (ADMIN은 모든 결제 취소 가능)
      * @return 이미 CANCELLED이면 {@code Optional.of(response)}, 정상 진행이면 {@code Optional.empty()}
      */
     @Transactional
-    Optional<PaymentResponse> loadAndValidateForCancel(String paymentKey) {
+    Optional<PaymentResponse> loadAndValidateForCancel(String paymentKey, String username, boolean isAdmin) {
         Payment payment = paymentRepository.findByPaymentKeyWithLock(paymentKey)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        // 소유권 검증 — paymentKey를 아는 누구나 타인의 결제를 취소할 수 있는 IDOR 방지
+        if (!isAdmin) {
+            Long userId = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
+            Order order = orderRepository.findById(payment.getOrderId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+            if (!order.getUserId().equals(userId)) {
+                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
+            }
+        }
 
         if (payment.getStatus() == PaymentStatus.CANCELLED) {
             return Optional.of(PaymentResponse.from(payment));

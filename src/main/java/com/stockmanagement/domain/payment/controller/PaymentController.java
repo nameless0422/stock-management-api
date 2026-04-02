@@ -57,12 +57,15 @@ public class PaymentController {
         return ApiResponse.ok(paymentService.confirm(request, username));
     }
 
-    @Operation(summary = "결제 취소/환불", description = "Order → CANCELLED, allocated 해제.")
+    @Operation(summary = "결제 취소/환불", description = "본인 결제만 취소 가능. ADMIN은 전체 취소 가능. Order → CANCELLED, allocated 해제.")
     @PostMapping("/{paymentKey}/cancel")
     public ApiResponse<PaymentResponse> cancel(
             @PathVariable String paymentKey,
-            @RequestBody @Valid PaymentCancelRequest request) {
-        return ApiResponse.ok(paymentService.cancel(paymentKey, request));
+            @RequestBody @Valid PaymentCancelRequest request,
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
+        return ApiResponse.ok(paymentService.cancel(paymentKey, request, username, isAdmin));
     }
 
     @Operation(summary = "TossPayments 웹훅 수신", description = "공개 엔드포인트. Toss-Signature 헤더로 HMAC-SHA256 서명 검증 후 처리.")

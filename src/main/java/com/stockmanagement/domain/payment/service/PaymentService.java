@@ -192,7 +192,7 @@ public class PaymentService {
      * @return updated payment details
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public PaymentResponse cancel(String paymentKey, PaymentCancelRequest request) {
+    public PaymentResponse cancel(String paymentKey, PaymentCancelRequest request, String username, boolean isAdmin) {
         String idempotencyKey = "cancel:" + paymentKey;
 
         // 1. Redis 완료 캐시 확인
@@ -207,8 +207,8 @@ public class PaymentService {
         }
 
         try {
-            // 3. Short TX: 상태 검증 (DB 커넥션 즉시 반환)
-            Optional<PaymentResponse> existing = transactionHelper.loadAndValidateForCancel(paymentKey);
+            // 3. Short TX: 소유권·상태 검증 (DB 커넥션 즉시 반환)
+            Optional<PaymentResponse> existing = transactionHelper.loadAndValidateForCancel(paymentKey, username, isAdmin);
             if (existing.isPresent()) {
                 idempotencyManager.complete(idempotencyKey, existing.get());
                 return existing.get();
