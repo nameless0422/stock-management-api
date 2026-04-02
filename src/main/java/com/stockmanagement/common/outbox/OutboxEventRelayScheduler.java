@@ -2,6 +2,7 @@ package com.stockmanagement.common.outbox;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stockmanagement.common.lock.DistributedLock;
 import com.stockmanagement.common.event.OrderCancelledEvent;
 import com.stockmanagement.common.event.OrderCreatedEvent;
 import com.stockmanagement.common.event.PaymentConfirmedEvent;
@@ -52,6 +53,10 @@ public class OutboxEventRelayScheduler {
                 .register(meterRegistry);
     }
 
+    // 멀티 인스턴스 환경에서 동일 이벤트 중복 처리를 방지하기 위한 분산 락.
+    // skipOnFailure=true: 다른 인스턴스가 실행 중이면 이번 주기를 조용히 건너뛴다.
+    // leaseTime=30s: 100건 relay가 완료되기 충분한 시간.
+    @DistributedLock(key = "'outbox:relay'", waitTime = 0, leaseTime = 30, skipOnFailure = true)
     @Scheduled(fixedDelayString = "${outbox.relay.interval-ms:5000}")
     @Transactional
     public void relay() {
