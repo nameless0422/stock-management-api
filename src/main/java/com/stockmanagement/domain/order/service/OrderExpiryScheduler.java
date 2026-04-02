@@ -48,11 +48,11 @@ public class OrderExpiryScheduler {
         int cancelled = 0;
         for (Long orderId : expiredIds) {
             try {
-                orderService.cancel(orderId, null, true); // 시스템 자동 취소 — ADMIN 권한으로 실행
+                orderService.cancel(orderId, "system", true); // 시스템 자동 취소 — ADMIN 권한으로 실행
                 cancelled++;
                 log.debug("주문 {} 자동 취소 완료", orderId);
             } catch (Exception e) {
-                log.warn("주문 {} 자동 취소 실패: {}", orderId, e.getMessage());
+                log.warn("주문 {} 자동 취소 실패", orderId, e);
             }
         }
 

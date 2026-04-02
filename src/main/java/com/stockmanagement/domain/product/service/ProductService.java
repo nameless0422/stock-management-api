@@ -251,21 +251,27 @@ public class ProductService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
     }
 
-    /** ES 색인을 시도하고 실패해도 CRUD 흐름을 중단하지 않는다. */
+    /**
+     * ES 색인을 시도하고 실패해도 CRUD 흐름을 중단하지 않는다.
+     * 실패 시 DB와 ES 간 불일치가 발생하므로 ERROR로 기록한다.
+     */
     private void safeIndex(Product product) {
         try {
             productSearchService.index(product);
         } catch (Exception e) {
-            log.warn("Elasticsearch 색인 실패. productId={}", product.getId(), e);
+            log.error("[ProductService] Elasticsearch 색인 실패 — DB/ES 불일치 발생. productId={}", product.getId(), e);
         }
     }
 
-    /** ES 색인 삭제를 시도하고 실패해도 CRUD 흐름을 중단하지 않는다. */
+    /**
+     * ES 색인 삭제를 시도하고 실패해도 CRUD 흐름을 중단하지 않는다.
+     * 실패 시 삭제된 상품이 검색 결과에 잔존하므로 ERROR로 기록한다.
+     */
     private void safeDeleteFromIndex(Long productId) {
         try {
             productSearchService.deleteFromIndex(productId);
         } catch (Exception e) {
-            log.warn("Elasticsearch 색인 삭제 실패. productId={}", productId, e);
+            log.error("[ProductService] Elasticsearch 색인 삭제 실패 — 삭제된 상품이 검색에 잔존할 수 있음. productId={}", productId, e);
         }
     }
 }

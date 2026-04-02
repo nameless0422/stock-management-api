@@ -58,8 +58,8 @@ public class InventorySnapshotScheduler {
                 snapshotRepository.save(snapshot);
                 saved++;
             } catch (Exception e) {
-                log.error("[InventorySnapshotScheduler] 스냅샷 저장 실패 — inventoryId={}, error={}",
-                        inv.getId(), e.getMessage());
+                log.error("[InventorySnapshotScheduler] 스냅샷 저장 실패 — inventoryId={}",
+                        inv.getId(), e);
             }
         }
         log.info("[InventorySnapshotScheduler] 완료 — 저장: {}건 / 스킵: {}건", saved, skipped);

@@ -5,6 +5,7 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.order.entity.Order;
+import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.service.OrderService;
 import com.stockmanagement.domain.payment.dto.PaymentResponse;
@@ -73,6 +74,11 @@ class PaymentTransactionHelper {
             throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
         }
 
+        // 만료 스케줄러가 이미 주문을 취소한 경우 결제 진행 거부 (Toss API 호출 전에 차단)
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+
         // DB 상태 재확인 — Redis TTL 만료 후 재요청 시 이중 안전장치
         if (payment.getStatus() == PaymentStatus.DONE) {
             return Optional.of(PaymentResponse.from(payment));
@@ -129,7 +135,20 @@ class PaymentTransactionHelper {
         );
 
         // 주문 확정: PENDING → CONFIRMED, 재고 reserved → allocated
-        orderService.confirm(payment.getOrderId());
+        // 극히 드문 경합: loadAndValidate(검증) → Toss HTTP 대기 → 만료 스케줄러가 취소
+        // → applyConfirmResult에 도달했을 때 주문이 이미 CANCELLED인 케이스를 방어
+        try {
+            orderService.confirm(payment.getOrderId());
+        } catch (BusinessException e) {
+            if (e.getErrorCode() == ErrorCode.INVALID_ORDER_STATUS) {
+                log.error("[Payment] CRITICAL: Toss 승인 완료됐으나 주문이 이미 취소됨 — " +
+                          "수동 환불 처리 필요: paymentKey={}, orderId={}",
+                          payment.getPaymentKey(), payment.getOrderId());
+                // payment는 DONE으로 커밋 유지 (Toss가 청구됐으므로 환불 근거 보존)
+            } else {
+                throw e;
+            }
+        }
 
         // 배송 레코드 자동 생성 — 실패해도 결제 트랜잭션을 롤백하지 않는다
         try {
@@ -142,9 +161,13 @@ class PaymentTransactionHelper {
         // 포인트 적립 (실 결제금액의 1%) — 실패해도 결제 트랜잭션을 롤백하지 않는다
         Order confirmedOrder = orderRepository.findById(payment.getOrderId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        // BigDecimal 전체 연산 후 마지막에 longValue() 호출 —
+        // 중간에 longValue()를 끼우면 소수점 버림이 먼저 발생해 포인트 누수 발생
         long paidAmount = confirmedOrder.getTotalAmount()
-                .subtract(confirmedOrder.getDiscountAmount()).longValue()
-                - confirmedOrder.getUsedPoints();
+                .subtract(confirmedOrder.getDiscountAmount())
+                .subtract(BigDecimal.valueOf(confirmedOrder.getUsedPoints()))
+                .max(BigDecimal.ZERO)
+                .longValue();
         if (paidAmount > 0) {
             try {
                 pointService.earn(confirmedOrder.getUserId(), paidAmount, confirmedOrder.getId());
