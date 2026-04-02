@@ -29,4 +29,10 @@ public @interface DistributedLock {
     long leaseTime() default 3;
 
     TimeUnit timeUnit() default TimeUnit.SECONDS;
+
+    /**
+     * 락 획득 실패 시 예외를 던지지 않고 메서드 실행을 건너뛴다.
+     * 스케줄러처럼 "이번 주기는 스킵"이 허용되는 경우에 사용한다.
+     */
+    boolean skipOnFailure() default false;
 }

@@ -3,6 +3,7 @@ package com.stockmanagement.domain.inventory.service;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.lock.DistributedLock;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.dto.InventoryAdjustRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryReceiveRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryResponse;
@@ -54,6 +55,7 @@ public class InventoryService {
     private final InventoryTransactionRepository transactionRepository;
     private final ProductRepository productRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final SystemSettingService systemSettingService;
 
     /**
      * 재고 목록을 조건 필터링 + 페이지네이션으로 조회한다.
@@ -163,7 +165,9 @@ public class InventoryService {
         recordTransaction(inventory, InventoryTransactionType.RESERVE, quantity);
 
         // 저재고 경보 — 임계값을 처음 하향 돌파하는 순간에만 발행 (중복 이메일 방지)
-        if (availableBefore >= LowStockEvent.THRESHOLD && inventory.getAvailable() < LowStockEvent.THRESHOLD) {
+        // systemSettingService 캐시(1시간 TTL)로 DB 조회 부담 없음
+        int threshold = systemSettingService.getLowStockThreshold();
+        if (availableBefore >= threshold && inventory.getAvailable() < threshold) {
             eventPublisher.publishEvent(new LowStockEvent(
                     productId,
                     inventory.getProduct().getName(),

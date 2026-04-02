@@ -51,6 +51,10 @@ public class DistributedLockAspect {
                     distributedLock.timeUnit()
             );
             if (!acquired) {
+                if (distributedLock.skipOnFailure()) {
+                    log.debug("분산 락 획득 실패 (스킵): key={}", lockKey);
+                    return null;
+                }
                 log.warn("분산 락 획득 실패: key={}", lockKey);
                 throw new BusinessException(ErrorCode.LOCK_ACQUISITION_FAILED);
             }

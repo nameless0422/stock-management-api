@@ -11,6 +11,7 @@ import com.stockmanagement.domain.inventory.entity.Inventory;
 import com.stockmanagement.domain.inventory.entity.InventoryStatus;
 import com.stockmanagement.domain.inventory.entity.InventoryTransaction;
 import com.stockmanagement.domain.inventory.entity.InventoryTransactionType;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.inventory.repository.InventoryTransactionRepository;
 import com.stockmanagement.domain.product.entity.Product;
@@ -56,6 +57,9 @@ class InventoryServiceTest {
     @Mock
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private SystemSettingService systemSettingService;
+
     @InjectMocks
     private InventoryService inventoryService;
 
@@ -69,6 +73,7 @@ class InventoryServiceTest {
                 .price(new BigDecimal("10000"))
                 .sku("SKU-001")
                 .build();
+        lenient().when(systemSettingService.getLowStockThreshold()).thenReturn(10);
     }
 
     /** onHand=10, reserved=3, available=7 인 재고 픽스처 */
