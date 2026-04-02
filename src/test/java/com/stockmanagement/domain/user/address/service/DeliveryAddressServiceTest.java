@@ -110,7 +110,7 @@ class DeliveryAddressServiceTest {
         @DisplayName("기존 기본 배송지 해제 후 새 기본 배송지 설정")
         void switchesDefault() {
             DeliveryAddress oldDefault = buildAddress(2L, 1L, true);
-            given(repository.findByUserIdAndIsDefaultTrue(1L)).willReturn(Optional.of(oldDefault));
+            given(repository.findByUserIdAndIsDefaultTrueForUpdate(1L)).willReturn(Optional.of(oldDefault));
             given(repository.findById(1L)).willReturn(Optional.of(address));
 
             service.setDefault(1L, 1L);
