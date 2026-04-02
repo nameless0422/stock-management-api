@@ -76,11 +76,12 @@ public class ShipmentService {
 
         if (!isAdmin) {
             Order order = orderRepository.findById(orderId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND));
             Long userId = userRepository.findByUsername(username)
                     .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
             if (!order.getUserId().equals(userId)) {
-                throw new BusinessException(ErrorCode.SHIPMENT_ACCESS_DENIED);
+                // 타인 배송 존재 여부 노출 방지 — ACCESS_DENIED 대신 NOT_FOUND 반환
+                throw new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND);
             }
         }
 

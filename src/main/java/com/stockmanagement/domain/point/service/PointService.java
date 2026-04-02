@@ -73,6 +73,7 @@ public class PointService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void earn(Long userId, long paidAmount, Long orderId) {
+        if (paidAmount <= 0) return; // 쿠폰/포인트 전액 할인 시 적립 없음
         long earnAmount = Math.max(1L, Math.round(paidAmount * EARN_RATE));
         UserPoint userPoint = getOrCreate(userId);
         userPoint.earn(earnAmount);
