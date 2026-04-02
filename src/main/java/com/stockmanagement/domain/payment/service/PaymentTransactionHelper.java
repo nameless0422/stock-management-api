@@ -135,8 +135,8 @@ class PaymentTransactionHelper {
         try {
             shipmentService.createForOrder(payment.getOrderId());
         } catch (Exception e) {
-            log.warn("[Payment] 배송 레코드 생성 실패 (결제는 완료됨): orderId={}, error={}",
-                    payment.getOrderId(), e.getMessage());
+            log.warn("[Payment] 배송 레코드 생성 실패 (결제는 완료됨): orderId={}",
+                    payment.getOrderId(), e);
         }
 
         // 포인트 적립 (실 결제금액의 1%) — 실패해도 결제 트랜잭션을 롤백하지 않는다
@@ -149,8 +149,8 @@ class PaymentTransactionHelper {
             try {
                 pointService.earn(confirmedOrder.getUserId(), paidAmount, confirmedOrder.getId());
             } catch (Exception e) {
-                log.warn("[Payment] 포인트 적립 실패 (결제는 완료됨): orderId={}, error={}",
-                        confirmedOrder.getId(), e.getMessage());
+                log.warn("[Payment] 포인트 적립 실패 (결제는 완료됨): orderId={}",
+                        confirmedOrder.getId(), e);
             }
         }
 

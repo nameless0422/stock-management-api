@@ -9,15 +9,16 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
-import org.redisson.api.RAtomicLong;
+import org.redisson.api.RScript;
 import org.redisson.api.RedissonClient;
+import org.redisson.client.codec.LongCodec;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.util.concurrent.TimeUnit;
+import java.util.Collections;
 
 /**
  * {@link RateLimit} 어노테이션을 처리하는 AOP 어스펙트.
@@ -33,6 +34,15 @@ public class RateLimitAspect {
 
     private static final String KEY_PREFIX = "rate-limit:api:";
 
+    // INCR과 EXPIRE를 원자적으로 실행하는 Lua 스크립트.
+    // INCR만 성공하고 EXPIRE 전에 앱이 크래시해도 키가 TTL 없이 영구 잔존하는 문제를 방지한다.
+    private static final String INCR_AND_EXPIRE_SCRIPT =
+            "local count = redis.call('INCR', KEYS[1]) " +
+            "if count == 1 then " +
+            "    redis.call('EXPIRE', KEYS[1], ARGV[1]) " +
+            "end " +
+            "return count";
+
     private final RedissonClient redissonClient;
 
     @Around("@annotation(com.stockmanagement.common.ratelimit.RateLimit)")
@@ -44,13 +54,14 @@ public class RateLimitAspect {
         String endpointKey = signature.getDeclaringType().getSimpleName() + ":" + signature.getMethod().getName();
         String redisKey = KEY_PREFIX + identifier + ":" + endpointKey;
 
-        RAtomicLong counter = redissonClient.getAtomicLong(redisKey);
-        long count = counter.incrementAndGet();
-
-        // 첫 번째 요청일 때만 TTL 설정 (윈도우 시작)
-        if (count == 1) {
-            counter.expire(rateLimit.windowSeconds(), TimeUnit.SECONDS);
-        }
+        // INCR + 조건부 EXPIRE를 Lua 스크립트로 원자 실행
+        long count = redissonClient.getScript(LongCodec.INSTANCE).eval(
+                RScript.Mode.READ_WRITE,
+                INCR_AND_EXPIRE_SCRIPT,
+                RScript.ReturnType.INTEGER,
+                Collections.singletonList(redisKey),
+                (long) rateLimit.windowSeconds()
+        );
 
         if (count > rateLimit.limit()) {
             log.warn("Rate limit 초과: key={}, count={}, limit={}", redisKey, count, rateLimit.limit());
