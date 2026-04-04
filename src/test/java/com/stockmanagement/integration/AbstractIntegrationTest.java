@@ -22,6 +22,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
+import org.testcontainers.images.builder.ImageFromDockerfile;
+import org.testcontainers.utility.DockerImageName;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -55,9 +57,25 @@ abstract class AbstractIntegrationTest {
     static final GenericContainer REDIS =
             new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
 
+    // analysis-nori 플러그인이 설치된 커스텀 ES 이미지 (Docker layer cache로 재빌드 방지)
+    private static final String ES_IMAGE_WITH_NORI;
+    static {
+        try {
+            ES_IMAGE_WITH_NORI = new ImageFromDockerfile()
+                    .withDockerfileFromBuilder(b -> b
+                            .from("docker.elastic.co/elasticsearch/elasticsearch:8.18.0")
+                            .run("bin/elasticsearch-plugin install --batch analysis-nori"))
+                    .get();
+        } catch (Exception e) {
+            throw new RuntimeException("nori 플러그인 ES 이미지 빌드 실패", e);
+        }
+    }
+
     @SuppressWarnings("resource")
     static final ElasticsearchContainer ELASTICSEARCH =
-            new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:8.18.0")
+            new ElasticsearchContainer(
+                    DockerImageName.parse(ES_IMAGE_WITH_NORI)
+                            .asCompatibleSubstituteFor("docker.elastic.co/elasticsearch/elasticsearch"))
                     .withEnv("xpack.security.enabled", "false")
                     .withEnv("ES_JAVA_OPTS", "-Xms256m -Xmx256m");
 
