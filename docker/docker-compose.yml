@@ -30,7 +30,9 @@ services:
       retries: 5
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.18.0
+    build:
+      context: ./elasticsearch
+      dockerfile: Dockerfile
     container_name: stock-elasticsearch
     environment:
       - discovery.type=single-node

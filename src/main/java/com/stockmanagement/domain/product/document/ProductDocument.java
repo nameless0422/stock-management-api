@@ -10,6 +10,7 @@ import org.springframework.data.elasticsearch.annotations.DateFormat;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
+import org.springframework.data.elasticsearch.annotations.Setting;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -21,12 +22,13 @@ import java.time.LocalDateTime;
  *
  * <p>필드 매핑:
  * <ul>
- *   <li>{@code name}, {@code description} — text 타입, standard analyzer (전문 검색)
+ *   <li>{@code name}, {@code description} — text 타입, nori_analyzer (한국어 형태소 분석)
  *   <li>{@code sku}, {@code category}, {@code status} — keyword 타입 (정확 일치 필터)
  *   <li>{@code price} — double 타입 (범위 쿼리)
  * </ul>
  */
 @Document(indexName = "products")
+@Setting(settingPath = "elasticsearch/product-settings.json")
 @Getter
 @Builder
 public class ProductDocument {
@@ -34,10 +36,10 @@ public class ProductDocument {
     @Id
     private String id;
 
-    @Field(type = FieldType.Text, analyzer = "standard")
+    @Field(type = FieldType.Text, analyzer = "nori_analyzer", searchAnalyzer = "nori_analyzer")
     private String name;
 
-    @Field(type = FieldType.Text, analyzer = "standard")
+    @Field(type = FieldType.Text, analyzer = "nori_analyzer", searchAnalyzer = "nori_analyzer")
     private String description;
 
     @Field(type = FieldType.Double)
