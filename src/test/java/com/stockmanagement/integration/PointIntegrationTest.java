@@ -36,9 +36,10 @@ class PointIntegrationTest extends AbstractIntegrationTest {
         return productId;
     }
 
-    /** UserPoint를 직접 저장하여 포인트 잔액을 초기화한다. */
+    /** signup() 시 생성된 UserPoint 레코드에 잔액을 추가한다. */
     private void seedPoints(long userId, long amount) {
-        UserPoint up = UserPoint.builder().userId(userId).build();
+        UserPoint up = userPointRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalStateException("UserPoint not found for userId=" + userId));
         up.earn(amount);
         userPointRepository.save(up);
     }
