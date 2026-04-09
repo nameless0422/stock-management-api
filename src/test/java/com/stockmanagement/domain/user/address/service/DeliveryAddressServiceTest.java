@@ -130,8 +130,8 @@ class DeliveryAddressServiceTest {
             DeliveryAddress defaultAddr = buildAddress(1L, 1L, true);
             DeliveryAddress otherAddr  = buildAddress(2L, 1L, false);
             given(repository.findById(1L)).willReturn(Optional.of(defaultAddr));
-            given(repository.findByUserIdOrderByIsDefaultDescCreatedAtDesc(1L))
-                    .willReturn(List.of(otherAddr));
+            given(repository.findFirstByUserIdOrderByCreatedAtDesc(1L))
+                    .willReturn(Optional.of(otherAddr));
 
             service.delete(1L, 1L);
 
@@ -147,7 +147,7 @@ class DeliveryAddressServiceTest {
             service.delete(1L, 1L);
 
             verify(repository).delete(address);
-            verify(repository, never()).findByUserIdOrderByIsDefaultDescCreatedAtDesc(anyLong());
+            verify(repository, never()).findFirstByUserIdOrderByCreatedAtDesc(anyLong());
         }
     }
 

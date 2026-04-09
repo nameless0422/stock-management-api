@@ -10,7 +10,7 @@ import com.stockmanagement.domain.inventory.dto.DailyInventorySnapshotResponse;
 import com.stockmanagement.domain.order.dto.DailyOrderStatsResponse;
 import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.user.dto.UserResponse;
-import com.stockmanagement.security.JwtTokenProvider;
+import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

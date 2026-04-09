@@ -5,7 +5,7 @@ import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.user.address.dto.DeliveryAddressResponse;
 import com.stockmanagement.domain.user.address.service.DeliveryAddressService;
 import com.stockmanagement.domain.user.service.UserService;
-import com.stockmanagement.security.JwtTokenProvider;
+import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

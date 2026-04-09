@@ -8,7 +8,7 @@ import com.stockmanagement.domain.coupon.dto.CouponValidateResponse;
 import com.stockmanagement.domain.coupon.entity.DiscountType;
 import com.stockmanagement.domain.coupon.service.CouponService;
 import com.stockmanagement.domain.user.service.UserService;
-import com.stockmanagement.security.JwtTokenProvider;
+import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

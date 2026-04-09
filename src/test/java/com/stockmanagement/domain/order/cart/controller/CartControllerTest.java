@@ -6,7 +6,7 @@ import com.stockmanagement.domain.order.cart.dto.CartResponse;
 import com.stockmanagement.domain.order.cart.service.CartService;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.user.service.UserService;
-import com.stockmanagement.security.JwtTokenProvider;
+import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

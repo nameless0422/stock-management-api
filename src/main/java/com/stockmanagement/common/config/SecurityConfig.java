@@ -1,8 +1,8 @@
 package com.stockmanagement.common.config;
 
 import com.stockmanagement.common.security.JwtBlacklist;
-import com.stockmanagement.security.JwtAuthenticationFilter;
-import com.stockmanagement.security.JwtTokenProvider;
+import com.stockmanagement.common.security.JwtAuthenticationFilter;
+import com.stockmanagement.common.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

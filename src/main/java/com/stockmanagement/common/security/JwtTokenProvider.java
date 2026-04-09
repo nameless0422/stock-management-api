@@ -1,4 +1,4 @@
-package com.stockmanagement.security;
+package com.stockmanagement.common.security;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
@@ -29,7 +29,12 @@ public class JwtTokenProvider {
         this.secretKey = Keys.hmacShaKeyFor(secretKeyStr.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String createToken(String username, String role) {
+    /**
+     * JWT 액세스 토큰을 생성한다.
+     *
+     * <p>{@code userId}를 클레임에 포함하여 서비스 레이어에서 DB 조회 없이 userId를 사용할 수 있게 한다.
+     */
+    public String createToken(String username, String role, Long userId) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + tokenValidityInSeconds * 1000);
 
@@ -37,10 +42,16 @@ public class JwtTokenProvider {
                 .id(UUID.randomUUID().toString())
                 .subject(username)
                 .claim("role", role)
+                .claim("userId", userId)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(secretKey)
                 .compact();
+    }
+
+    /** userId 없는 토큰 생성 — 테스트/레거시 호환용 */
+    public String createToken(String username, String role) {
+        return createToken(username, role, null);
     }
 
     public String getUsername(String token) {
@@ -49,6 +60,18 @@ public class JwtTokenProvider {
 
     public String getRole(String token) {
         return parseClaims(token).get("role", String.class);
+    }
+
+    /**
+     * JWT 토큰에서 userId 클레임을 추출한다.
+     * 구 버전 토큰처럼 클레임이 없으면 null을 반환한다.
+     */
+    public Long getUserId(String token) {
+        try {
+            return parseClaims(token).get("userId", Long.class);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public boolean validateToken(String token) {

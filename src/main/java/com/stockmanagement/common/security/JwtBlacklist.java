@@ -1,6 +1,6 @@
 package com.stockmanagement.common.security;
 
-import com.stockmanagement.security.JwtTokenProvider;
+import com.stockmanagement.common.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Component;

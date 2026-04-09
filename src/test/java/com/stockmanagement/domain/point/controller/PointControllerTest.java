@@ -5,7 +5,7 @@ import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.point.dto.PointBalanceResponse;
 import com.stockmanagement.domain.point.dto.PointTransactionResponse;
 import com.stockmanagement.domain.point.service.PointService;
-import com.stockmanagement.security.JwtTokenProvider;
+import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
