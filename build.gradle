@@ -80,19 +80,43 @@ tasks.named('test') {
 	finalizedBy jacocoTestReport
 }
 
+// 커버리지 측정 대상에서 제외할 클래스 목록 (공통 적용)
+def jacocoExcludes = [
+	'com/stockmanagement/StockManagementApiApplication.class',
+	'com/stockmanagement/common/config/**',        // 설정 클래스
+	'com/stockmanagement/**/dto/**',               // DTO (순수 데이터 클래스)
+	'com/stockmanagement/**/entity/**',            // Entity (JPA 매핑 클래스)
+	'com/stockmanagement/**/document/**',          // ES Document
+]
+
 jacocoTestReport {
 	dependsOn test
 	reports {
 		html.required = true
-		xml.required = false
+		xml.required = true   // CI에서 커버리지 수치 파싱용
 		csv.required = false
 	}
-	// contextLoads()처럼 DB 연결이 필요한 통합 테스트는 커버리지 측정 대상에서 제외
 	afterEvaluate {
 		classDirectories.setFrom(files(classDirectories.files.collect {
-			fileTree(dir: it, exclude: [
-				'com/stockmanagement/StockManagementApiApplication.class'
-			])
+			fileTree(dir: it, exclude: jacocoExcludes)
 		}))
+	}
+}
+
+// 커버리지 임계값 검증 — 기준 미달 시 빌드 실패
+jacocoTestCoverageVerification {
+	afterEvaluate {
+		classDirectories.setFrom(files(classDirectories.files.collect {
+			fileTree(dir: it, exclude: jacocoExcludes)
+		}))
+	}
+	violationRules {
+		rule {
+			limit {
+				counter = 'LINE'
+				value   = 'COVEREDRATIO'
+				minimum = 0.70  // 라인 커버리지 70% 미달 시 빌드 실패
+			}
+		}
 	}
 }
