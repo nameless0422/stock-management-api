@@ -30,7 +30,6 @@ import com.stockmanagement.domain.product.review.repository.ReviewRepository;
 import com.stockmanagement.common.event.OrderCancelledEvent;
 import com.stockmanagement.common.event.OrderCreatedEvent;
 import com.stockmanagement.common.outbox.OutboxEventStore;
-import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -75,7 +74,6 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final InventoryService inventoryService;
     private final OrderStatusHistoryRepository historyRepository;
-    private final UserRepository userRepository;
     private final CouponService couponService;
     private final PointService pointService;
     private final OutboxEventStore outboxEventStore;
@@ -232,10 +230,10 @@ public class OrderService {
      * 캐시 히트로 인한 소유권 검증 누락 위험이 없다.
      * ADMIN은 모든 주문에 접근 가능하고, USER는 본인 주문만 조회할 수 있다.
      */
-    public OrderResponse getByIdForUser(Long id, String username, boolean isAdmin) {
+    public OrderResponse getByIdForUser(Long id, Long userId, boolean isAdmin) {
         Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        validateOrderOwnership(order, username, isAdmin);
+        validateOrderOwnership(order, userId, isAdmin);
         return OrderResponse.from(order);
     }
 
@@ -243,10 +241,10 @@ public class OrderService {
      * 주문 + 결제 + 배송 정보를 단일 응답으로 반환한다 (프론트 상세 페이지용).
      * 소유권 검증은 {@link #getByIdForUser}와 동일하다.
      */
-    public OrderDetailResponse getDetail(Long id, String username, boolean isAdmin) {
+    public OrderDetailResponse getDetail(Long id, Long userId, boolean isAdmin) {
         Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        validateOrderOwnership(order, username, isAdmin);
+        validateOrderOwnership(order, userId, isAdmin);
         PaymentResponse payment = paymentRepository.findByOrderId(order.getId())
                 .map(PaymentResponse::from)
                 .orElse(null);
@@ -275,13 +273,10 @@ public class OrderService {
      * @param request     검색 조건 (status, userId, startDate, endDate)
      * @param pageable    페이징/정렬 정보
      */
-    public Page<OrderResponse> getList(String username, boolean isAdmin,
+    public Page<OrderResponse> getList(Long userId, boolean isAdmin,
                                        OrderSearchRequest request, Pageable pageable) {
         if (!isAdmin) {
-            // USER: 본인 주문만 조회
-            Long userId = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND))
-                    .getId();
+            // USER: 본인 주문만 조회 (컨트롤러에서 전달된 userId로 강제 필터)
             request.setUserId(userId);
         }
         return orderRepository.findAll(OrderSpecification.of(request), pageable)
@@ -293,10 +288,10 @@ public class OrderService {
      *
      * <p>ADMIN은 모든 주문 이력에 접근 가능하고, USER는 본인 주문 이력만 조회할 수 있다.
      */
-    public List<OrderStatusHistoryResponse> getHistory(Long orderId, String username, boolean isAdmin) {
+    public List<OrderStatusHistoryResponse> getHistory(Long orderId, Long userId, boolean isAdmin) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        validateOrderOwnership(order, username, isAdmin);
+        validateOrderOwnership(order, userId, isAdmin);
         return historyRepository.findByOrderIdOrderByCreatedAtAsc(orderId)
                 .stream().map(OrderStatusHistoryResponse::from).toList();
     }
@@ -317,14 +312,14 @@ public class OrderService {
      */
     @Transactional
     @CacheEvict(cacheNames = "orders", key = "#id")
-    public OrderResponse cancel(Long id, String username, boolean isAdmin) {
+    public OrderResponse cancel(Long id, Long userId, boolean isAdmin) {
         // 비관적 락: 만료 스케줄러(cancel)와 결제 확정(confirm)의 동시 실행으로 인한
         // 재고 상태 불일치(allocated 누수)를 방지한다.
         Order order = orderRepository.findByIdWithItemsForUpdate(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
         // 요청자가 주문 소유자인지 검증 (ADMIN은 모든 주문 취소 가능)
-        validateOrderOwnership(order, username, isAdmin);
+        validateOrderOwnership(order, userId, isAdmin);
 
         // 상태 검증 + CANCELLED 전환 (PENDING이 아니면 INVALID_ORDER_STATUS 예외)
         order.cancel();
@@ -407,15 +402,12 @@ public class OrderService {
      * 주문 소유권을 검증한다.
      * ADMIN은 모든 주문에 접근 가능하고, USER는 본인 주문만 접근할 수 있다.
      *
+     * @param userId 요청자 ID (ADMIN bypass 시 null 허용)
      * @throws BusinessException USER가 타인 주문에 접근 시 {@code ORDER_ACCESS_DENIED}
      */
-    private void validateOrderOwnership(Order order, String username, boolean isAdmin) {
-        if (!isAdmin) {
-            Long userId = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
-            if (!order.getUserId().equals(userId)) {
-                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
-            }
+    private void validateOrderOwnership(Order order, Long userId, boolean isAdmin) {
+        if (!isAdmin && !order.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
         }
     }
 
