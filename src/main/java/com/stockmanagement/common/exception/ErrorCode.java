@@ -19,7 +19,7 @@ public enum ErrorCode {
 
     // ===== Product =====
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다."),
-    PRODUCT_NOT_AVAILABLE(HttpStatus.CONFLICT, "판매 중이 아닌 상품은 주문할 수 없습니다."),
+    PRODUCT_NOT_AVAILABLE(HttpStatus.UNPROCESSABLE_ENTITY, "판매 중이 아닌 상품은 주문할 수 없습니다."),
     DUPLICATE_SKU(HttpStatus.CONFLICT, "이미 존재하는 SKU입니다."),
 
     // ===== Inventory =====
@@ -66,10 +66,10 @@ public enum ErrorCode {
 
     // ===== Coupon =====
     COUPON_NOT_FOUND(HttpStatus.NOT_FOUND, "쿠폰을 찾을 수 없습니다."),
-    COUPON_INACTIVE(HttpStatus.CONFLICT, "비활성화된 쿠폰입니다."),
+    COUPON_INACTIVE(HttpStatus.UNPROCESSABLE_ENTITY, "비활성화된 쿠폰입니다."),
     COUPON_EXPIRED(HttpStatus.GONE, "만료된 쿠폰입니다."),
-    COUPON_EXHAUSTED(HttpStatus.CONFLICT, "쿠폰 사용 가능 횟수를 초과했습니다."),
-    COUPON_ALREADY_USED(HttpStatus.CONFLICT, "이미 사용한 쿠폰입니다."),
+    COUPON_EXHAUSTED(HttpStatus.UNPROCESSABLE_ENTITY, "쿠폰 사용 가능 횟수를 초과했습니다."),
+    COUPON_ALREADY_USED(HttpStatus.UNPROCESSABLE_ENTITY, "이미 사용한 쿠폰입니다."),
     COUPON_MIN_ORDER_NOT_MET(HttpStatus.BAD_REQUEST, "쿠폰 적용을 위한 최소 주문 금액을 충족하지 않습니다."),
     COUPON_ALREADY_ISSUED(HttpStatus.CONFLICT, "이미 발급된 쿠폰입니다."),
 
