@@ -4,6 +4,8 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.point.entity.UserPoint;
+import com.stockmanagement.domain.point.repository.UserPointRepository;
 import com.stockmanagement.domain.user.dto.LoginRequest;
 import com.stockmanagement.domain.user.dto.LoginResponse;
 import com.stockmanagement.domain.user.dto.RefreshRequest;
@@ -49,6 +51,9 @@ class UserServiceTest {
     private OrderRepository orderRepository;
 
     @Mock
+    private UserPointRepository userPointRepository;
+
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @Mock
@@ -91,11 +96,13 @@ class UserServiceTest {
             given(userRepository.existsByEmail("test@example.com")).willReturn(false);
             given(passwordEncoder.encode("password123")).willReturn("encoded-pw");
             given(userRepository.save(any(User.class))).willReturn(user);
+            given(userPointRepository.save(any(UserPoint.class))).willReturn(null);
 
             UserResponse response = userService.signup(request);
 
             verify(passwordEncoder).encode("password123");
             verify(userRepository).save(any(User.class));
+            verify(userPointRepository).save(any(UserPoint.class)); // 포인트 계정 초기화 검증
             assertThat(response.username()).isEqualTo("testuser");
             assertThat(response.email()).isEqualTo("test@example.com");
             assertThat(response.role()).isEqualTo(UserRole.USER);
@@ -148,7 +155,7 @@ class UserServiceTest {
 
             given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
             given(passwordEncoder.matches("password123", "encoded-pw")).willReturn(true);
-            given(jwtTokenProvider.createToken("testuser", "USER")).willReturn("jwt-token");
+            given(jwtTokenProvider.createToken("testuser", "USER", null)).willReturn("jwt-token");
             given(jwtTokenProvider.getTokenValidityInSeconds()).willReturn(86400L);
             given(refreshTokenStore.issue("testuser")).willReturn("refresh-uuid");
 
@@ -205,7 +212,7 @@ class UserServiceTest {
 
             given(refreshTokenStore.consume("old-refresh-uuid")).willReturn("testuser");
             given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
-            given(jwtTokenProvider.createToken("testuser", "USER")).willReturn("new-jwt-token");
+            given(jwtTokenProvider.createToken("testuser", "USER", null)).willReturn("new-jwt-token");
             given(jwtTokenProvider.getTokenValidityInSeconds()).willReturn(86400L);
             given(refreshTokenStore.issue("testuser")).willReturn("new-refresh-uuid");
 

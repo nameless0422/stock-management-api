@@ -5,6 +5,8 @@ import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.point.entity.UserPoint;
+import com.stockmanagement.domain.point.repository.UserPointRepository;
 import com.stockmanagement.domain.product.review.repository.ReviewRepository;
 import com.stockmanagement.domain.user.dto.ChangePasswordRequest;
 import com.stockmanagement.domain.user.dto.LoginRequest;
@@ -44,6 +46,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
     private final ReviewRepository reviewRepository;
+    private final UserPointRepository userPointRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final LoginRateLimiter loginRateLimiter;
@@ -66,7 +69,10 @@ public class UserService {
                 .role(UserRole.USER)
                 .build();
 
-        return UserResponse.from(userRepository.save(user));
+        User savedUser = userRepository.save(user);
+        // 포인트 계정을 회원가입 시점에 미리 생성 — getOrCreate() 경쟁 조건 원천 차단
+        userPointRepository.save(UserPoint.builder().userId(savedUser.getId()).build());
+        return UserResponse.from(savedUser);
     }
 
     /** 로그인. Rate Limit 확인 → 자격증명 검증 → Access Token + Refresh Token 발급. */
@@ -81,7 +87,7 @@ public class UserService {
         }
 
         loginRateLimiter.reset(request.username());
-        String accessToken  = jwtTokenProvider.createToken(user.getUsername(), user.getRole().name());
+        String accessToken  = jwtTokenProvider.createToken(user.getUsername(), user.getRole().name(), user.getId());
         String refreshToken = refreshTokenStore.issue(user.getUsername());
         return LoginResponse.of(accessToken, jwtTokenProvider.getTokenValidityInSeconds(), refreshToken);
     }
@@ -97,7 +103,7 @@ public class UserService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        String newAccessToken  = jwtTokenProvider.createToken(user.getUsername(), user.getRole().name());
+        String newAccessToken  = jwtTokenProvider.createToken(user.getUsername(), user.getRole().name(), user.getId());
         String newRefreshToken = refreshTokenStore.issue(user.getUsername());
         return LoginResponse.of(newAccessToken, jwtTokenProvider.getTokenValidityInSeconds(), newRefreshToken);
     }
