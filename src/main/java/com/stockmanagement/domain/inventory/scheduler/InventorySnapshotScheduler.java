@@ -39,29 +39,25 @@ public class InventorySnapshotScheduler {
         Set<Long> alreadySnapped = snapshotRepository.findInventoryIdsBySnapshotDate(today);
         log.info("[InventorySnapshotScheduler] 재고 스냅샷 시작 — 대상: {}건, 기준일: {}", inventories.size(), today);
 
-        int saved = 0;
-        int skipped = 0;
-        for (Inventory inv : inventories) {
-            try {
-                if (alreadySnapped.contains(inv.getId())) {
-                    skipped++;
-                    continue;
-                }
-                DailyInventorySnapshot snapshot = DailyInventorySnapshot.builder()
+        // 신규 항목만 필터링하여 엔티티 리스트 구성 → saveAll() 단일 배치 INSERT
+        List<DailyInventorySnapshot> snapshots = inventories.stream()
+                .filter(inv -> !alreadySnapped.contains(inv.getId()))
+                .map(inv -> DailyInventorySnapshot.builder()
                         .inventory(inv)
                         .snapshotDate(today)
                         .onHand(inv.getOnHand())
                         .reserved(inv.getReserved())
                         .allocated(inv.getAllocated())
                         .available(inv.getAvailable())
-                        .build();
-                snapshotRepository.save(snapshot);
-                saved++;
-            } catch (Exception e) {
-                log.error("[InventorySnapshotScheduler] 스냅샷 저장 실패 — inventoryId={}",
-                        inv.getId(), e);
-            }
+                        .build())
+                .toList();
+
+        int skipped = inventories.size() - snapshots.size();
+        try {
+            snapshotRepository.saveAll(snapshots);
+            log.info("[InventorySnapshotScheduler] 완료 — 저장: {}건 / 스킵: {}건", snapshots.size(), skipped);
+        } catch (Exception e) {
+            log.error("[InventorySnapshotScheduler] 스냅샷 배치 저장 실패 — 저장 시도: {}건", snapshots.size(), e);
         }
-        log.info("[InventorySnapshotScheduler] 완료 — 저장: {}건 / 스킵: {}건", saved, skipped);
     }
 }

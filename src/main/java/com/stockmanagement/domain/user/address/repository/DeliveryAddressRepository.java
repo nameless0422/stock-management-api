@@ -30,6 +30,9 @@ public interface DeliveryAddressRepository extends JpaRepository<DeliveryAddress
     @Query("SELECT d FROM DeliveryAddress d WHERE d.userId = :userId AND d.isDefault = true")
     Optional<DeliveryAddress> findByUserIdAndIsDefaultTrueForUpdate(@Param("userId") Long userId);
 
+    /** 기본 배송지 삭제 후 승격 후보 조회 — 가장 최근 등록된 배송지 1건 반환 */
+    Optional<DeliveryAddress> findFirstByUserIdOrderByCreatedAtDesc(Long userId);
+
     /** 배송지 소유권 확인 (서비스 레이어에서 권한 검사용) */
     boolean existsByIdAndUserId(Long id, Long userId);
 
