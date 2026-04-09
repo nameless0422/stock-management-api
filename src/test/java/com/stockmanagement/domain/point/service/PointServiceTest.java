@@ -162,7 +162,7 @@ class PointServiceTest {
                     .description("적립").orderId(100L).build();
 
             given(pointTransactionRepository.findByOrderId(100L)).willReturn(List.of(useTx, earnTx));
-            given(pointTransactionRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+            given(pointTransactionRepository.saveAll(any())).willAnswer(inv -> inv.getArgument(0));
 
             pointService.refundByOrder(1L, 100L);
 

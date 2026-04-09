@@ -12,6 +12,7 @@ import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.DailyOrderStatsRepository;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.order.repository.OrderStatsProjection;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.product.repository.ProductRepository;
@@ -78,13 +79,22 @@ class AdminServiceTest {
             given(inventory.getAllocated()).willReturn(1);
             given(inventory.getAvailable()).willReturn(3);
 
+            // findOrderStats() 단일 쿼리로 5개 쿼리 대체
+            OrderStatsProjection pendingStat = mock(OrderStatsProjection.class);
+            given(pendingStat.getStatus()).willReturn(OrderStatus.PENDING);
+            given(pendingStat.getOrderCount()).willReturn(10L);
+
+            OrderStatsProjection confirmedStat = mock(OrderStatsProjection.class);
+            given(confirmedStat.getStatus()).willReturn(OrderStatus.CONFIRMED);
+            given(confirmedStat.getOrderCount()).willReturn(80L);
+            given(confirmedStat.getTotalAmount()).willReturn(BigDecimal.valueOf(500_000));
+
+            OrderStatsProjection cancelledStat = mock(OrderStatsProjection.class);
+            given(cancelledStat.getStatus()).willReturn(OrderStatus.CANCELLED);
+            given(cancelledStat.getOrderCount()).willReturn(10L);
+
             given(systemSettingService.getLowStockThreshold()).willReturn(10);
-            given(orderRepository.count()).willReturn(100L);
-            given(orderRepository.countByStatus(OrderStatus.PENDING)).willReturn(10L);
-            given(orderRepository.countByStatus(OrderStatus.CONFIRMED)).willReturn(80L);
-            given(orderRepository.countByStatus(OrderStatus.CANCELLED)).willReturn(10L);
-            given(orderRepository.sumTotalAmountByStatus(OrderStatus.CONFIRMED))
-                    .willReturn(BigDecimal.valueOf(500_000));
+            given(orderRepository.findOrderStats()).willReturn(List.of(pendingStat, confirmedStat, cancelledStat));
             given(userRepository.count()).willReturn(200L);
             given(inventoryRepository.findLowStock(10)).willReturn(List.of(inventory));
 
@@ -104,9 +114,7 @@ class AdminServiceTest {
         @DisplayName("저재고 없으면 빈 목록 반환")
         void emptyLowStock() {
             given(systemSettingService.getLowStockThreshold()).willReturn(10);
-            given(orderRepository.count()).willReturn(0L);
-            given(orderRepository.countByStatus(any())).willReturn(0L);
-            given(orderRepository.sumTotalAmountByStatus(any())).willReturn(BigDecimal.ZERO);
+            given(orderRepository.findOrderStats()).willReturn(List.of());
             given(userRepository.count()).willReturn(0L);
             given(inventoryRepository.findLowStock(10)).willReturn(List.of());
 

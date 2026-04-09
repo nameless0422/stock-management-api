@@ -6,7 +6,7 @@ import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.inventory.dto.InventoryResponse;
 import com.stockmanagement.domain.inventory.service.InventoryService;
 import com.stockmanagement.common.security.JwtBlacklist;
-import com.stockmanagement.security.JwtTokenProvider;
+import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

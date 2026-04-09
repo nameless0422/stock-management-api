@@ -1,4 +1,4 @@
-package com.stockmanagement.security;
+package com.stockmanagement.common.security;
 
 import com.stockmanagement.common.security.JwtBlacklist;
 import jakarta.servlet.FilterChain;
@@ -35,6 +35,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             var authority = new SimpleGrantedAuthority("ROLE_" + role);
             var authentication = new UsernamePasswordAuthenticationToken(
                     username, null, List.of(authority));
+
+            // userId 클레임이 존재하면 details에 저장하여 서비스 레이어 DB 조회를 제거한다
+            Long userId = jwtTokenProvider.getUserId(token);
+            if (userId != null) {
+                authentication.setDetails(userId);
+            }
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
         }

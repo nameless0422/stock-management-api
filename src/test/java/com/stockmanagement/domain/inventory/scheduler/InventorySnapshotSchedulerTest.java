@@ -29,33 +29,35 @@ class InventorySnapshotSchedulerTest {
     @InjectMocks InventorySnapshotScheduler scheduler;
 
     @Test
-    @DisplayName("스냅샷 미존재 시 저장")
+    @DisplayName("스냅샷 미존재 시 saveAll()로 배치 저장")
     void savesSnapshotWhenNotExists() {
         Inventory inv = buildInventory(1L, 100, 10, 5);
         given(inventoryRepository.findAll()).willReturn(List.of(inv));
         // 오늘 스냅샷이 없는 상태 — 빈 Set 반환
         given(snapshotRepository.findInventoryIdsBySnapshotDate(any(LocalDate.class)))
                 .willReturn(Set.of());
-        given(snapshotRepository.save(any(DailyInventorySnapshot.class)))
+        given(snapshotRepository.saveAll(anyList()))
                 .willAnswer(invocation -> invocation.getArgument(0));
 
         scheduler.takeSnapshot();
 
-        verify(snapshotRepository).save(any(DailyInventorySnapshot.class));
+        verify(snapshotRepository).saveAll(anyList());
     }
 
     @Test
-    @DisplayName("스냅샷 이미 존재 시 저장 스킵")
+    @DisplayName("스냅샷 이미 존재 시 saveAll()에 빈 목록 전달 (저장 없음)")
     void skipsWhenSnapshotAlreadyExists() {
         Inventory inv = buildInventory(1L, 100, 10, 5);
         given(inventoryRepository.findAll()).willReturn(List.of(inv));
         // inventoryId=1L이 이미 존재하는 상태
         given(snapshotRepository.findInventoryIdsBySnapshotDate(any(LocalDate.class)))
                 .willReturn(Set.of(1L));
+        given(snapshotRepository.saveAll(anyList()))
+                .willAnswer(invocation -> invocation.getArgument(0));
 
         scheduler.takeSnapshot();
 
-        verify(snapshotRepository, never()).save(any());
+        verify(snapshotRepository).saveAll(List.of());
     }
 
     // ===== 헬퍼 =====

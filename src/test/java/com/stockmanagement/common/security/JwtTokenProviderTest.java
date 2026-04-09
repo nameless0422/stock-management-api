@@ -1,4 +1,4 @@
-package com.stockmanagement.security;
+package com.stockmanagement.common.security;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

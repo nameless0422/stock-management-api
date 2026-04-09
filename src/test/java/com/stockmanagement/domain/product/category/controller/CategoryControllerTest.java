@@ -6,7 +6,7 @@ import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.RefreshTokenStore;
 import com.stockmanagement.domain.product.category.dto.CategoryResponse;
 import com.stockmanagement.domain.product.category.service.CategoryService;
-import com.stockmanagement.security.JwtTokenProvider;
+import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

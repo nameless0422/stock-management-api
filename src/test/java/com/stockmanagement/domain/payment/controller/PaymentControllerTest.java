@@ -8,7 +8,7 @@ import com.stockmanagement.domain.payment.dto.PaymentResponse;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.payment.infrastructure.TossWebhookVerifier;
 import com.stockmanagement.domain.payment.service.PaymentService;
-import com.stockmanagement.security.JwtTokenProvider;
+import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
