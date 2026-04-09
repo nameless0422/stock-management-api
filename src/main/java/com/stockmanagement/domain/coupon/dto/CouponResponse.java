@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.coupon.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.stockmanagement.domain.coupon.entity.Coupon;
 import com.stockmanagement.domain.coupon.entity.DiscountType;
 import lombok.Builder;
@@ -26,6 +27,8 @@ public class CouponResponse {
     private LocalDateTime validFrom;
     private LocalDateTime validUntil;
     private boolean active;
+    @JsonProperty("isPublic")
+    private boolean isPublic;
     private LocalDateTime createdAt;
 
     public static CouponResponse from(Coupon coupon) {
@@ -44,6 +47,7 @@ public class CouponResponse {
                 .validFrom(coupon.getValidFrom())
                 .validUntil(coupon.getValidUntil())
                 .active(coupon.isActive())
+                .isPublic(coupon.isPublic())
                 .createdAt(coupon.getCreatedAt())
                 .build();
     }

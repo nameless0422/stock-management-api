@@ -2,9 +2,11 @@ package com.stockmanagement.domain.coupon.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.coupon.dto.CouponClaimRequest;
 import com.stockmanagement.domain.coupon.dto.CouponCreateRequest;
 import com.stockmanagement.domain.coupon.dto.CouponValidateRequest;
 import com.stockmanagement.domain.coupon.dto.CouponValidateResponse;
+import com.stockmanagement.domain.coupon.dto.MyCouponResponse;
 import com.stockmanagement.domain.coupon.entity.Coupon;
 import com.stockmanagement.domain.coupon.entity.CouponUsage;
 import com.stockmanagement.domain.coupon.entity.DiscountType;
@@ -183,6 +185,8 @@ class CouponServiceTest {
         given(couponRepository.findByCodeWithLock("FIXED10")).willReturn(Optional.of(coupon));
         given(couponUsageRepository.countByCoupon_IdAndUserId(any(), eq(USER_ID))).willReturn(0);
         given(couponUsageRepository.save(any())).willReturn(mock(CouponUsage.class));
+        // 비공개 쿠폰이므로 user_coupons 등록 여부 확인 stub
+        given(userCouponRepository.existsByUserIdAndCouponId(any(), any())).willReturn(true);
 
         CouponValidateResponse result = couponService.applyCoupon(
                 "FIXED10", USER_ID, ORDER_ID, BigDecimal.valueOf(30000));
@@ -190,6 +194,20 @@ class CouponServiceTest {
         assertThat(result.getDiscountAmount()).isEqualByComparingTo(BigDecimal.valueOf(5000));
         assertThat(coupon.getUsageCount()).isEqualTo(1);
         verify(couponUsageRepository).save(any(CouponUsage.class));
+    }
+
+    @Test
+    @DisplayName("applyCoupon — 비공개 쿠폰 미발급 사용자 → COUPON_NOT_ISSUED")
+    void applyCoupon_privateNotIssued() {
+        Coupon coupon = fixedCoupon(BigDecimal.valueOf(5000), null); // isPublic = false
+        given(couponRepository.findByCodeWithLock("FIXED10")).willReturn(Optional.of(coupon));
+        given(couponUsageRepository.countByCoupon_IdAndUserId(any(), eq(USER_ID))).willReturn(0);
+        given(userCouponRepository.existsByUserIdAndCouponId(any(), any())).willReturn(false);
+
+        assertThatThrownBy(() -> couponService.applyCoupon(
+                "FIXED10", USER_ID, ORDER_ID, BigDecimal.valueOf(30000)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.COUPON_NOT_ISSUED);
     }
 
     @Test
@@ -300,5 +318,67 @@ class CouponServiceTest {
         var result = couponService.getMyCoupons(USER_ID);
 
         assertThat(result.get(0).isUsable()).isFalse();
+    }
+
+    // ===== claim =====
+
+    @Test
+    @DisplayName("claim — 공개 쿠폰 정상 등록: MyCouponResponse 반환")
+    void claim_success() {
+        Coupon coupon = Coupon.builder()
+                .code("PUBLIC10")
+                .name("공개 쿠폰")
+                .discountType(DiscountType.FIXED_AMOUNT)
+                .discountValue(BigDecimal.valueOf(1000))
+                .maxUsagePerUser(1)
+                .validFrom(PAST)
+                .validUntil(FUTURE)
+                .isPublic(true)
+                .build();
+        UserCoupon saved = UserCoupon.builder().userId(USER_ID).coupon(coupon).build();
+
+        given(couponRepository.findByCode("PUBLIC10")).willReturn(Optional.of(coupon));
+        given(userCouponRepository.existsByUserIdAndCouponId(eq(USER_ID), any())).willReturn(false);
+        given(userCouponRepository.save(any())).willReturn(saved);
+        given(couponUsageRepository.countByCoupon_IdAndUserId(any(), eq(USER_ID))).willReturn(0);
+
+        MyCouponResponse result = couponService.claim(USER_ID, new CouponClaimRequest("PUBLIC10"));
+
+        assertThat(result.isUsable()).isTrue();
+        verify(userCouponRepository).save(any(UserCoupon.class));
+    }
+
+    @Test
+    @DisplayName("claim — 비공개 쿠폰 → COUPON_NOT_PUBLIC")
+    void claim_notPublic() {
+        Coupon coupon = fixedCoupon(BigDecimal.valueOf(1000), null); // isPublic = false
+
+        given(couponRepository.findByCode("FIXED10")).willReturn(Optional.of(coupon));
+
+        assertThatThrownBy(() -> couponService.claim(USER_ID, new CouponClaimRequest("FIXED10")))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.COUPON_NOT_PUBLIC);
+    }
+
+    @Test
+    @DisplayName("claim — 이미 보유한 공개 쿠폰 재등록 시도 → COUPON_ALREADY_ISSUED")
+    void claim_alreadyIssued() {
+        Coupon coupon = Coupon.builder()
+                .code("PUBLIC10")
+                .name("공개 쿠폰")
+                .discountType(DiscountType.FIXED_AMOUNT)
+                .discountValue(BigDecimal.valueOf(1000))
+                .maxUsagePerUser(1)
+                .validFrom(PAST)
+                .validUntil(FUTURE)
+                .isPublic(true)
+                .build();
+
+        given(couponRepository.findByCode("PUBLIC10")).willReturn(Optional.of(coupon));
+        given(userCouponRepository.existsByUserIdAndCouponId(eq(USER_ID), any())).willReturn(true);
+
+        assertThatThrownBy(() -> couponService.claim(USER_ID, new CouponClaimRequest("PUBLIC10")))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.COUPON_ALREADY_ISSUED);
     }
 }

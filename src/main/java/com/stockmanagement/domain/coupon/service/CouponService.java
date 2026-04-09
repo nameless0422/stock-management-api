@@ -3,6 +3,7 @@ package com.stockmanagement.domain.coupon.service;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.lock.DistributedLock;
+import com.stockmanagement.domain.coupon.dto.CouponClaimRequest;
 import com.stockmanagement.domain.coupon.dto.CouponCreateRequest;
 import com.stockmanagement.domain.coupon.dto.CouponIssueRequest;
 import com.stockmanagement.domain.coupon.dto.CouponResponse;
@@ -60,6 +61,7 @@ public class CouponService {
                 .maxUsagePerUser(request.getMaxUsagePerUser())
                 .validFrom(request.getValidFrom())
                 .validUntil(request.getValidUntil())
+                .isPublic(request.isPublic())
                 .build();
         return CouponResponse.from(couponRepository.save(coupon));
     }
@@ -135,6 +137,34 @@ public class CouponService {
     // ===== USER =====
 
     /**
+     * 공개 쿠폰 코드를 입력해 사용자 지갑(user_coupons)에 등록한다.
+     *
+     * <p>isPublic = false 쿠폰은 admin이 직접 발급해야 하므로 claim 불가.
+     * 이미 등록된 쿠폰(중복 claim)은 COUPON_ALREADY_ISSUED 예외를 던진다.
+     *
+     * @return 등록된 쿠폰 정보 + 사용 가능 여부
+     */
+    @Transactional
+    public MyCouponResponse claim(Long userId, CouponClaimRequest request) {
+        Coupon coupon = findActiveByCode(request.getCouponCode());
+
+        if (!coupon.isPublic()) {
+            throw new BusinessException(ErrorCode.COUPON_NOT_PUBLIC);
+        }
+        if (userCouponRepository.existsByUserIdAndCouponId(userId, coupon.getId())) {
+            throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
+        }
+        // 유효기간 검증 — 만료 쿠폰은 등록 시점에 차단
+        validatePeriod(coupon);
+
+        UserCoupon userCoupon = userCouponRepository.save(
+                UserCoupon.builder().userId(userId).coupon(coupon).build());
+
+        int usedCount = couponUsageRepository.countByCoupon_IdAndUserId(coupon.getId(), userId);
+        return MyCouponResponse.from(userCoupon, isUsable(coupon, usedCount, LocalDateTime.now()));
+    }
+
+    /**
      * 쿠폰 유효성 검사 + 할인 금액 미리보기.
      * 사용 이력을 기록하지 않으므로 읽기 전용.
      */
@@ -167,6 +197,12 @@ public class CouponService {
         validateUsageCount(coupon);
         validateMinimumOrderAmount(coupon, orderAmount);
         validateUserUsage(coupon, userId);
+
+        // 발급 전용 쿠폰은 user_coupons 등록 여부 확인
+        if (!coupon.isPublic()
+                && !userCouponRepository.existsByUserIdAndCouponId(userId, coupon.getId())) {
+            throw new BusinessException(ErrorCode.COUPON_NOT_ISSUED);
+        }
 
         BigDecimal discountAmount = coupon.calculateDiscount(orderAmount);
 

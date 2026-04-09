@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.coupon.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.domain.coupon.dto.CouponClaimRequest;
 import com.stockmanagement.domain.coupon.dto.CouponCreateRequest;
 import com.stockmanagement.domain.coupon.dto.CouponIssueRequest;
 import com.stockmanagement.domain.coupon.dto.CouponResponse;
@@ -72,6 +73,16 @@ public class CouponController {
             @AuthenticationPrincipal String username) {
         Long userId = userService.resolveUserId(username);
         return ApiResponse.ok(couponService.getMyCoupons(userId));
+    }
+
+    @Operation(summary = "공개 쿠폰 등록 [USER] — 쿠폰 코드 입력으로 내 지갑에 추가")
+    @PostMapping("/claim")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<MyCouponResponse> claim(
+            @AuthenticationPrincipal String username,
+            @Valid @RequestBody CouponClaimRequest request) {
+        Long userId = userService.resolveUserId(username);
+        return ApiResponse.ok(couponService.claim(userId, request));
     }
 
     @Operation(summary = "쿠폰 유효성 확인 + 할인 금액 미리보기 [USER]")

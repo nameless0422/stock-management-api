@@ -76,6 +76,10 @@ public class Coupon {
     @Column(nullable = false)
     private boolean active;
 
+    /** 공개 쿠폰 여부. true이면 코드를 아는 누구나 claim/사용 가능. false이면 admin 발급 필수. */
+    @Column(nullable = false)
+    private boolean isPublic;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -89,7 +93,8 @@ public class Coupon {
                   DiscountType discountType, BigDecimal discountValue,
                   BigDecimal minimumOrderAmount, BigDecimal maxDiscountAmount,
                   Integer maxUsageCount, int maxUsagePerUser,
-                  LocalDateTime validFrom, LocalDateTime validUntil) {
+                  LocalDateTime validFrom, LocalDateTime validUntil,
+                  boolean isPublic) {
         this.code = code;
         this.name = name;
         this.description = description;
@@ -103,6 +108,7 @@ public class Coupon {
         this.validFrom = validFrom;
         this.validUntil = validUntil;
         this.active = true;
+        this.isPublic = isPublic;
     }
 
     /** 사용 횟수를 1 증가시킨다. */
