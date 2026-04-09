@@ -25,7 +25,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: 테스트 실행 및 커버리지 리포트 생성
-        run: ./gradlew test jacocoTestReport --no-daemon
+        run: ./gradlew test jacocoTestReport jacocoTestCoverageVerification --no-daemon
 
       - name: JaCoCo 커버리지 리포트 업로드
         uses: actions/upload-artifact@v4
@@ -34,6 +34,15 @@ jobs:
           name: coverage-report
           path: build/reports/jacoco/test/html/
           retention-days: 7
+
+      - name: 테스트 결과 리포트 (PR 코멘트)
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: JUnit Test Results
+          path: build/test-results/test/TEST-*.xml
+          reporter: java-junit
+          fail-on-error: false
 
       - name: 테스트 결과 업로드
         uses: actions/upload-artifact@v4
