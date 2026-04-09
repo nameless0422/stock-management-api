@@ -2,10 +2,16 @@
 <configuration>
     <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="app"/>
 
-    <!-- requestId를 포함하는 표준 콘솔 패턴 -->
+    <!--
+        민감 정보 마스킹 (logback %replace 두 단계 적용):
+        1. Authorization Bearer 토큰: "Bearer eyJ..." -> "Bearer [MASKED]"
+        2. JSON password 필드: "password":"secret" -> "password":"[MASKED]"
+    -->
+
+    <!-- requestId + 민감 정보 마스킹이 적용된 콘솔 패턴 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{requestId:-?}] %logger{36} - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{requestId:-?}] %logger{36} - %replace(%replace(%msg){'(?i)(bearer\s+)\S+','$1[MASKED]'}){'(?i)("password"\s*:\s*")[^"]*(")', '$1[MASKED]$2'}%n</pattern>
         </encoder>
     </appender>
 
