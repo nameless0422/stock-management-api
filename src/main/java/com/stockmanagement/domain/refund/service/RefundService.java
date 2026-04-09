@@ -53,9 +53,10 @@ public class RefundService {
      *
      * <p>{@code noRollbackFor}: paymentService.cancel() 실패 시에도 트랜잭션을 커밋하여
      * Refund FAILED 상태(Dirty Checking)가 DB에 반영되도록 한다.
-     * RuntimeException으로 범위를 한정하여 Error 계열(OOM 등)은 여전히 롤백된다.
+     * catch 블록이 Exception을 잡아 re-throw하므로 checked exception까지 포함해야 한다.
+     * Error 계열(OOM 등)은 여기서 잡히지 않으므로 여전히 롤백된다.
      */
-    @Transactional(noRollbackFor = RuntimeException.class)
+    @Transactional(noRollbackFor = Exception.class)
     public RefundResponse requestRefund(RefundRequest request, String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));

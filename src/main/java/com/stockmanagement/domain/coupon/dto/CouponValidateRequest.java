@@ -19,6 +19,6 @@ public class CouponValidateRequest {
     private String couponCode;
 
     @NotNull
-    @DecimalMin("0")
+    @DecimalMin(value = "0.01", message = "주문 금액은 0보다 커야 합니다")
     private BigDecimal orderAmount;
 }

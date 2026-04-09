@@ -14,6 +14,8 @@ import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,9 +79,7 @@ public class ShipmentService {
         if (!isAdmin) {
             Order order = orderRepository.findById(orderId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND));
-            Long userId = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
-            if (!order.getUserId().equals(userId)) {
+            if (!order.getUserId().equals(resolveUserId(username))) {
                 // 타인 배송 존재 여부 노출 방지 — ACCESS_DENIED 대신 NOT_FOUND 반환
                 throw new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND);
             }
@@ -125,6 +125,17 @@ public class ShipmentService {
         Shipment shipment = findByOrderIdOrThrow(orderId);
         shipment.processReturn();
         return ShipmentResponse.from(shipment);
+    }
+
+    /** JWT details에서 userId를 꺼낸다. details가 없으면 DB fallback (구 토큰·테스트 환경 호환). */
+    private Long resolveUserId(String username) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getDetails() instanceof Long userId) {
+            return userId;
+        }
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND))
+                .getId();
     }
 
     private Shipment findByOrderIdOrThrow(Long orderId) {

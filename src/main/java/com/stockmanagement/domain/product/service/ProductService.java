@@ -180,35 +180,40 @@ public class ProductService {
 
     /**
      * 단일 상품에 재고·리뷰 통계를 포함한 응답을 생성한다 (이미지 미포함).
+     *
+     * <p>기존 avgRatingByProductId() + countByProductId() 2개 쿼리를
+     * findReviewStatsByProductId() 단일 쿼리로 대체한다.
      * 재고 레코드가 없으면 availableQuantity=0, 리뷰가 없으면 avgRating=null, reviewCount=0.
      */
     private ProductResponse buildProductResponse(Product product) {
         Integer available = inventoryRepository.findByProductId(product.getId())
                 .map(Inventory::getAvailable)
                 .orElse(0);
-        double avgRating = reviewRepository.avgRatingByProductId(product.getId());
-        long reviewCount = reviewRepository.countByProductId(product.getId());
+        ReviewStatsProjection stats = reviewRepository
+                .findReviewStatsByProductId(product.getId()).orElse(null);
         return ProductResponse.from(product, available,
-                reviewCount > 0 ? avgRating : null,
-                reviewCount > 0 ? reviewCount : 0L);
+                stats != null ? stats.getAvgRating() : null,
+                stats != null ? stats.getReviewCount() : 0L);
     }
 
     /**
      * 단일 상품에 재고·리뷰 통계 + 이미지 목록을 포함한 응답을 생성한다 (상세 조회용).
+     *
+     * <p>리뷰 통계는 findReviewStatsByProductId() 단일 쿼리로 조회한다.
      */
     private ProductResponse buildProductResponseWithImages(Product product) {
         Integer available = inventoryRepository.findByProductId(product.getId())
                 .map(Inventory::getAvailable)
                 .orElse(0);
-        double avgRating = reviewRepository.avgRatingByProductId(product.getId());
-        long reviewCount = reviewRepository.countByProductId(product.getId());
+        ReviewStatsProjection stats = reviewRepository
+                .findReviewStatsByProductId(product.getId()).orElse(null);
         List<ProductImageResponse> images = productImageRepository
                 .findByProductIdOrderByDisplayOrderAsc(product.getId()).stream()
                 .map(ProductImageResponse::from)
                 .toList();
         return ProductResponse.from(product, available,
-                reviewCount > 0 ? avgRating : null,
-                reviewCount > 0 ? reviewCount : 0L,
+                stats != null ? stats.getAvgRating() : null,
+                stats != null ? stats.getReviewCount() : 0L,
                 images);
     }
 
