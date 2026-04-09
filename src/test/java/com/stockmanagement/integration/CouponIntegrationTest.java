@@ -162,7 +162,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("소진 쿠폰 (maxUsageCount=1) — 2번째 사용 → 409")
+    @DisplayName("소진 쿠폰 (maxUsageCount=1) — 2번째 사용 → 422")
     void exhaustedCoupon() throws Exception {
         String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP4", 10000, 10);
@@ -173,7 +173,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         long user1Id = userRepository.findByUsername("buyer1").orElseThrow().getId();
         createOrder(user1Token, user1Id, productId, 10000, "ONETIME");
 
-        // 두 번째 사용자 — COUPON_EXHAUSTED (409)
+        // 두 번째 사용자 — COUPON_EXHAUSTED (422)
         String user2Token = signupAndLogin("buyer2", "password1", "b2@test.com");
         long user2Id = userRepository.findByUsername("buyer2").orElseThrow().getId();
         mockMvc.perform(post("/api/orders")
@@ -183,11 +183,11 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\",\"couponCode\":\"ONETIME\"," +
                                 "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
                                 user2Id, UUID.randomUUID(), productId)))
-                .andExpect(status().isConflict());
+                .andExpect(status().isUnprocessableEntity());
     }
 
     @Test
-    @DisplayName("같은 사용자가 동일 쿠폰 재사용 → 409")
+    @DisplayName("같은 사용자가 동일 쿠폰 재사용 → 422")
     void sameUserCouponReuse() throws Exception {
         String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP5", 10000, 10);
@@ -198,7 +198,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         // 첫 번째 사용 — 성공
         createOrder(userToken, userId, productId, 10000, "ONCE_PER_USER");
 
-        // 두 번째 사용 — COUPON_ALREADY_USED (409)
+        // 두 번째 사용 — COUPON_ALREADY_USED (422)
         mockMvc.perform(post("/api/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -206,7 +206,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\",\"couponCode\":\"ONCE_PER_USER\"," +
                                 "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
                                 userId, UUID.randomUUID(), productId)))
-                .andExpect(status().isConflict());
+                .andExpect(status().isUnprocessableEntity());
     }
 
     @Test
@@ -227,7 +227,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("ADMIN — 쿠폰 비활성화 → 비활성화 쿠폰 사용 시 409")
+    @DisplayName("ADMIN — 쿠폰 비활성화 → 비활성화 쿠폰 사용 시 422")
     void deactivateCoupon() throws Exception {
         String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP6", 10000, 10);
@@ -239,7 +239,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.active").value(false));
 
-        // 비활성화된 쿠폰 사용 → 409 COUPON_INACTIVE
+        // 비활성화된 쿠폰 사용 → 422 COUPON_INACTIVE
         String userToken = signupAndLogin("buyer", "password1", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
         mockMvc.perform(post("/api/orders")
@@ -249,7 +249,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\",\"couponCode\":\"DEACT\"," +
                                 "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
                                 userId, UUID.randomUUID(), productId)))
-                .andExpect(status().isConflict());
+                .andExpect(status().isUnprocessableEntity());
     }
 
     // ===== 쿠폰 발급 / 내 쿠폰 목록 =====
