@@ -58,9 +58,9 @@ class OrderExpirySchedulerTest {
 
         scheduler.cancelExpiredOrders();
 
-        verify(orderService).cancel(eq(1L), eq("system"), eq(true));
-        verify(orderService).cancel(eq(2L), eq("system"), eq(true));
-        verify(orderService).cancel(eq(3L), eq("system"), eq(true));
+        verify(orderService).cancel(eq(1L), isNull(), eq(true));
+        verify(orderService).cancel(eq(2L), isNull(), eq(true));
+        verify(orderService).cancel(eq(3L), isNull(), eq(true));
         verifyNoMoreInteractions(orderService);
     }
 
@@ -69,13 +69,13 @@ class OrderExpirySchedulerTest {
     void partialFailure_continuesWithOthers() {
         given(orderRepository.findExpiredPendingOrderIds(any(LocalDateTime.class)))
                 .willReturn(List.of(1L, 2L, 3L));
-        doThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND)).when(orderService).cancel(eq(2L), eq("system"), eq(true));
+        doThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND)).when(orderService).cancel(eq(2L), isNull(), eq(true));
 
         scheduler.cancelExpiredOrders();
 
-        verify(orderService).cancel(eq(1L), eq("system"), eq(true));
-        verify(orderService).cancel(eq(2L), eq("system"), eq(true));
-        verify(orderService).cancel(eq(3L), eq("system"), eq(true));
+        verify(orderService).cancel(eq(1L), isNull(), eq(true));
+        verify(orderService).cancel(eq(2L), isNull(), eq(true));
+        verify(orderService).cancel(eq(3L), isNull(), eq(true));
     }
 
     @Test

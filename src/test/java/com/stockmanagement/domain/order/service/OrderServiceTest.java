@@ -20,8 +20,6 @@ import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.common.outbox.OutboxEventStore;
-import com.stockmanagement.domain.user.entity.User;
-import com.stockmanagement.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -63,9 +61,6 @@ class OrderServiceTest {
     private OrderStatusHistoryRepository historyRepository;
 
     @Mock
-    private UserRepository userRepository;
-
-    @Mock
     private CouponService couponService;
 
     @Mock
@@ -91,6 +86,7 @@ class OrderServiceTest {
                 .price(new BigDecimal("10000"))
                 .sku("SKU-001")
                 .build();
+        ReflectionTestUtils.setField(product, "id", 1L); // findAllById 결과 Map 조회에 필요
 
         order = Order.builder()
                 .userId(1L)
@@ -126,7 +122,7 @@ class OrderServiceTest {
             given(request.getItems()).willReturn(List.of(itemRequest));
 
             given(orderRepository.findByIdempotencyKey("idem-key-001")).willReturn(Optional.empty());
-            given(productRepository.findById(1L)).willReturn(Optional.of(product));
+            given(productRepository.findAllById(anyIterable())).willReturn(List.of(product));
             given(orderRepository.save(any(Order.class))).willReturn(order);
 
             OrderResponse response = orderService.create(request);
@@ -164,7 +160,7 @@ class OrderServiceTest {
             given(request.getItems()).willReturn(List.of(itemRequest));
 
             given(orderRepository.findByIdempotencyKey("idem-key-001")).willReturn(Optional.empty());
-            given(productRepository.findById(99L)).willReturn(Optional.empty());
+            given(productRepository.findAllById(anyIterable())).willReturn(List.of()); // 존재하지 않는 상품
 
             assertThatThrownBy(() -> orderService.create(request))
                     .isInstanceOf(BusinessException.class)
@@ -188,7 +184,7 @@ class OrderServiceTest {
             given(request.getItems()).willReturn(List.of(itemRequest));
 
             given(orderRepository.findByIdempotencyKey("idem-key-001")).willReturn(Optional.empty());
-            given(productRepository.findById(1L)).willReturn(Optional.of(product)); // price=10000
+            given(productRepository.findAllById(anyIterable())).willReturn(List.of(product)); // price=10000
 
             assertThatThrownBy(() -> orderService.create(request))
                     .isInstanceOf(BusinessException.class)
@@ -213,7 +209,7 @@ class OrderServiceTest {
             given(request.getCouponCode()).willReturn("FIXED2000");
 
             given(orderRepository.findByIdempotencyKey("idem-key-coupon")).willReturn(Optional.empty());
-            given(productRepository.findById(1L)).willReturn(Optional.of(product));
+            given(productRepository.findAllById(anyIterable())).willReturn(List.of(product));
             given(orderRepository.save(any(Order.class))).willReturn(order);
 
             CouponValidateResponse couponResult = CouponValidateResponse.builder()
@@ -245,7 +241,7 @@ class OrderServiceTest {
             given(request.getItems()).willReturn(List.of(itemRequest));
 
             given(orderRepository.findByIdempotencyKey("idem-key-001")).willReturn(Optional.empty());
-            given(productRepository.findById(1L)).willReturn(Optional.of(product));
+            given(productRepository.findAllById(anyIterable())).willReturn(List.of(product));
             given(orderRepository.save(any(Order.class))).willReturn(order);
             doThrow(new InsufficientStockException(100, 5))
                     .when(inventoryService).reserve(any(), anyInt());
@@ -297,23 +293,20 @@ class OrderServiceTest {
             given(orderRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class)))
                     .willReturn(new PageImpl<>(List.of(order), pageable, 1));
 
-            Page<OrderResponse> result = orderService.getList("admin", true, new OrderSearchRequest(), pageable);
+            Page<OrderResponse> result = orderService.getList(null, true, new OrderSearchRequest(), pageable);
 
             assertThat(result.getTotalElements()).isEqualTo(1);
             assertThat(result.getContent().get(0).getIdempotencyKey()).isEqualTo("idem-key-001");
         }
 
         @Test
-        @DisplayName("USER — 본인 userId로 강제 필터링")
+        @DisplayName("USER — 컨트롤러에서 전달된 userId로 강제 필터링")
         void user_filtersOwnOrdersOnly() {
             Pageable pageable = PageRequest.of(0, 10);
-            User mockUser = mock(User.class);
-            given(mockUser.getId()).willReturn(1L);
-            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser));
             given(orderRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class)))
                     .willReturn(new PageImpl<>(List.of(order), pageable, 1));
 
-            Page<OrderResponse> result = orderService.getList("user1", false, new OrderSearchRequest(), pageable);
+            Page<OrderResponse> result = orderService.getList(1L, false, new OrderSearchRequest(), pageable);
 
             assertThat(result.getTotalElements()).isEqualTo(1);
         }
@@ -325,19 +318,12 @@ class OrderServiceTest {
     @DisplayName("cancel()")
     class Cancel {
 
-        private User mockUser(Long id) {
-            User u = User.builder().username("user1").password("pw").email("e@e.com").build();
-            ReflectionTestUtils.setField(u, "id", id);
-            return u;
-        }
-
         @Test
         @DisplayName("PENDING 주문 취소 — CANCELLED 전환 및 재고 예약 해제 호출")
         void cancelsPendingOrder() {
-            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L)));
             given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
-            OrderResponse response = orderService.cancel(1L, "user1", false);
+            OrderResponse response = orderService.cancel(1L, 1L, false); // userId=1L, order.userId=1L
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
             verify(inventoryService).releaseReservation(any(), eq(1));
@@ -348,10 +334,9 @@ class OrderServiceTest {
         @DisplayName("CONFIRMED 주문 취소 시도 — INVALID_ORDER_STATUS 예외 발생")
         void throwsWhenCancellingConfirmedOrder() {
             order.confirm(); // PENDING → CONFIRMED
-            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L)));
             given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
-            assertThatThrownBy(() -> orderService.cancel(1L, "user1", false))
+            assertThatThrownBy(() -> orderService.cancel(1L, 1L, false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_ORDER_STATUS));
@@ -364,7 +349,7 @@ class OrderServiceTest {
         void throwsWhenNotFound() {
             given(orderRepository.findByIdWithItemsForUpdate(99L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> orderService.cancel(99L, "user1", false))
+            assertThatThrownBy(() -> orderService.cancel(99L, 1L, false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.ORDER_NOT_FOUND));

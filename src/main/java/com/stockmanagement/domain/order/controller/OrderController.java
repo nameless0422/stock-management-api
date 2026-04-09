@@ -68,7 +68,7 @@ public class OrderController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderService.getByIdForUser(id, username, isAdmin));
+        return ApiResponse.ok(orderService.getByIdForUser(id, resolveUserId(authentication, username), isAdmin));
     }
 
     @Operation(summary = "주문 상세 통합 조회",
@@ -79,7 +79,7 @@ public class OrderController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderService.getDetail(id, username, isAdmin));
+        return ApiResponse.ok(orderService.getDetail(id, resolveUserId(authentication, username), isAdmin));
     }
 
     @Operation(summary = "주문 목록 조회 (필터 + 페이징)",
@@ -92,7 +92,9 @@ public class OrderController {
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderService.getList(username, isAdmin, request, pageable));
+        // ADMIN은 request.userId 파라미터로 필터링하므로 userId 해결 불필요
+        Long userId = isAdmin ? null : resolveUserId(authentication, username);
+        return ApiResponse.ok(orderService.getList(userId, isAdmin, request, pageable));
     }
 
     @Operation(summary = "주문 취소", description = "PENDING 상태만 취소 가능. 재고 예약 해제(reserved--). ADMIN은 모든 주문 취소 가능.")
@@ -102,7 +104,7 @@ public class OrderController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderService.cancel(id, username, isAdmin));
+        return ApiResponse.ok(orderService.cancel(id, resolveUserId(authentication, username), isAdmin));
     }
 
     @Operation(summary = "주문 상태 변경 이력 조회", description = "생성·취소·확정·환불 등 모든 상태 전이를 시간순으로 반환. ADMIN은 모든 주문, USER는 본인 주문만 가능.")
@@ -112,6 +114,19 @@ public class OrderController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderService.getHistory(id, username, isAdmin));
+        return ApiResponse.ok(orderService.getHistory(id, resolveUserId(authentication, username), isAdmin));
+    }
+
+    /**
+     * JWT claim 또는 DB 조회로 userId를 결정한다.
+     *
+     * <p>JwtAuthenticationFilter가 {@code auth.setDetails(userId)}에 저장한 경우 DB 조회를 건너뛴다.
+     * 구 토큰 또는 테스트 환경처럼 details가 없으면 userService.resolveUserId(username)로 DB 조회.
+     */
+    private Long resolveUserId(Authentication auth, String username) {
+        if (auth != null && auth.getDetails() instanceof Long userId) {
+            return userId;
+        }
+        return userService.resolveUserId(username);
     }
 }
