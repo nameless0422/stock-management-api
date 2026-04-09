@@ -20,7 +20,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         String json = String.format(
                 "{\"code\":\"%s\",\"name\":\"테스트 쿠폰\"," +
                 "\"discountType\":\"%s\",\"discountValue\":%d," +
-                "\"maxUsageCount\":%d,\"maxUsagePerUser\":1," +
+                "\"maxUsageCount\":%d,\"maxUsagePerUser\":1,\"isPublic\":true," +
                 "\"validFrom\":\"2020-01-01T00:00:00\",\"validUntil\":\"2099-12-31T23:59:59\"}",
                 code, type, discountValue, maxUsage);
 
@@ -109,7 +109,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         String json = "{\"code\":\"PCT10\",\"name\":\"10% 할인\"," +
                       "\"discountType\":\"PERCENTAGE\",\"discountValue\":10," +
                       "\"maxDiscountAmount\":3000," +
-                      "\"maxUsageCount\":100,\"maxUsagePerUser\":1," +
+                      "\"maxUsageCount\":100,\"maxUsagePerUser\":1,\"isPublic\":true," +
                       "\"validFrom\":\"2020-01-01T00:00:00\",\"validUntil\":\"2099-12-31T23:59:59\"}";
         mockMvc.perform(post("/api/coupons")
                         .header("Authorization", "Bearer " + adminToken)

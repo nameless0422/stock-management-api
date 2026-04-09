@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.coupon.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.stockmanagement.domain.coupon.entity.DiscountType;
 import jakarta.validation.constraints.*;
 import lombok.Getter;
@@ -54,5 +55,6 @@ public class CouponCreateRequest {
     private LocalDateTime validUntil;
 
     /** 공개 쿠폰 여부. true이면 사용자가 직접 claim 가능. 기본값 false (admin 발급 필수). */
+    @JsonProperty("isPublic")
     private boolean isPublic;
 }
