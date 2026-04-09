@@ -20,7 +20,7 @@ import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import com.stockmanagement.common.security.LoginRateLimiter;
 import com.stockmanagement.common.security.RefreshTokenStore;
-import com.stockmanagement.security.JwtTokenProvider;
+import com.stockmanagement.common.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;

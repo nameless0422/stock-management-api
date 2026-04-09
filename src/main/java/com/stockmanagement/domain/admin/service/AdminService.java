@@ -15,6 +15,7 @@ import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.DailyOrderStatsRepository;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.order.repository.OrderStatsProjection;
 import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.user.dto.UserResponse;
@@ -46,14 +47,28 @@ public class AdminService {
     private final ProductRepository productRepository;
     private final SystemSettingService systemSettingService;
 
-    /** 관리자 대시보드 — 주문 통계, 매출, 사용자 수, 저재고 목록 */
+    /**
+     * 관리자 대시보드 — 주문 통계, 매출, 사용자 수, 저재고 목록.
+     *
+     * <p>기존 6개 쿼리(상태별 count×4 + sum×1 + userCount×1)를 2개로 줄인다.
+     * {@code findOrderStats()}의 GROUP BY 결과로 주문 관련 5개 쿼리를 대체한다.
+     */
     public DashboardResponse getDashboard() {
-        long totalOrders     = orderRepository.count();
-        long pendingOrders   = orderRepository.countByStatus(OrderStatus.PENDING);
-        long confirmedOrders = orderRepository.countByStatus(OrderStatus.CONFIRMED);
-        long cancelledOrders = orderRepository.countByStatus(OrderStatus.CANCELLED);
-        var  totalRevenue    = orderRepository.sumTotalAmountByStatus(OrderStatus.CONFIRMED);
-        long totalUsers      = userRepository.count();
+        // 쿼리 1: 상태별 주문 수·금액 일괄 집계
+        Map<OrderStatus, OrderStatsProjection> statsMap = orderRepository.findOrderStats()
+                .stream()
+                .collect(Collectors.toMap(OrderStatsProjection::getStatus, s -> s));
+
+        long totalOrders     = statsMap.values().stream().mapToLong(OrderStatsProjection::getOrderCount).sum();
+        long pendingOrders   = countFromMap(statsMap, OrderStatus.PENDING);
+        long confirmedOrders = countFromMap(statsMap, OrderStatus.CONFIRMED);
+        long cancelledOrders = countFromMap(statsMap, OrderStatus.CANCELLED);
+        var  totalRevenue    = statsMap.containsKey(OrderStatus.CONFIRMED)
+                ? statsMap.get(OrderStatus.CONFIRMED).getTotalAmount()
+                : java.math.BigDecimal.ZERO;
+
+        // 쿼리 2: 전체 사용자 수
+        long totalUsers = userRepository.count();
 
         List<LowStockItem> lowStockItems = inventoryRepository
                 .findLowStock(systemSettingService.getLowStockThreshold())
@@ -65,6 +80,11 @@ public class AdminService {
                 totalOrders, pendingOrders, confirmedOrders, cancelledOrders,
                 totalRevenue, totalUsers, lowStockItems
         );
+    }
+
+    private long countFromMap(Map<OrderStatus, OrderStatsProjection> statsMap, OrderStatus status) {
+        OrderStatsProjection proj = statsMap.get(status);
+        return proj != null ? proj.getOrderCount() : 0L;
     }
 
     /** 전체 사용자 목록 (페이징). search가 있으면 username/email로 필터링 */

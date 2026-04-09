@@ -5,6 +5,7 @@ import com.stockmanagement.common.exception.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -44,6 +45,10 @@ public class RateLimitAspect {
             "return count";
 
     private final RedissonClient redissonClient;
+
+    /** false이면 X-Real-IP / X-Forwarded-For 헤더를 무시하고 RemoteAddr만 사용 (직접 노출 환경용) */
+    @Value("${rate-limit.trust-proxy:true}")
+    private boolean trustProxy;
 
     @Around("@annotation(com.stockmanagement.common.ratelimit.RateLimit)")
     public Object rateLimit(ProceedingJoinPoint joinPoint) throws Throwable {
@@ -88,26 +93,28 @@ public class RateLimitAspect {
 
     /**
      * 클라이언트 IP 추출.
-     * X-Real-IP (신뢰할 수 있는 프록시가 설정) → X-Forwarded-For 마지막 IP (가장 가까운 프록시) → RemoteAddr 순으로 사용.
-     * X-Forwarded-For 첫 번째 값은 클라이언트가 임의로 조작 가능하므로 사용하지 않는다.
+     * trust-proxy=true (기본): X-Real-IP → X-Forwarded-For 마지막 IP → RemoteAddr 순으로 사용.
+     * trust-proxy=false: 프록시 없이 직접 노출된 환경 — RemoteAddr만 사용 (헤더 위조 방지).
      */
     private String resolveClientIp() {
         ServletRequestAttributes attrs =
                 (ServletRequestAttributes) RequestContextHolder.currentRequestAttributes();
         HttpServletRequest request = attrs.getRequest();
 
-        // X-Real-IP: nginx 등 리버스 프록시가 설정한 단일 IP (스푸핑 불가)
-        String realIp = request.getHeader("X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp.trim();
-        }
+        if (trustProxy) {
+            // X-Real-IP: nginx 등 리버스 프록시가 설정한 단일 IP (스푸핑 불가)
+            String realIp = request.getHeader("X-Real-IP");
+            if (realIp != null && !realIp.isBlank()) {
+                return realIp.trim();
+            }
 
-        // X-Forwarded-For: 프록시 체인에서 마지막(가장 가까운) 프록시가 추가한 IP 사용
-        // 첫 번째 값은 클라이언트가 위조 가능하므로 마지막 값 사용
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            String[] ips = forwarded.split(",");
-            return ips[ips.length - 1].trim();
+            // X-Forwarded-For: 프록시 체인에서 마지막(가장 가까운) 프록시가 추가한 IP 사용
+            // 첫 번째 값은 클라이언트가 위조 가능하므로 마지막 값 사용
+            String forwarded = request.getHeader("X-Forwarded-For");
+            if (forwarded != null && !forwarded.isBlank()) {
+                String[] ips = forwarded.split(",");
+                return ips[ips.length - 1].trim();
+            }
         }
 
         return request.getRemoteAddr();
