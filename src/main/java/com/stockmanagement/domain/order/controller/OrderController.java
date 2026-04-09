@@ -8,6 +8,7 @@ import com.stockmanagement.domain.order.dto.OrderDetailResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
+import com.stockmanagement.domain.order.service.OrderDetailService;
 import com.stockmanagement.domain.order.service.OrderService;
 import com.stockmanagement.domain.user.service.UserService;
 import jakarta.validation.Valid;
@@ -48,6 +49,7 @@ import java.util.List;
 public class OrderController {
 
     private final OrderService orderService;
+    private final OrderDetailService orderDetailService;
     private final UserService userService;
 
     @Operation(summary = "주문 생성", description = "재고 예약(reserved++) 후 PENDING 주문 생성. 동일 idempotencyKey 재요청 시 기존 주문 반환.")
@@ -79,7 +81,7 @@ public class OrderController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderService.getDetail(id, resolveUserId(authentication, username), isAdmin));
+        return ApiResponse.ok(orderDetailService.getDetail(id, resolveUserId(authentication, username), isAdmin));
     }
 
     @Operation(summary = "주문 목록 조회 (필터 + 페이징)",

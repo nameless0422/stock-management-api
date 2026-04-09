@@ -5,10 +5,11 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
+import com.stockmanagement.domain.order.service.OrderDetailService;
 import com.stockmanagement.domain.order.service.OrderService;
 import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.common.security.JwtBlacklist;
-import com.stockmanagement.security.JwtTokenProvider;
+import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -42,6 +43,9 @@ class OrderControllerTest {
 
     @MockBean
     private OrderService orderService;
+
+    @MockBean
+    private OrderDetailService orderDetailService;
 
     @MockBean
     private UserService userService;
