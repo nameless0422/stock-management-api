@@ -7,15 +7,10 @@ import com.stockmanagement.domain.inventory.service.InventoryService;
 import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.user.address.service.DeliveryAddressService;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
-import com.stockmanagement.domain.order.dto.OrderDetailResponse;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
-import com.stockmanagement.domain.payment.dto.PaymentResponse;
-import com.stockmanagement.domain.payment.repository.PaymentRepository;
-import com.stockmanagement.domain.shipment.dto.ShipmentResponse;
-import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderItem;
 import com.stockmanagement.domain.order.entity.OrderStatus;
@@ -26,7 +21,6 @@ import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
 import com.stockmanagement.domain.product.repository.ProductRepository;
-import com.stockmanagement.domain.product.review.repository.ReviewRepository;
 import com.stockmanagement.common.event.OrderCancelledEvent;
 import com.stockmanagement.common.event.OrderCreatedEvent;
 import com.stockmanagement.common.outbox.OutboxEventStore;
@@ -45,7 +39,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -78,9 +71,6 @@ public class OrderService {
     private final PointService pointService;
     private final OutboxEventStore outboxEventStore;
     private final DeliveryAddressService deliveryAddressService;
-    private final PaymentRepository paymentRepository;
-    private final ShipmentRepository shipmentRepository;
-    private final ReviewRepository reviewRepository;
 
     /**
      * 주문을 생성한다.
@@ -238,28 +228,6 @@ public class OrderService {
     }
 
     /**
-     * 주문 + 결제 + 배송 정보를 단일 응답으로 반환한다 (프론트 상세 페이지용).
-     * 소유권 검증은 {@link #getByIdForUser}와 동일하다.
-     */
-    public OrderDetailResponse getDetail(Long id, Long userId, boolean isAdmin) {
-        Order order = orderRepository.findByIdWithItems(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        validateOrderOwnership(order, userId, isAdmin);
-        PaymentResponse payment = paymentRepository.findByOrderId(order.getId())
-                .map(PaymentResponse::from)
-                .orElse(null);
-        ShipmentResponse shipment = shipmentRepository.findByOrderId(order.getId())
-                .map(ShipmentResponse::from)
-                .orElse(null);
-        Set<Long> reviewedIds = reviewedProductIds(order.getUserId(), order.getItems());
-        return OrderDetailResponse.builder()
-                .order(OrderResponse.from(order, reviewedIds))
-                .payment(payment)
-                .shipment(shipment)
-                .build();
-    }
-
-    /**
      * 주문 목록을 동적 조건으로 페이징 조회한다.
      *
      * <p>권한별 동작:
@@ -409,14 +377,6 @@ public class OrderService {
         if (!isAdmin && !order.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
         }
-    }
-
-    /** 주문 항목들의 상품 ID 중 사용자가 리뷰를 작성한 ID 집합을 반환한다. */
-    private Set<Long> reviewedProductIds(Long userId, List<OrderItem> items) {
-        List<Long> productIds = items.stream()
-                .map(i -> i.getProduct().getId())
-                .collect(Collectors.toList());
-        return new java.util.HashSet<>(reviewRepository.findReviewedProductIdsByUserId(userId, productIds));
     }
 
     /** 현재 인증 컨텍스트의 사용자명을 반환한다. 인증 정보가 없으면 "system"을 반환한다. */
