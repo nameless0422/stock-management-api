@@ -44,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -128,8 +129,15 @@ public class OrderService {
         List<OrderItem> items = new ArrayList<>();
         BigDecimal totalAmount = BigDecimal.ZERO;
 
+        // 상품 ID 일괄 조회 — 루프마다 findById()를 호출하는 N+1 방지
+        List<Long> productIds = request.getItems().stream()
+                .map(OrderItemRequest::getProductId)
+                .toList();
+        Map<Long, Product> productMap = productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, p -> p));
+
         for (OrderItemRequest itemRequest : request.getItems()) {
-            Product product = productRepository.findById(itemRequest.getProductId())
+            Product product = Optional.ofNullable(productMap.get(itemRequest.getProductId()))
                     .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
             // 상품 판매 상태 검증 — INACTIVE/DISCONTINUED 상품은 주문 불가
@@ -137,7 +145,8 @@ public class OrderService {
                 throw new BusinessException(ErrorCode.PRODUCT_NOT_AVAILABLE);
             }
 
-            // 단가 검증 — 요청값이 현재 상품 가격과 일치해야 한다
+            // 단가 검증 — 클라이언트가 제출한 가격이 현재 DB 가격과 일치하는지 확인
+            // (가격이 바뀐 경우 사용자가 인지할 수 있도록 명시적 오류 반환)
             if (product.getPrice().compareTo(itemRequest.getUnitPrice()) != 0) {
                 throw new BusinessException(ErrorCode.INVALID_INPUT,
                         String.format("상품 '%s'의 단가가 일치하지 않습니다. (요청: %s, 현재: %s)",
@@ -147,7 +156,7 @@ public class OrderService {
             OrderItem item = OrderItem.builder()
                     .product(product)
                     .quantity(itemRequest.getQuantity())
-                    .unitPrice(itemRequest.getUnitPrice())
+                    .unitPrice(product.getPrice()) // 클라이언트 값 불신: DB canonical 가격 사용
                     .build();
 
             items.add(item);
