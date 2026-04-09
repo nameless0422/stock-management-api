@@ -14,6 +14,9 @@ import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -124,13 +127,14 @@ public class PointService {
     @Transactional
     public void refundByOrder(Long userId, Long orderId) {
         UserPoint userPoint = getOrCreate(userId);
+        List<PointTransaction> newTxns = new ArrayList<>();
 
         pointTransactionRepository.findByOrderId(orderId).forEach(tx -> {
             if (tx.getType() == PointTransactionType.USE) {
                 // 사용 포인트 반환
                 long refundAmount = Math.abs(tx.getAmount());
                 userPoint.refund(refundAmount);
-                pointTransactionRepository.save(PointTransaction.builder()
+                newTxns.add(PointTransaction.builder()
                         .userId(userId)
                         .amount(refundAmount)
                         .type(PointTransactionType.REFUND)
@@ -144,7 +148,7 @@ public class PointService {
                 long actualReclaim = Math.min(reclaimAmount, userPoint.getBalance());
                 if (actualReclaim > 0) {
                     userPoint.use(actualReclaim);
-                    pointTransactionRepository.save(PointTransaction.builder()
+                    newTxns.add(PointTransaction.builder()
                             .userId(userId)
                             .amount(-actualReclaim)
                             .type(PointTransactionType.EXPIRE)
@@ -158,6 +162,11 @@ public class PointService {
                 }
             }
         });
+
+        // 신규 트랜잭션 기록을 단일 배치 INSERT로 처리
+        if (!newTxns.isEmpty()) {
+            pointTransactionRepository.saveAll(newTxns);
+        }
     }
 
     private UserPoint getOrCreate(Long userId) {

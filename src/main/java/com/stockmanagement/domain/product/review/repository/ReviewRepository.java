@@ -30,6 +30,16 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     /** 상품 리뷰 수 */
     long countByProductId(Long productId);
 
+    /**
+     * 단일 상품의 평균 별점·리뷰 수를 조회한다 (단건 상세 조회용).
+     *
+     * <p>기존 avgRatingByProductId() + countByProductId() 2개 쿼리를 1개로 대체한다.
+     * 리뷰가 없으면 GROUP BY 결과가 없으므로 Optional.empty()를 반환한다.
+     */
+    @Query("SELECT r.productId AS productId, AVG(r.rating) AS avgRating, COUNT(r) AS reviewCount " +
+           "FROM Review r WHERE r.productId = :productId GROUP BY r.productId")
+    Optional<ReviewStatsProjection> findReviewStatsByProductId(@Param("productId") Long productId);
+
     /** 여러 상품의 평균 별점·리뷰 수를 한 번에 조회한다 (목록 조회 N+1 방지). */
     @Query("SELECT r.productId AS productId, AVG(r.rating) AS avgRating, COUNT(r) AS reviewCount " +
            "FROM Review r WHERE r.productId IN :productIds GROUP BY r.productId")

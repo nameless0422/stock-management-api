@@ -116,9 +116,8 @@ public class DeliveryAddressService {
         repository.delete(address);
 
         if (wasDefault) {
-            // 남은 배송지 중 가장 최근 배송지를 기본으로 승격
-            repository.findByUserIdOrderByIsDefaultDescCreatedAtDesc(userId)
-                    .stream().findFirst()
+            // 남은 배송지 중 가장 최근 배송지 1건만 조회하여 기본으로 승격 (전체 목록 조회 불필요)
+            repository.findFirstByUserIdOrderByCreatedAtDesc(userId)
                     .ifPresent(DeliveryAddress::setAsDefault);
         }
     }

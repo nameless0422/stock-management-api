@@ -68,6 +68,17 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     BigDecimal sumTotalAmountByStatus(@Param("status") OrderStatus status);
 
     /**
+     * 상태별 주문 수·금액을 단일 GROUP BY 쿼리로 집계한다 (대시보드 최적화).
+     *
+     * <p>기존 6개 개별 쿼리(count×4 + sum×1 + userCount×1) 중 5개를 대체한다.
+     * 결과를 Map으로 변환하면 PENDING/CONFIRMED/CANCELLED 건수와 CONFIRMED 매출을 한 번에 얻을 수 있다.
+     */
+    @Query("SELECT o.status AS status, COUNT(o) AS orderCount, " +
+           "COALESCE(SUM(o.totalAmount), 0) AS totalAmount " +
+           "FROM Order o GROUP BY o.status")
+    List<OrderStatsProjection> findOrderStats();
+
+    /**
      * 기준 시각 이전에 생성된 PENDING 주문 ID 목록을 반환한다 (만료 주문 자동 취소용).
      *
      * @param threshold 기준 시각 (현재 시각 - 만료 시간)
