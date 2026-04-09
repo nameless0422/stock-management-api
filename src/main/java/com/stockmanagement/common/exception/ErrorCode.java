@@ -72,6 +72,8 @@ public enum ErrorCode {
     COUPON_ALREADY_USED(HttpStatus.UNPROCESSABLE_ENTITY, "이미 사용한 쿠폰입니다."),
     COUPON_MIN_ORDER_NOT_MET(HttpStatus.BAD_REQUEST, "쿠폰 적용을 위한 최소 주문 금액을 충족하지 않습니다."),
     COUPON_ALREADY_ISSUED(HttpStatus.CONFLICT, "이미 발급된 쿠폰입니다."),
+    COUPON_NOT_ISSUED(HttpStatus.FORBIDDEN, "발급되지 않은 쿠폰입니다. 코드 입력 전 쿠폰을 먼저 등록해주세요."),
+    COUPON_NOT_PUBLIC(HttpStatus.BAD_REQUEST, "관리자 발급 전용 쿠폰은 직접 등록할 수 없습니다."),
 
     // ===== Review =====
     REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "리뷰를 찾을 수 없습니다."),

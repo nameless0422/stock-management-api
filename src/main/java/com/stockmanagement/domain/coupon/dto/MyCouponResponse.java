@@ -30,6 +30,9 @@ public class MyCouponResponse {
     /** 현재 사용 가능 여부 (active + 기간 유효 + 수량 미소진 + 사용자 한도 미달) */
     @JsonProperty("isUsable")
     private final boolean isUsable;
+    /** 공개 쿠폰 여부 */
+    @JsonProperty("isPublic")
+    private final boolean isPublic;
 
     public static MyCouponResponse from(UserCoupon userCoupon, boolean isUsable) {
         Coupon c = userCoupon.getCoupon();
@@ -46,6 +49,7 @@ public class MyCouponResponse {
                 .validUntil(c.getValidUntil())
                 .issuedAt(userCoupon.getIssuedAt())
                 .isUsable(isUsable)
+                .isPublic(userCoupon.getCoupon().isPublic())
                 .build();
     }
 }

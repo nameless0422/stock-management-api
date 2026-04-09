@@ -52,4 +52,7 @@ public class CouponCreateRequest {
 
     @NotNull
     private LocalDateTime validUntil;
+
+    /** 공개 쿠폰 여부. true이면 사용자가 직접 claim 가능. 기본값 false (admin 발급 필수). */
+    private boolean isPublic;
 }
