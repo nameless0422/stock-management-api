@@ -10,6 +10,10 @@ jobs:
   test:
     name: Build & Test
     runs-on: ubuntu-latest
+    permissions:
+      checks: write       # dorny/test-reporter check run 생성
+      contents: read      # 코드 체크아웃
+      pull-requests: write # PR 코멘트 작성
 
     steps:
       - name: 코드 체크아웃
