@@ -22,6 +22,12 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
+# 컨테이너 헬스체크: 30초마다 /actuator/health 호출
+# — Docker Compose depends_on condition: service_healthy 연동
+# — 3회 연속 실패 시 unhealthy 상태로 전환
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD wget -qO- http://localhost:8080/actuator/health || exit 1
+
 # JVM 옵션 설명:
 #   UseContainerSupport      — Cgroup 메모리 제한 자동 인식
 #   MaxRAMPercentage=75.0    — 컨테이너 메모리의 75%를 힙 상한으로 사용 (-Xmx 대체)
