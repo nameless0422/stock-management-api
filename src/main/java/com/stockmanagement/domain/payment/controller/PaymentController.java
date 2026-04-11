@@ -8,6 +8,7 @@ import com.stockmanagement.domain.payment.dto.*;
 import com.stockmanagement.domain.payment.infrastructure.TossWebhookVerifier;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
 import com.stockmanagement.domain.payment.service.PaymentService;
+import com.stockmanagement.domain.user.service.UserService;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -39,13 +40,15 @@ public class PaymentController {
     private final PaymentService paymentService;
     private final TossWebhookVerifier webhookVerifier;
     private final ObjectMapper objectMapper;
+    private final UserService userService;
 
     @Operation(summary = "결제 준비", description = "TossPayments 결제창 렌더링 전 호출. tossOrderId와 amount 반환. 본인 주문만 가능.")
     @PostMapping("/prepare")
     public ApiResponse<PaymentPrepareResponse> prepare(
             @RequestBody @Valid PaymentPrepareRequest request,
-            @AuthenticationPrincipal String username) {
-        return ApiResponse.ok(paymentService.prepare(request, username));
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        return ApiResponse.ok(paymentService.prepare(request, resolveUserId(authentication, username)));
     }
 
     @Operation(summary = "결제 승인", description = "결제창 완료 후 paymentKey로 호출. Order → CONFIRMED, reserved→allocated. 본인 주문만 가능.")
@@ -53,8 +56,9 @@ public class PaymentController {
     @RateLimit(limit = 5, windowSeconds = 60)
     public ApiResponse<PaymentResponse> confirm(
             @RequestBody @Valid PaymentConfirmRequest request,
-            @AuthenticationPrincipal String username) {
-        return ApiResponse.ok(paymentService.confirm(request, username));
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        return ApiResponse.ok(paymentService.confirm(request, resolveUserId(authentication, username)));
     }
 
     @Operation(summary = "결제 취소/환불", description = "본인 결제만 취소 가능. ADMIN은 전체 취소 가능. Order → CANCELLED, allocated 해제.")
@@ -65,7 +69,7 @@ public class PaymentController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(paymentService.cancel(paymentKey, request, username, isAdmin));
+        return ApiResponse.ok(paymentService.cancel(paymentKey, request, resolveUserId(authentication, username), isAdmin));
     }
 
     @Operation(summary = "TossPayments 웹훅 수신", description = "공개 엔드포인트. Toss-Signature 헤더로 HMAC-SHA256 서명 검증 후 처리.")
@@ -93,6 +97,19 @@ public class PaymentController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(paymentService.getByOrderId(orderId, username, isAdmin).orElse(null));
+        return ApiResponse.ok(paymentService.getByOrderId(orderId, resolveUserId(authentication, username), isAdmin).orElse(null));
+    }
+
+    /**
+     * JWT claim 또는 DB 조회로 userId를 결정한다.
+     *
+     * <p>JwtAuthenticationFilter가 {@code auth.setDetails(userId)}에 저장한 경우 DB 조회를 건너뛴다.
+     * 구 토큰 또는 테스트 환경처럼 details가 없으면 userService.resolveUserId(username)으로 DB 조회.
+     */
+    private Long resolveUserId(Authentication auth, String username) {
+        if (auth != null && auth.getDetails() instanceof Long userId) {
+            return userId;
+        }
+        return userService.resolveUserId(username);
     }
 }

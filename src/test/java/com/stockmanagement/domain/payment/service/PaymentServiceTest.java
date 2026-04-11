@@ -13,8 +13,6 @@ import com.stockmanagement.domain.payment.infrastructure.TossPaymentsClient;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmResponse;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
-import com.stockmanagement.domain.user.entity.User;
-import com.stockmanagement.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -53,9 +51,6 @@ class PaymentServiceTest {
     private PaymentIdempotencyManager idempotencyManager;
 
     @Mock
-    private UserRepository userRepository;
-
-    @Mock
     private PaymentTransactionHelper transactionHelper;
 
     @InjectMocks
@@ -84,12 +79,6 @@ class PaymentServiceTest {
         // 기본: Redis에 캐시 없음, 선점 항상 성공
         lenient().when(idempotencyManager.getIfCompleted(anyString())).thenReturn(Optional.empty());
         lenient().when(idempotencyManager.tryAcquire(anyString())).thenReturn(true);
-
-        // confirm() 소유권 검증용 기본 스텁 (pendingOrder.userId == 1L)
-        User mockUser = User.builder().username("user").password("pw").email("e@test.com").build();
-        ReflectionTestUtils.setField(mockUser, "id", 1L);
-        lenient().when(userRepository.findByUsername("user")).thenReturn(Optional.of(mockUser));
-        lenient().when(orderRepository.findById(1L)).thenReturn(Optional.of(pendingOrder));
     }
 
     // ===== prepare() =====
@@ -98,12 +87,6 @@ class PaymentServiceTest {
     @DisplayName("prepare()")
     class Prepare {
 
-        private User mockUser() {
-            User u = User.builder().username("user1").password("pw").email("e@e.com").build();
-            ReflectionTestUtils.setField(u, "id", 1L); // pendingOrder.userId == 1L
-            return u;
-        }
-
         @Test
         @DisplayName("정상 준비 — Payment 저장 후 tossOrderId와 금액 반환")
         void savesPaymentAndReturnsPrepareResponse() {
@@ -111,12 +94,11 @@ class PaymentServiceTest {
             given(request.getOrderId()).willReturn(1L);
             given(request.getAmount()).willReturn(new BigDecimal("10000"));
 
-            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser()));
             given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(pendingOrder));
             given(paymentRepository.findByOrderId(pendingOrder.getId())).willReturn(Optional.empty());
             given(paymentRepository.save(any(Payment.class))).willReturn(pendingPayment);
 
-            PaymentPrepareResponse response = paymentService.prepare(request, "user1");
+            PaymentPrepareResponse response = paymentService.prepare(request, 1L);
 
             verify(paymentRepository).save(any(Payment.class));
             assertThat(response.getTossOrderId()).isEqualTo("toss-order-001");
@@ -130,7 +112,7 @@ class PaymentServiceTest {
             given(request.getOrderId()).willReturn(99L);
             given(orderRepository.findByIdWithItems(99L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> paymentService.prepare(request, "user1"))
+            assertThatThrownBy(() -> paymentService.prepare(request, 1L))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.ORDER_NOT_FOUND));
@@ -145,10 +127,9 @@ class PaymentServiceTest {
             given(request.getOrderId()).willReturn(1L);
 
             pendingOrder.confirm(); // PENDING → CONFIRMED
-            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser()));
             given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(pendingOrder));
 
-            assertThatThrownBy(() -> paymentService.prepare(request, "user1"))
+            assertThatThrownBy(() -> paymentService.prepare(request, 1L))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_ORDER_STATUS));
@@ -161,10 +142,9 @@ class PaymentServiceTest {
             given(request.getOrderId()).willReturn(1L);
             given(request.getAmount()).willReturn(new BigDecimal("9999")); // 불일치
 
-            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser()));
             given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(pendingOrder));
 
-            assertThatThrownBy(() -> paymentService.prepare(request, "user1"))
+            assertThatThrownBy(() -> paymentService.prepare(request, 1L))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH));
@@ -177,12 +157,11 @@ class PaymentServiceTest {
             given(request.getOrderId()).willReturn(1L);
             given(request.getAmount()).willReturn(new BigDecimal("10000"));
 
-            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser()));
             given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(pendingOrder));
             given(paymentRepository.findByOrderId(pendingOrder.getId()))
                     .willReturn(Optional.of(pendingPayment)); // 기존 PENDING Payment
 
-            PaymentPrepareResponse response = paymentService.prepare(request, "user1");
+            PaymentPrepareResponse response = paymentService.prepare(request, 1L);
 
             verify(paymentRepository, never()).save(any());
             assertThat(response.getTossOrderId()).isEqualTo("toss-order-001");
@@ -215,7 +194,7 @@ class PaymentServiceTest {
             given(request.getAmount()).willReturn(new BigDecimal("10000"));
             given(request.getPaymentKey()).willReturn("pk-001");
 
-            given(transactionHelper.loadAndValidateForConfirm(anyString(), any(), anyString()))
+            given(transactionHelper.loadAndValidateForConfirm(anyString(), any(), anyLong()))
                     .willReturn(Optional.empty());
             given(tossPaymentsClient.confirm(any())).willReturn(successResponse);
 
@@ -223,7 +202,7 @@ class PaymentServiceTest {
             PaymentResponse doneResponse = PaymentResponse.from(pendingPayment);
             given(transactionHelper.applyConfirmResult(eq("toss-order-001"), any())).willReturn(doneResponse);
 
-            PaymentResponse response = paymentService.confirm(request, "user");
+            PaymentResponse response = paymentService.confirm(request, 1L);
 
             verify(tossPaymentsClient).confirm(any());
             verify(transactionHelper).applyConfirmResult(eq("toss-order-001"), any());
@@ -239,10 +218,10 @@ class PaymentServiceTest {
 
             pendingPayment.approve("pk-001", "카드", LocalDateTime.now(), LocalDateTime.now());
             PaymentResponse doneResponse = PaymentResponse.from(pendingPayment);
-            given(transactionHelper.loadAndValidateForConfirm(anyString(), any(), anyString()))
+            given(transactionHelper.loadAndValidateForConfirm(anyString(), any(), anyLong()))
                     .willReturn(Optional.of(doneResponse));
 
-            PaymentResponse response = paymentService.confirm(request, "user");
+            PaymentResponse response = paymentService.confirm(request, 1L);
 
             verifyNoInteractions(tossPaymentsClient);
             verify(transactionHelper, never()).applyConfirmResult(any(), any());
@@ -256,10 +235,10 @@ class PaymentServiceTest {
             given(request.getTossOrderId()).willReturn("toss-order-001");
             given(request.getAmount()).willReturn(new BigDecimal("10000"));
 
-            given(transactionHelper.loadAndValidateForConfirm(anyString(), any(), anyString()))
+            given(transactionHelper.loadAndValidateForConfirm(anyString(), any(), anyLong()))
                     .willThrow(new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED));
 
-            assertThatThrownBy(() -> paymentService.confirm(request, "user"))
+            assertThatThrownBy(() -> paymentService.confirm(request, 1L))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_ALREADY_PROCESSED));
@@ -274,10 +253,10 @@ class PaymentServiceTest {
             given(request.getTossOrderId()).willReturn("toss-order-001");
             given(request.getAmount()).willReturn(new BigDecimal("9999")); // 불일치
 
-            given(transactionHelper.loadAndValidateForConfirm(anyString(), any(), anyString()))
+            given(transactionHelper.loadAndValidateForConfirm(anyString(), any(), anyLong()))
                     .willThrow(new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH));
 
-            assertThatThrownBy(() -> paymentService.confirm(request, "user"))
+            assertThatThrownBy(() -> paymentService.confirm(request, 1L))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH));
@@ -295,7 +274,7 @@ class PaymentServiceTest {
             given(idempotencyManager.getIfCompleted("confirm:toss-order-001"))
                     .willReturn(Optional.of(cached));
 
-            PaymentResponse response = paymentService.confirm(request, "user");
+            PaymentResponse response = paymentService.confirm(request, 1L);
 
             assertThat(response).isSameAs(cached);
             verifyNoInteractions(transactionHelper, tossPaymentsClient);
@@ -309,7 +288,7 @@ class PaymentServiceTest {
 
             given(idempotencyManager.tryAcquire("confirm:toss-order-001")).willReturn(false);
 
-            assertThatThrownBy(() -> paymentService.confirm(request, "user"))
+            assertThatThrownBy(() -> paymentService.confirm(request, 1L))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_PROCESSING_IN_PROGRESS));
@@ -327,13 +306,13 @@ class PaymentServiceTest {
 
             TossConfirmResponse failResponse = mock(TossConfirmResponse.class);
 
-            given(transactionHelper.loadAndValidateForConfirm(anyString(), any(), anyString()))
+            given(transactionHelper.loadAndValidateForConfirm(anyString(), any(), anyLong()))
                     .willReturn(Optional.empty());
             given(tossPaymentsClient.confirm(any())).willReturn(failResponse);
             given(transactionHelper.applyConfirmResult(eq("toss-order-001"), any()))
                     .willThrow(new BusinessException(ErrorCode.TOSS_PAYMENTS_ERROR));
 
-            assertThatThrownBy(() -> paymentService.confirm(request, "user"))
+            assertThatThrownBy(() -> paymentService.confirm(request, 1L))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.TOSS_PAYMENTS_ERROR));
@@ -366,13 +345,13 @@ class PaymentServiceTest {
             given(request.getCancelReason()).willReturn("고객 요청");
             given(request.getCancelAmount()).willReturn(null);
 
-            given(transactionHelper.loadAndValidateForCancel(eq("pk-001"), any(), anyBoolean())).willReturn(Optional.empty());
+            given(transactionHelper.loadAndValidateForCancel(eq("pk-001"), anyLong(), anyBoolean())).willReturn(Optional.empty());
 
             donePayment.cancel("고객 요청");
             PaymentResponse cancelledResponse = PaymentResponse.from(donePayment);
             given(transactionHelper.applyCancelResult(eq("pk-001"), eq("고객 요청"))).willReturn(cancelledResponse);
 
-            PaymentResponse response = paymentService.cancel("pk-001", request, "user1", false);
+            PaymentResponse response = paymentService.cancel("pk-001", request, 1L, false);
 
             verify(tossPaymentsClient).cancel(eq("pk-001"), any());
             verify(transactionHelper).applyCancelResult(eq("pk-001"), eq("고객 요청"));
@@ -384,10 +363,10 @@ class PaymentServiceTest {
         void returnsExistingCancelledPaymentWithoutApiCall() {
             donePayment.cancel("이미 취소됨");
             PaymentResponse cancelledResponse = PaymentResponse.from(donePayment);
-            given(transactionHelper.loadAndValidateForCancel(eq("pk-001"), any(), anyBoolean()))
+            given(transactionHelper.loadAndValidateForCancel(eq("pk-001"), anyLong(), anyBoolean()))
                     .willReturn(Optional.of(cancelledResponse));
 
-            PaymentResponse response = paymentService.cancel("pk-001", mock(PaymentCancelRequest.class), "user1", false);
+            PaymentResponse response = paymentService.cancel("pk-001", mock(PaymentCancelRequest.class), 1L, false);
 
             verifyNoInteractions(tossPaymentsClient);
             verify(transactionHelper, never()).applyCancelResult(any(), any());
@@ -401,7 +380,7 @@ class PaymentServiceTest {
             given(idempotencyManager.getIfCompleted("cancel:pk-001"))
                     .willReturn(Optional.of(cached));
 
-            PaymentResponse response = paymentService.cancel("pk-001", mock(PaymentCancelRequest.class), "user1", false);
+            PaymentResponse response = paymentService.cancel("pk-001", mock(PaymentCancelRequest.class), 1L, false);
 
             assertThat(response).isSameAs(cached);
             verifyNoInteractions(transactionHelper, tossPaymentsClient);
@@ -412,7 +391,7 @@ class PaymentServiceTest {
         void throwsWhenProcessingInProgress() {
             given(idempotencyManager.tryAcquire("cancel:pk-001")).willReturn(false);
 
-            assertThatThrownBy(() -> paymentService.cancel("pk-001", mock(PaymentCancelRequest.class), "user1", false))
+            assertThatThrownBy(() -> paymentService.cancel("pk-001", mock(PaymentCancelRequest.class), 1L, false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_PROCESSING_IN_PROGRESS));
@@ -423,10 +402,10 @@ class PaymentServiceTest {
         @Test
         @DisplayName("DONE이 아닌 상태(PENDING)는 INVALID_PAYMENT_STATUS 예외 발생")
         void throwsWhenPaymentNotDone() {
-            given(transactionHelper.loadAndValidateForCancel(eq("pk-x"), any(), anyBoolean()))
+            given(transactionHelper.loadAndValidateForCancel(eq("pk-x"), anyLong(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS));
 
-            assertThatThrownBy(() -> paymentService.cancel("pk-x", mock(PaymentCancelRequest.class), "user1", false))
+            assertThatThrownBy(() -> paymentService.cancel("pk-x", mock(PaymentCancelRequest.class), 1L, false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_PAYMENT_STATUS));
@@ -437,10 +416,10 @@ class PaymentServiceTest {
         @Test
         @DisplayName("결제가 존재하지 않으면 PAYMENT_NOT_FOUND 예외 발생")
         void throwsWhenPaymentNotFound() {
-            given(transactionHelper.loadAndValidateForCancel(eq("unknown-pk"), any(), anyBoolean()))
+            given(transactionHelper.loadAndValidateForCancel(eq("unknown-pk"), anyLong(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
-            assertThatThrownBy(() -> paymentService.cancel("unknown-pk", mock(PaymentCancelRequest.class), "user1", false))
+            assertThatThrownBy(() -> paymentService.cancel("unknown-pk", mock(PaymentCancelRequest.class), 1L, false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND));
@@ -486,10 +465,9 @@ class PaymentServiceTest {
         @DisplayName("본인 주문이면 결제 정보를 반환한다")
         void returnsPaymentForOwner() {
             given(orderRepository.findById(10L)).willReturn(Optional.of(confirmedOrder(10L, 1L)));
-            given(userRepository.findByUsername("user1")).willReturn(Optional.of(stubUser(1L)));
             given(paymentRepository.findByOrderId(10L)).willReturn(Optional.of(pendingPayment));
 
-            Optional<PaymentResponse> result = paymentService.getByOrderId(10L, "user1", false);
+            Optional<PaymentResponse> result = paymentService.getByOrderId(10L, 1L, false);
 
             assertThat(result).isPresent();
         }
@@ -498,9 +476,8 @@ class PaymentServiceTest {
         @DisplayName("타인 주문 접근 시 ORDER_ACCESS_DENIED 예외 발생")
         void throwsForNonOwner() {
             given(orderRepository.findById(10L)).willReturn(Optional.of(confirmedOrder(10L, 99L)));
-            given(userRepository.findByUsername("user1")).willReturn(Optional.of(stubUser(1L)));
 
-            assertThatThrownBy(() -> paymentService.getByOrderId(10L, "user1", false))
+            assertThatThrownBy(() -> paymentService.getByOrderId(10L, 1L, false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.ORDER_ACCESS_DENIED));
@@ -511,7 +488,7 @@ class PaymentServiceTest {
         void adminCanAccessAnyOrder() {
             given(paymentRepository.findByOrderId(10L)).willReturn(Optional.of(pendingPayment));
 
-            Optional<PaymentResponse> result = paymentService.getByOrderId(10L, "admin", true);
+            Optional<PaymentResponse> result = paymentService.getByOrderId(10L, null, true);
 
             assertThat(result).isPresent();
         }
@@ -524,12 +501,6 @@ class PaymentServiceTest {
             ReflectionTestUtils.setField(o, "id", orderId);
             ReflectionTestUtils.setField(o, "status", OrderStatus.CONFIRMED);
             return o;
-        }
-
-        private User stubUser(Long userId) {
-            User u = User.builder().username("user1").password("pw").email("u@test.com").build();
-            ReflectionTestUtils.setField(u, "id", userId);
-            return u;
         }
     }
 
@@ -566,21 +537,24 @@ class PaymentServiceTest {
         }
 
         @Test
-        @DisplayName("PAYMENT_STATUS_CHANGED + DONE 수신 시 PENDING payment는 로그만 기록한다")
-        void logsDoneEventForPendingPayment() {
+        @DisplayName("PAYMENT_STATUS_CHANGED + DONE + PENDING → 가상계좌 입금 확정 처리")
+        void confirmsVirtualAccountDepositForPendingPayment() {
             TossWebhookEvent.Data data = mock(TossWebhookEvent.Data.class);
             given(data.getOrderId()).willReturn("toss-order-001");
             given(data.getStatus()).willReturn("DONE");
+            given(data.getPaymentKey()).willReturn("pk-webhook-001");
 
             TossWebhookEvent event = mock(TossWebhookEvent.class);
             given(event.getEventType()).willReturn("PAYMENT_STATUS_CHANGED");
             given(event.getData()).willReturn(data);
 
             given(paymentRepository.findByTossOrderId("toss-order-001"))
-                    .willReturn(Optional.of(pendingPayment)); // PENDING 상태
+                    .willReturn(Optional.of(pendingPayment));
+            given(transactionHelper.applyWebhookConfirmResult("toss-order-001", "pk-webhook-001"))
+                    .willReturn(mock(PaymentResponse.class));
 
             assertThatCode(() -> paymentService.handleWebhook(event)).doesNotThrowAnyException();
-            verifyNoInteractions(transactionHelper);
+            verify(transactionHelper).applyWebhookConfirmResult("toss-order-001", "pk-webhook-001");
         }
     }
 }

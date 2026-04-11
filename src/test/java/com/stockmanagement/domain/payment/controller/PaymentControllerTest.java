@@ -8,6 +8,7 @@ import com.stockmanagement.domain.payment.dto.PaymentResponse;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.payment.infrastructure.TossWebhookVerifier;
 import com.stockmanagement.domain.payment.service.PaymentService;
+import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -44,6 +45,9 @@ class PaymentControllerTest {
 
     @MockBean
     private JwtBlacklist jwtBlacklist;
+
+    @MockBean
+    private UserService userService;
 
     @MockBean
     private TossWebhookVerifier webhookVerifier;
