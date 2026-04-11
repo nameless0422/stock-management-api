@@ -1,5 +1,6 @@
 package com.stockmanagement.common.outbox;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -11,10 +12,12 @@ import java.util.List;
 public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> {
 
     /**
-     * 미발행 이벤트 중 재시도 횟수 상한 미만인 레코드를 최대 100건 조회한다.
+     * 미발행 이벤트 중 재시도 횟수 상한 미만인 레코드를 최대 {@code pageable.pageSize}건 조회한다.
      * 생성 순서대로 처리하여 이벤트 순서를 보장한다.
+     * 배치 크기는 {@code outbox.relay.batch-size} 프로퍼티로 제어된다.
      */
-    List<OutboxEvent> findTop100ByPublishedAtIsNullAndRetryCountLessThanOrderByCreatedAtAsc(int maxRetry);
+    @Query("SELECT e FROM OutboxEvent e WHERE e.publishedAt IS NULL AND e.retryCount < :maxRetry ORDER BY e.createdAt ASC")
+    List<OutboxEvent> findPendingEvents(@Param("maxRetry") int maxRetry, Pageable pageable);
 
     /**
      * 발행 완료된 레코드 중 기준 시각 이전 것을 일괄 삭제한다 (purge용).
