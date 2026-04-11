@@ -131,10 +131,11 @@ public class SecurityConfig {
                         headers.addHeaderWriter(new StaticHeadersWriter(
                                 "Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=()"));
                         // CSP — 자체 출처 리소스만 허용 (Swagger UI·어드민 SPA 인라인 스크립트 허용)
+                        // 주의: Swagger UI 5.x 이상은 unsafe-eval 없이 동작. 구버전 사용 시 재확인 필요.
                         headers.contentSecurityPolicy(csp -> csp
                                 .policyDirectives(
                                         "default-src 'self'; " +
-                                        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+                                        "script-src 'self' 'unsafe-inline'; " +
                                         "style-src 'self' 'unsafe-inline'; " +
                                         "img-src 'self' data:; " +
                                         "font-src 'self'; " +

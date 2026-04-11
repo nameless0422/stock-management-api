@@ -16,6 +16,10 @@ import java.util.UUID;
 @Component
 public class JwtTokenProvider {
 
+    /** 개발용 기본 시크릿 — 운영 환경에서 이 값이 사용되면 보안 위험. */
+    private static final String DEV_DEFAULT_SECRET =
+            "stock-management-secret-key-for-development-only";
+
     @Value("${jwt.secret}")
     private String secretKeyStr;
 
@@ -24,9 +28,23 @@ public class JwtTokenProvider {
 
     private SecretKey secretKey;
 
+    /**
+     * 시작 시 JWT 시크릿을 초기화하고 보안 검사를 수행한다.
+     *
+     * <p>JWT_SECRET 환경변수 미설정으로 개발용 기본값이 사용되는 경우 ERROR 로그를 출력한다.
+     * 공격자가 기본값을 알고 있으므로 운영 배포 전 반드시 교체해야 한다.
+     */
     @PostConstruct
     public void init() {
         this.secretKey = Keys.hmacShaKeyFor(secretKeyStr.getBytes(StandardCharsets.UTF_8));
+
+        if (DEV_DEFAULT_SECRET.equals(secretKeyStr)) {
+            log.error("╔══════════════════════════════════════════════════╗");
+            log.error("║ [SECURITY WARNING] JWT 개발용 기본 시크릿 사용 중  ║");
+            log.error("║ JWT_SECRET 환경변수를 설정하지 않으면               ║");
+            log.error("║ 공격자가 임의 토큰을 위조할 수 있습니다.            ║");
+            log.error("╚══════════════════════════════════════════════════╝");
+        }
     }
 
     /**
