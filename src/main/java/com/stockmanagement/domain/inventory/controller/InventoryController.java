@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.inventory.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.domain.inventory.dto.InventoryAdjustRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryReceiveRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryResponse;
@@ -65,12 +66,21 @@ public class InventoryController {
         return ApiResponse.ok(inventoryService.getByProductId(productId));
     }
 
-    @Operation(summary = "재고 변동 이력 조회", description = "최신순 정렬. page/size 파라미터로 페이지네이션 가능.")
+    @Operation(
+        summary = "재고 변동 이력 조회",
+        description = """
+            커서 기반 페이지네이션. 최신순(ID 내림차순) 정렬.
+            - 첫 조회: lastId 없이 호출
+            - 다음 페이지: 이전 응답의 nextCursor를 lastId로 전달
+            - hasNext=false이면 마지막 페이지
+            """
+    )
     @GetMapping("/{productId}/transactions")
-    public ApiResponse<Page<InventoryTransactionResponse>> getTransactions(
+    public ApiResponse<CursorPage<InventoryTransactionResponse>> getTransactions(
             @PathVariable Long productId,
-            @PageableDefault(size = 20) Pageable pageable) {
-        return ApiResponse.ok(inventoryService.getTransactions(productId, pageable));
+            @RequestParam(required = false) Long lastId,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(inventoryService.getTransactions(productId, lastId, size));
     }
 
     @Operation(summary = "입고 처리", description = "ADMIN 전용. onHand 증가 → available 증가.")

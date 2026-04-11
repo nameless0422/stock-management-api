@@ -15,6 +15,7 @@ import com.stockmanagement.domain.inventory.entity.InventoryTransactionType;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.inventory.repository.InventorySpecification;
 import com.stockmanagement.domain.inventory.repository.InventoryTransactionRepository;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.event.LowStockEvent;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
@@ -25,6 +26,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,13 +82,25 @@ public class InventoryService {
     }
 
     /**
-     * 상품의 재고 변동 이력을 최신순 페이징 조회한다.
-     * 재고 레코드가 없으면 404 예외를 발생시킨다.
+     * 상품의 재고 변동 이력을 커서 기반으로 최신순 조회한다.
+     *
+     * <p>오프셋 페이지네이션 대신 {@code WHERE id < :lastId} 커서 방식을 사용하여
+     * 페이지 번호가 늘어나도 앞 레코드를 스캔하지 않는다.
+     *
+     * @param productId 조회 대상 상품 ID
+     * @param lastId    이전 페이지의 마지막 항목 ID (첫 조회 시 null)
+     * @param size      한 페이지 항목 수
      */
-    public Page<InventoryTransactionResponse> getTransactions(Long productId, Pageable pageable) {
+    public CursorPage<InventoryTransactionResponse> getTransactions(Long productId, Long lastId, int size) {
         findByProductId(productId); // 재고 존재 여부 확인
-        return transactionRepository.findByInventoryProductIdOrderByCreatedAtDesc(productId, pageable)
-                .map(InventoryTransactionResponse::from);
+        PageRequest limit = PageRequest.of(0, size + 1);
+        var items = lastId == null
+                ? transactionRepository.findByInventoryProductIdOrderByIdDesc(productId, limit)
+                : transactionRepository.findByInventoryProductIdAndIdLessThanOrderByIdDesc(productId, lastId, limit);
+        return CursorPage.of(
+                items.stream().map(InventoryTransactionResponse::from).toList(),
+                size,
+                InventoryTransactionResponse::getId);
     }
 
     /**

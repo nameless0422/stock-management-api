@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.order.service;
 
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.coupon.service.CouponService;
@@ -28,6 +29,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -252,6 +254,30 @@ public class OrderService {
     }
 
     /**
+     * 사용자 주문 목록을 커서 기반으로 최신순 조회한다.
+     *
+     * <p>오프셋 방식 {@link #getList}와 달리 COUNT 쿼리가 없어 대용량 이력 스크롤에 적합하다.
+     * ADMIN이 아닌 경우 userId를 강제 적용하여 타인 주문 조회를 차단한다.
+     *
+     * @param userId  조회 대상 사용자 ID (USER는 본인, ADMIN은 원하는 userId 지정 가능)
+     * @param isAdmin ADMIN 권한 여부
+     * @param status  주문 상태 필터 (null이면 전체)
+     * @param lastId  이전 페이지 마지막 항목 ID (첫 조회 시 null)
+     * @param size    한 페이지 항목 수
+     */
+    public CursorPage<OrderResponse> getOrderScroll(Long userId, boolean isAdmin,
+                                                     OrderStatus status, Long lastId, int size) {
+        PageRequest limit = PageRequest.of(0, size + 1);
+        List<Order> items = lastId == null
+                ? orderRepository.findCursorByUserId(userId, status, limit)
+                : orderRepository.findCursorByUserIdAfter(userId, status, lastId, limit);
+        return CursorPage.of(
+                items.stream().map(OrderResponse::from).toList(),
+                size,
+                OrderResponse::getId);
+    }
+
+    /**
      * 특정 주문의 상태 변경 이력을 시간순으로 조회한다.
      *
      * <p>ADMIN은 모든 주문 이력에 접근 가능하고, USER는 본인 주문 이력만 조회할 수 있다.
@@ -309,16 +335,17 @@ public class OrderService {
     }
 
     /**
-     * Confirms the order after successful payment – called by the Payment domain.
+     * 결제 완료 후 주문을 확정한다 — Payment 도메인에서 호출.
      *
-     * <p>Transitions PENDING → CONFIRMED and moves each item's inventory
-     * from {@code reserved} to {@code allocated}.
+     * <p>PENDING → CONFIRMED 전환 및 재고 reserved → allocated 이동.
+     * 반환된 {@link Order} 객체를 재사용함으로써 호출자의 추가 DB 조회를 제거한다.
      *
-     * @param id order ID to confirm
+     * @param id 확정할 주문 ID
+     * @return 확정된 Order 엔티티
      */
     @Transactional
     @CacheEvict(cacheNames = "orders", key = "#id")
-    public void confirm(Long id) {
+    public Order confirm(Long id) {
         Order order = orderRepository.findByIdWithItemsForUpdate(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
@@ -329,6 +356,7 @@ public class OrderService {
         }
 
         recordHistory(order.getId(), OrderStatus.PENDING, OrderStatus.CONFIRMED, null);
+        return order;
     }
 
     /**

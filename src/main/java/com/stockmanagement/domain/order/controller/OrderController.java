@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.order.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
@@ -8,6 +9,7 @@ import com.stockmanagement.domain.order.dto.OrderDetailResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
+import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.service.OrderDetailService;
 import com.stockmanagement.domain.order.service.OrderService;
 import com.stockmanagement.domain.user.service.UserService;
@@ -97,6 +99,29 @@ public class OrderController {
         // ADMIN은 request.userId 파라미터로 필터링하므로 userId 해결 불필요
         Long userId = isAdmin ? null : resolveUserId(authentication, username);
         return ApiResponse.ok(orderService.getList(userId, isAdmin, request, pageable));
+    }
+
+    @Operation(
+        summary = "주문 목록 커서 스크롤 (사용자용)",
+        description = """
+            커서 기반 페이지네이션으로 주문 목록을 최신순 조회한다.
+            - 첫 조회: lastId 없이 호출
+            - 다음 페이지: 이전 응답의 nextCursor를 lastId로 전달
+            - status 필터 지원 (PENDING / CONFIRMED / CANCELLED / REFUNDED)
+            - ADMIN: userId 파라미터로 특정 사용자 주문 스크롤 가능
+            - USER: 본인 주문만 조회 (userId 파라미터 무시)
+            """
+    )
+    @GetMapping("/scroll")
+    public ApiResponse<CursorPage<OrderResponse>> scroll(
+            @AuthenticationPrincipal String username,
+            Authentication authentication,
+            @RequestParam(required = false) OrderStatus status,
+            @RequestParam(required = false) Long lastId,
+            @RequestParam(defaultValue = "20") int size) {
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
+        Long userId = resolveUserId(authentication, username);
+        return ApiResponse.ok(orderService.getOrderScroll(userId, isAdmin, status, lastId, size));
     }
 
     @Operation(summary = "주문 취소", description = "PENDING 상태만 취소 가능. 재고 예약 해제(reserved--). ADMIN은 모든 주문 취소 가능.")

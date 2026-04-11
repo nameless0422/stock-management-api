@@ -95,6 +95,41 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     boolean existsPurchaseByUserIdAndProductId(@Param("userId") Long userId,
                                                @Param("productId") Long productId);
 
+    // ===== 커서 기반 페이지네이션 (사용자 주문 목록 스크롤) =====
+
+    /**
+     * 사용자 주문 목록을 커서 기반으로 최신순 조회한다 (첫 페이지).
+     *
+     * <p>COUNT 쿼리 없이 LIMIT만 사용하여 오프셋 방식 대비 일정한 응답 속도를 보장한다.
+     *
+     * @param userId 조회 대상 사용자 ID
+     * @param status 주문 상태 필터 (null이면 전체)
+     * @param pageable {@code PageRequest.of(0, size+1)} — LIMIT 제어용
+     */
+    @Query("SELECT o FROM Order o WHERE o.userId = :userId " +
+           "AND (:status IS NULL OR o.status = :status) " +
+           "ORDER BY o.id DESC")
+    List<Order> findCursorByUserId(@Param("userId") Long userId,
+                                   @Param("status") OrderStatus status,
+                                   Pageable pageable);
+
+    /**
+     * 사용자 주문 목록을 커서 기반으로 최신순 조회한다 (커서 이후).
+     *
+     * @param userId  조회 대상 사용자 ID
+     * @param status  주문 상태 필터 (null이면 전체)
+     * @param lastId  이전 페이지 마지막 항목의 ID (이 ID 미만부터 조회)
+     * @param pageable {@code PageRequest.of(0, size+1)} — LIMIT 제어용
+     */
+    @Query("SELECT o FROM Order o WHERE o.userId = :userId " +
+           "AND (:status IS NULL OR o.status = :status) " +
+           "AND o.id < :lastId " +
+           "ORDER BY o.id DESC")
+    List<Order> findCursorByUserIdAfter(@Param("userId") Long userId,
+                                        @Param("status") OrderStatus status,
+                                        @Param("lastId") Long lastId,
+                                        Pageable pageable);
+
     // ===== 일별 통계 집계 (DailyOrderStatsScheduler) =====
 
     /** 기간 내 전체 주문 수 */
