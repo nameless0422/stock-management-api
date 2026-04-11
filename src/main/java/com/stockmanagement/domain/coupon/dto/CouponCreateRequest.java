@@ -13,8 +13,15 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class CouponCreateRequest {
 
+    /**
+     * 쿠폰 코드.
+     * 최소 8자, 영문 + 숫자 혼합 필수.
+     * 단순 코드("AAAA", "12345678")는 무차별 대입으로 탈취 가능하므로 형식 강제.
+     */
     @NotBlank
-    @Size(max = 50)
+    @Size(min = 8, max = 50)
+    @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*\\d)[A-Za-z0-9]+$",
+             message = "쿠폰 코드는 영문과 숫자를 모두 포함한 8자 이상이어야 합니다")
     private String code;
 
     @NotBlank

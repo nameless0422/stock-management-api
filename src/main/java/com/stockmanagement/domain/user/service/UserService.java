@@ -152,7 +152,12 @@ public class UserService {
         return UserResponse.from(user);
     }
 
-    /** 비밀번호 변경. 현재 비밀번호 확인 후 새 비밀번호로 교체. */
+    /**
+     * 비밀번호 변경.
+     *
+     * <p>현재 비밀번호 확인 후 새 비밀번호로 교체하고, 해당 사용자의 모든 기기 Refresh Token을 즉시 폐기한다.
+     * 계정 탈취·비밀번호 유출 상황에서 공격자가 기존 토큰으로 재발급받지 못하도록 차단한다.
+     */
     @Transactional
     public void changePassword(String username, ChangePasswordRequest request) {
         User user = userRepository.findByUsername(username)
@@ -161,6 +166,8 @@ public class UserService {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
         user.updatePassword(passwordEncoder.encode(request.getNewPassword()));
+        // 비밀번호 변경 시 모든 기기 Refresh Token 일괄 폐기 (전체 로그아웃 효과)
+        refreshTokenStore.revokeAll(username);
     }
 
     /** 현재 인증된 사용자의 주문 목록 페이징 조회. hasReview 정보 포함. */
