@@ -15,6 +15,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
@@ -32,6 +33,7 @@ class OutboxEventRelaySchedulerTest {
 
     @BeforeEach
     void setUp() {
+        ReflectionTestUtils.setField(scheduler, "batchSize", 100);
         scheduler.registerMetrics();
     }
 
@@ -42,7 +44,7 @@ class OutboxEventRelaySchedulerTest {
         @Test
         @DisplayName("미발행 이벤트 없음 → processor 미호출")
         void doesNothingWhenNoPending() {
-            given(repository.findTop100ByPublishedAtIsNullAndRetryCountLessThanOrderByCreatedAtAsc(anyInt()))
+            given(repository.findPendingEvents(anyInt(), any()))
                     .willReturn(List.of());
 
             scheduler.relay();
@@ -58,7 +60,7 @@ class OutboxEventRelaySchedulerTest {
             ReflectionTestUtils.setField(e1, "id", 1L);
             ReflectionTestUtils.setField(e2, "id", 2L);
 
-            given(repository.findTop100ByPublishedAtIsNullAndRetryCountLessThanOrderByCreatedAtAsc(anyInt()))
+            given(repository.findPendingEvents(anyInt(), any()))
                     .willReturn(List.of(e1, e2));
 
             scheduler.relay();

@@ -1,12 +1,15 @@
 package com.stockmanagement.common.outbox;
 
 import com.stockmanagement.common.lock.DistributedLock;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -33,11 +36,20 @@ public class OutboxEventRelayScheduler {
     private final OutboxEventProcessor processor;
     private final MeterRegistry meterRegistry;
 
+    /** 1회 relay 시 처리할 최대 이벤트 수. 적체 복구 속도와 DB 부하 사이의 균형. */
+    @Value("${outbox.relay.batch-size:100}")
+    private int batchSize;
+
+    private Counter relayedCounter;
+
     @PostConstruct
     void registerMetrics() {
         Gauge.builder("outbox.dead_letters", repository,
                         r -> r.countByPublishedAtIsNullAndRetryCountGreaterThanEqual(MAX_RETRY))
                 .description("MAX_RETRY 초과로 영구 발행 실패된 Outbox 이벤트 수")
+                .register(meterRegistry);
+        relayedCounter = Counter.builder("outbox.relayed")
+                .description("relay에 성공(processOne 호출)한 Outbox 이벤트 누적 수")
                 .register(meterRegistry);
     }
 
@@ -53,15 +65,16 @@ public class OutboxEventRelayScheduler {
     @Scheduled(fixedDelayString = "${outbox.relay.interval-ms:5000}")
     public void relay() {
         List<OutboxEvent> pending = repository
-                .findTop100ByPublishedAtIsNullAndRetryCountLessThanOrderByCreatedAtAsc(MAX_RETRY);
+                .findPendingEvents(MAX_RETRY, PageRequest.of(0, batchSize));
 
         if (pending.isEmpty()) return;
 
-        log.debug("[Outbox] relay 대상: {}건", pending.size());
+        log.debug("[Outbox] relay 대상: {}건 (batchSize={})", pending.size(), batchSize);
 
         // 건별 독립 트랜잭션: 중간 실패가 이전 성공 커밋을 롤백하지 않음
         for (OutboxEvent outbox : pending) {
             processor.processOne(outbox.getId());
+            relayedCounter.increment();
         }
     }
 }
