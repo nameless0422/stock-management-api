@@ -6,6 +6,7 @@ import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.point.entity.UserPoint;
 import com.stockmanagement.domain.point.repository.UserPointRepository;
+import com.stockmanagement.domain.user.dto.ChangePasswordRequest;
 import com.stockmanagement.domain.user.dto.LoginRequest;
 import com.stockmanagement.domain.user.dto.LoginResponse;
 import com.stockmanagement.domain.user.dto.RefreshRequest;
@@ -302,6 +303,48 @@ class UserServiceTest {
                             .isEqualTo(ErrorCode.USER_NOT_FOUND));
 
             verifyNoInteractions(orderRepository);
+        }
+    }
+
+    // ===== changePassword() =====
+
+    @Nested
+    @DisplayName("changePassword()")
+    class ChangePassword {
+
+        @Test
+        @DisplayName("정상 변경 — 새 비밀번호 인코딩 저장 + 모든 Refresh Token 폐기")
+        void changesPasswordAndRevokesAllTokens() {
+            ChangePasswordRequest request = new ChangePasswordRequest();
+            org.springframework.test.util.ReflectionTestUtils.setField(request, "currentPassword", "old-pw");
+            org.springframework.test.util.ReflectionTestUtils.setField(request, "newPassword", "new-pw");
+
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+            given(passwordEncoder.matches("old-pw", "encoded-pw")).willReturn(true);
+            given(passwordEncoder.encode("new-pw")).willReturn("new-encoded-pw");
+
+            userService.changePassword("testuser", request);
+
+            verify(passwordEncoder).encode("new-pw");
+            verify(refreshTokenStore).revokeAll("testuser");
+        }
+
+        @Test
+        @DisplayName("현재 비밀번호 불일치 — INVALID_CREDENTIALS 예외 발생, Refresh Token 폐기 없음")
+        void throwsWhenCurrentPasswordMismatch() {
+            ChangePasswordRequest request = new ChangePasswordRequest();
+            org.springframework.test.util.ReflectionTestUtils.setField(request, "currentPassword", "wrong-pw");
+            org.springframework.test.util.ReflectionTestUtils.setField(request, "newPassword", "new-pw");
+
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+            given(passwordEncoder.matches("wrong-pw", "encoded-pw")).willReturn(false);
+
+            assertThatThrownBy(() -> userService.changePassword("testuser", request))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.INVALID_CREDENTIALS));
+
+            verify(refreshTokenStore, never()).revokeAll(anyString());
         }
     }
 
