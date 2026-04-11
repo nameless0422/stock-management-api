@@ -3,6 +3,8 @@ plugins {
 	id 'org.springframework.boot' version '3.5.11'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'jacoco'
+	// PIT 뮤테이션 테스트 — 비즈니스 로직의 경계값·조건 변이에 대한 실제 동작 검증
+	id 'info.solidsoft.pitest' version '1.15.0'
 }
 
 group = 'com'
@@ -101,6 +103,42 @@ jacocoTestReport {
 			fileTree(dir: it, exclude: jacocoExcludes)
 		}))
 	}
+}
+
+// ===== PIT 뮤테이션 테스트 설정 =====
+// 실행: ./gradlew pitest
+// 리포트 위치: build/reports/pitest/index.html
+//
+// 대상: 재고·결제·쿠폰 등 핵심 비즈니스 로직 서비스 (설정/DTO/Entity 제외)
+// 목표: mutation score 60% 이상
+// 주의: 전체 실행은 느리다. CI에서는 jacoco 후 별도 파이프라인으로 분리 권장.
+pitest {
+	junit5PluginVersion = '1.2.1'
+	targetClasses = [
+		'com.stockmanagement.domain.inventory.service.*',
+		'com.stockmanagement.domain.order.service.*',
+		'com.stockmanagement.domain.payment.service.*',
+		'com.stockmanagement.domain.coupon.service.*',
+		'com.stockmanagement.domain.point.service.*',
+		'com.stockmanagement.domain.refund.service.*',
+	]
+	targetTests = [
+		'com.stockmanagement.domain.inventory.service.*',
+		'com.stockmanagement.domain.order.service.*',
+		'com.stockmanagement.domain.payment.service.*',
+		'com.stockmanagement.domain.coupon.service.*',
+		'com.stockmanagement.domain.point.service.*',
+		'com.stockmanagement.domain.refund.service.*',
+	]
+	threads = 4
+	outputFormats = ['HTML', 'XML']
+	timestampedReports = false // 매번 같은 경로에 덮어써서 비교 용이
+	// 변이 연산자: 기본 + 경계값 변이 (< → <=, > → >=) 포함
+	mutators = ['DEFAULTS', 'STRONGER']
+	// 단위 테스트만 대상 (통합 테스트 제외 — 수행 시간 수 배 차이)
+	excludedTestClasses = ['com.stockmanagement.integration.*']
+	// 변이 Score 임계값: 60% 미만 시 빌드 실패
+	mutationThreshold = 60
 }
 
 // 커버리지 임계값 검증 — 기준 미달 시 빌드 실패
