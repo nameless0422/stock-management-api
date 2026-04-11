@@ -122,7 +122,7 @@ class InventoryServiceTest {
     class GetTransactions {
 
         @Test
-        @DisplayName("재고가 존재하면 이력 목록을 반환한다")
+        @DisplayName("재고가 존재하면 이력 목록을 반환한다 (커서 기반)")
         void returnsTransactionList() {
             Inventory inventory = inventoryWithStock();
             given(inventoryRepository.findByProductId(1L)).willReturn(Optional.of(inventory));
@@ -134,10 +134,10 @@ class InventoryServiceTest {
             given(tx.getSnapshotReserved()).willReturn(0);
             given(tx.getSnapshotAllocated()).willReturn(0);
             given(tx.getCreatedAt()).willReturn(LocalDateTime.now());
-            given(transactionRepository.findByInventoryProductIdOrderByCreatedAtDesc(eq(1L), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of(tx)));
+            given(transactionRepository.findByInventoryProductIdOrderByIdDesc(eq(1L), any(Pageable.class)))
+                    .willReturn(List.of(tx));
 
-            Page<InventoryTransactionResponse> result = inventoryService.getTransactions(1L, Pageable.unpaged());
+            var result = inventoryService.getTransactions(1L, null, 20);
 
             assertThat(result.getContent()).hasSize(1);
             assertThat(result.getContent().get(0).getType()).isEqualTo("RECEIVE");
@@ -148,7 +148,7 @@ class InventoryServiceTest {
         void throwsWhenInventoryNotFound() {
             given(inventoryRepository.findByProductId(99L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> inventoryService.getTransactions(99L, Pageable.unpaged()))
+            assertThatThrownBy(() -> inventoryService.getTransactions(99L, null, 20))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVENTORY_NOT_FOUND));

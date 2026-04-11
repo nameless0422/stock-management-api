@@ -1,6 +1,8 @@
 package com.stockmanagement.domain.inventory.controller;
 
 import com.stockmanagement.common.config.SecurityConfig;
+import com.stockmanagement.common.dto.CursorPage;
+import org.springframework.data.domain.Page;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.inventory.dto.InventoryResponse;
@@ -14,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -151,13 +152,15 @@ class InventoryControllerTest {
 
         @Test
         @WithMockUser
-        @DisplayName("인증된 사용자 — 이력 조회 → 200")
+        @DisplayName("인증된 사용자 — 이력 조회 → 200 (커서 페이지)")
         void returnsTransactions() throws Exception {
-            given(inventoryService.getTransactions(eq(1L), any())).willReturn(Page.empty());
+            given(inventoryService.getTransactions(eq(1L), any(), eq(20)))
+                    .willReturn(CursorPage.of(java.util.List.of(), 20, t -> t.getId()));
 
             mockMvc.perform(get("/api/inventory/1/transactions"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.success").value(true));
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.hasNext").value(false));
         }
 
         @Test
@@ -171,7 +174,7 @@ class InventoryControllerTest {
         @WithMockUser
         @DisplayName("재고가 없는 상품 이력 조회 → 404")
         void returnsNotFoundWhenInventoryMissing() throws Exception {
-            given(inventoryService.getTransactions(eq(999L), any()))
+            given(inventoryService.getTransactions(eq(999L), any(), eq(20)))
                     .willThrow(new BusinessException(ErrorCode.INVENTORY_NOT_FOUND));
 
             mockMvc.perform(get("/api/inventory/999/transactions"))
