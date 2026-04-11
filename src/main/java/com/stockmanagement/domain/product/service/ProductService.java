@@ -18,11 +18,13 @@ import com.stockmanagement.domain.product.image.dto.ProductImageResponse;
 import com.stockmanagement.domain.product.image.repository.ProductImageRepository;
 import com.stockmanagement.domain.product.review.repository.ReviewRepository;
 import com.stockmanagement.domain.product.review.repository.ReviewStatsProjection;
+import com.stockmanagement.common.event.ProductSyncEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -55,6 +57,7 @@ public class ProductService {
     private final InventoryRepository inventoryRepository;
     private final ReviewRepository reviewRepository;
     private final ProductImageRepository productImageRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 상품을 등록한다.
@@ -75,7 +78,7 @@ public class ProductService {
                 .category(category)
                 .build();
         Product saved = productRepository.save(product);
-        safeIndex(saved);
+        eventPublisher.publishEvent(new ProductSyncEvent(saved.getId(), false));
         return ProductResponse.from(saved);
     }
 
@@ -145,7 +148,7 @@ public class ProductService {
         Product product = findById(id);
         Category category = resolveCategory(request.getCategoryId());
         product.update(request.getName(), request.getDescription(), request.getPrice(), category);
-        safeIndex(product);
+        eventPublisher.publishEvent(new ProductSyncEvent(product.getId(), false));
         return buildProductResponse(product);
     }
 
@@ -159,7 +162,7 @@ public class ProductService {
     public void delete(Long id) {
         Product product = findById(id);
         product.changeStatus(ProductStatus.DISCONTINUED);
-        safeDeleteFromIndex(id);
+        eventPublisher.publishEvent(new ProductSyncEvent(id, true));
     }
 
     /** 상품 판매 상태를 변경한다 (ACTIVE ↔ DISCONTINUED). */
@@ -168,11 +171,8 @@ public class ProductService {
     public ProductResponse changeStatus(Long id, ProductStatusRequest request) {
         Product product = findById(id);
         product.changeStatus(request.getStatus());
-        if (request.getStatus() == ProductStatus.ACTIVE) {
-            safeIndex(product);
-        } else {
-            safeDeleteFromIndex(id);
-        }
+        eventPublisher.publishEvent(new ProductSyncEvent(id,
+                request.getStatus() != ProductStatus.ACTIVE));
         return buildProductResponse(product);
     }
 
@@ -256,27 +256,4 @@ public class ProductService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
     }
 
-    /**
-     * ES 색인을 시도하고 실패해도 CRUD 흐름을 중단하지 않는다.
-     * 실패 시 DB와 ES 간 불일치가 발생하므로 ERROR로 기록한다.
-     */
-    private void safeIndex(Product product) {
-        try {
-            productSearchService.index(product);
-        } catch (Exception e) {
-            log.error("[ProductService] Elasticsearch 색인 실패 — DB/ES 불일치 발생. productId={}", product.getId(), e);
-        }
-    }
-
-    /**
-     * ES 색인 삭제를 시도하고 실패해도 CRUD 흐름을 중단하지 않는다.
-     * 실패 시 삭제된 상품이 검색 결과에 잔존하므로 ERROR로 기록한다.
-     */
-    private void safeDeleteFromIndex(Long productId) {
-        try {
-            productSearchService.deleteFromIndex(productId);
-        } catch (Exception e) {
-            log.error("[ProductService] Elasticsearch 색인 삭제 실패 — 삭제된 상품이 검색에 잔존할 수 있음. productId={}", productId, e);
-        }
-    }
 }
