@@ -100,7 +100,7 @@ class RefundServiceTest {
             RefundResponse response = refundService.requestRefund(mockRequest(10L), "user1");
 
             assertThat(response.getPaymentId()).isEqualTo(10L);
-            verify(paymentService).cancel(eq("pk_test_abc123"), any(), eq("user1"), eq(false));
+            verify(paymentService).cancel(eq("pk_test_abc123"), any(), eq(1L), eq(false));
             assertThat(saved.getStatus()).isEqualTo(RefundStatus.COMPLETED);
         }
 
@@ -142,7 +142,7 @@ class RefundServiceTest {
 
             refundService.requestRefund(mockRequest(10L), "user1");
 
-            verify(paymentService).cancel(eq("pk_test_abc123"), any(), eq("user1"), eq(false));
+            verify(paymentService).cancel(eq("pk_test_abc123"), any(), eq(1L), eq(false));
             assertThat(failedRefund.getStatus()).isEqualTo(RefundStatus.COMPLETED);
         }
 

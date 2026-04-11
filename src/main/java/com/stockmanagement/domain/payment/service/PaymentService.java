@@ -16,7 +16,6 @@ import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmRequest;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmResponse;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
-import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,21 +27,21 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Core business logic for the payment domain.
+ * 결제 도메인 핵심 비즈니스 로직 서비스.
  *
- * <p>Transaction strategy:
+ * <p>트랜잭션 전략:
  * <ul>
- *   <li>Class-level: {@code @Transactional(readOnly = true)} – default for queries
- *   <li>Write methods: individually overridden with {@code @Transactional}
+ *   <li>클래스 레벨: {@code @Transactional(readOnly = true)} — 조회 기본값
+ *   <li>쓰기 메서드: {@code @Transactional} 로 개별 오버라이드
  * </ul>
  *
- * <p>Payment flow:
+ * <p>결제 흐름:
  * <pre>
- *   1. prepare()  – validate order, create PENDING Payment, return tossOrderId + amount
- *   2. confirm()  – verify amount, call Toss confirm API, transition PENDING → DONE,
- *                   call OrderService.confirm() → Inventory reserved → allocated
- *   3. cancel()   – call Toss cancel API, transition DONE → CANCELLED,
- *                   call OrderService.refund() → Inventory allocated released
+ *   1. prepare()  — 주문 검증, PENDING Payment 생성, tossOrderId + 금액 반환
+ *   2. confirm()  — 금액 검증, Toss confirm API 호출, PENDING → DONE 전환,
+ *                   OrderService.confirm() → 재고 reserved → allocated
+ *   3. cancel()   — Toss cancel API 호출, DONE → CANCELLED 전환,
+ *                   OrderService.refund() → 재고 allocated 해제
  * </pre>
  */
 @Slf4j
@@ -55,31 +54,28 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final TossPaymentsClient tossPaymentsClient;
     private final PaymentIdempotencyManager idempotencyManager;
-    private final UserRepository userRepository;
     private final PaymentTransactionHelper transactionHelper;
 
     /**
-     * Prepares a payment session for the given order.
+     * 결제 세션을 준비한다.
      *
-     * <p>Steps:
+     * <p>처리 흐름:
      * <ol>
-     *   <li>Validates the order exists and is in PENDING status
-     *   <li>Validates the client-supplied amount against the server-stored total
-     *   <li>Returns an existing PENDING payment if one already exists (idempotency)
-     *   <li>Generates a unique {@code tossOrderId} and creates a PENDING Payment record
+     *   <li>주문 존재 여부 및 PENDING 상태 검증
+     *   <li>클라이언트 제출 금액을 서버 저장 금액과 비교 (클라이언트 조작 방지)
+     *   <li>이미 PENDING 결제가 존재하면 기존 결제 반환 (멱등성)
+     *   <li>고유 {@code tossOrderId} 생성 후 PENDING Payment 레코드 저장
      * </ol>
      *
-     * @param request contains our internal orderId and expected amount
-     * @return tossOrderId and verified amount to pass to the TossPayments checkout widget
+     * @param request 내부 orderId와 예상 금액
+     * @return TossPayments 결제 위젯에 전달할 tossOrderId와 검증된 금액
      */
     @Transactional
-    public PaymentPrepareResponse prepare(PaymentPrepareRequest request, String username) {
+    public PaymentPrepareResponse prepare(PaymentPrepareRequest request, Long userId) {
         Order order = orderRepository.findByIdWithItems(request.getOrderId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
-        // 요청자가 주문 소유자인지 검증
-        Long userId = userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
+        // 요청자가 주문 소유자인지 검증 (JWT claim에서 추출한 userId 사용 — DB 조회 불필요)
         if (!order.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
         }
@@ -129,11 +125,11 @@ public class PaymentService {
      * <p>{@code NOT_SUPPORTED} propagation으로 클래스 레벨 readOnly TX를 억제한다.
      * 내부 DB 연산은 각각 헬퍼의 독립 트랜잭션으로 처리된다.
      *
-     * @param request paymentKey, tossOrderId, and amount forwarded from the checkout widget
-     * @return updated payment details
+     * @param request 결제 위젯에서 전달된 paymentKey, tossOrderId, amount
+     * @return 업데이트된 결제 상세 정보
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public PaymentResponse confirm(PaymentConfirmRequest request, String username) {
+    public PaymentResponse confirm(PaymentConfirmRequest request, Long userId) {
         String idempotencyKey = "confirm:" + request.getTossOrderId();
 
         // 1. Redis 완료 캐시 확인
@@ -150,7 +146,7 @@ public class PaymentService {
         try {
             // 3. Short TX: 소유권·상태·금액 검증 (DB 커넥션 즉시 반환)
             Optional<PaymentResponse> existing = transactionHelper.loadAndValidateForConfirm(
-                    request.getTossOrderId(), request.getAmount(), username);
+                    request.getTossOrderId(), request.getAmount(), userId);
             if (existing.isPresent()) {
                 idempotencyManager.complete(idempotencyKey, existing.get());
                 return existing.get();
@@ -187,12 +183,12 @@ public class PaymentService {
      *   <li>결과를 Redis에 캐싱 (24h TTL)
      * </ol>
      *
-     * @param paymentKey TossPayments-assigned payment key
-     * @param request    cancellation reason and optional partial amount
-     * @return updated payment details
+     * @param paymentKey Toss 결제 키
+     * @param request    취소 사유 및 부분 취소 금액 (선택)
+     * @return 업데이트된 결제 상세 정보
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public PaymentResponse cancel(String paymentKey, PaymentCancelRequest request, String username, boolean isAdmin) {
+    public PaymentResponse cancel(String paymentKey, PaymentCancelRequest request, Long userId, boolean isAdmin) {
         String idempotencyKey = "cancel:" + paymentKey;
 
         // 1. Redis 완료 캐시 확인
@@ -208,7 +204,7 @@ public class PaymentService {
 
         try {
             // 3. Short TX: 소유권·상태 검증 (DB 커넥션 즉시 반환)
-            Optional<PaymentResponse> existing = transactionHelper.loadAndValidateForCancel(paymentKey, username, isAdmin);
+            Optional<PaymentResponse> existing = transactionHelper.loadAndValidateForCancel(paymentKey, userId, isAdmin);
             if (existing.isPresent()) {
                 idempotencyManager.complete(idempotencyKey, existing.get());
                 return existing.get();
@@ -232,51 +228,49 @@ public class PaymentService {
     }
 
     /**
-     * Handles incoming webhook events from TossPayments.
+     * TossPayments Webhook 이벤트를 처리한다.
      *
-     * <p>TossPayments expects HTTP 2xx within 10 seconds.
-     * Currently logs PAYMENT_STATUS_CHANGED events. Virtual account deposit completion
-     * (WAITING_FOR_DEPOSIT → DONE) requires additional handling in production.
+     * <p>TossPayments는 10초 이내 HTTP 2xx를 기대한다.
+     * 가상계좌 입금 완료(WAITING_FOR_DEPOSIT → DONE) 이벤트 수신 시 결제를 확정한다.
      *
-     * @param event parsed webhook payload
+     * @param event 파싱된 Webhook 페이로드
      */
     @Transactional
     public void handleWebhook(TossWebhookEvent event) {
         if (!"PAYMENT_STATUS_CHANGED".equals(event.getEventType())) {
-            log.debug("Ignoring unsupported webhook event type: {}", event.getEventType());
+            log.debug("지원하지 않는 Webhook 이벤트 타입 무시: {}", event.getEventType());
             return;
         }
 
         TossWebhookEvent.Data data = event.getData();
-        log.info("Received webhook: eventType={}, status={}, tossOrderId={}",
+        log.info("Webhook 수신: eventType={}, status={}, tossOrderId={}",
                 event.getEventType(), data.getStatus(), data.getOrderId());
 
         paymentRepository.findByTossOrderId(data.getOrderId()).ifPresent(payment -> {
             switch (data.getStatus()) {
                 case "DONE" -> {
-                    // For virtual account payments: the confirm endpoint may receive
-                    // WAITING_FOR_DEPOSIT and leave the payment PENDING until the customer deposits.
-                    // This webhook fires when the deposit arrives.
+                    // 가상계좌: confirm 시 WAITING_FOR_DEPOSIT으로 PENDING 유지 후
+                    // 실제 입금 완료 시 Toss가 DONE Webhook을 전송한다.
                     if (payment.getStatus() == PaymentStatus.PENDING) {
-                        log.info("Webhook DONE received for PENDING payment: tossOrderId={}. " +
-                                "Virtual account deposit detected – manual review may be required.",
+                        log.info("[Webhook] 가상계좌 입금 완료 — 결제 확정 진행: tossOrderId={}",
                                 data.getOrderId());
-                        // TODO: implement full webhook-driven confirmation for virtual accounts
+                        transactionHelper.applyWebhookConfirmResult(
+                                data.getOrderId(), data.getPaymentKey());
                     }
                 }
                 case "CANCELED" ->
-                    log.info("Webhook CANCELED: tossOrderId={}", data.getOrderId());
+                    log.info("[Webhook] CANCELED: tossOrderId={}", data.getOrderId());
                 default ->
-                    log.debug("Webhook unhandled status={}: tossOrderId={}", data.getStatus(), data.getOrderId());
+                    log.debug("[Webhook] 미처리 status={}: tossOrderId={}", data.getStatus(), data.getOrderId());
             }
         });
     }
 
     /**
-     * Retrieves payment details by TossPayments paymentKey.
+     * Toss paymentKey로 결제 상세 정보를 조회한다.
      *
-     * @param paymentKey TossPayments-assigned payment key
-     * @return payment details
+     * @param paymentKey Toss 결제 키
+     * @return 결제 상세 정보
      */
     public PaymentResponse getByPaymentKey(String paymentKey) {
         return paymentRepository.findByPaymentKey(paymentKey)
@@ -293,12 +287,11 @@ public class PaymentService {
      * @param isAdmin  ADMIN 여부
      * @return 결제 정보 (없으면 Optional.empty())
      */
-    public Optional<PaymentResponse> getByOrderId(Long orderId, String username, boolean isAdmin) {
+    public Optional<PaymentResponse> getByOrderId(Long orderId, Long userId, boolean isAdmin) {
         if (!isAdmin) {
+            // JWT claim에서 추출한 userId로 소유권 검증 — DB 조회 불필요
             Order order = orderRepository.findById(orderId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-            Long userId = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)).getId();
             if (!order.getUserId().equals(userId)) {
                 throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
             }
@@ -309,9 +302,9 @@ public class PaymentService {
     // ===== Private helpers =====
 
     /**
-     * Generates a unique tossOrderId for a payment attempt.
-     * Format: {@code order-{orderId}-{8-char UUID suffix}}
-     * Satisfies TossPayments orderId constraints: 6–64 chars, alphanumeric + hyphen/underscore.
+     * 결제 시도용 고유 tossOrderId를 생성한다.
+     * 형식: {@code order-{orderId}-{UUID 8자}}
+     * TossPayments orderId 제약 충족: 6~64자, 영숫자 + 하이픈/언더스코어.
      */
     private String buildTossOrderId(Long orderId) {
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
@@ -319,8 +312,8 @@ public class PaymentService {
     }
 
     /**
-     * Builds a human-readable order name for the checkout widget.
-     * Example: "MacBook Pro 외 2건"
+     * 결제 위젯용 주문명을 생성한다.
+     * 예시: "MacBook Pro 외 2건"
      */
     private PaymentPrepareResponse buildPrepareResponse(Payment payment, Order order) {
         return new PaymentPrepareResponse(
