@@ -11,6 +11,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.dao.DataIntegrityViolationException;
+
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
@@ -56,8 +58,15 @@ public class InventorySnapshotScheduler {
         try {
             snapshotRepository.saveAll(snapshots);
             log.info("[InventorySnapshotScheduler] 완료 — 저장: {}건 / 스킵: {}건", snapshots.size(), skipped);
+        } catch (DataIntegrityViolationException e) {
+            // 레이스 컨디션으로 인한 중복 스냅샷 — alreadySnapped 집합 조회 후 INSERT 사이에
+            // 다른 인스턴스가 먼저 저장한 경우. 안전하게 스킵한다.
+            log.debug("[InventorySnapshotScheduler] 중복 스냅샷 감지 (동시 실행 경합) — date={}", today);
         } catch (Exception e) {
-            log.error("[InventorySnapshotScheduler] 스냅샷 배치 저장 실패 — 저장 시도: {}건", snapshots.size(), e);
+            // 예상치 못한 오류 — 스케줄러가 error를 삼키면 다음 주기까지 알 수 없으므로 re-throw하여
+            // Spring 스케줄러가 로그를 남기고 Prometheus/알림이 감지할 수 있도록 한다.
+            log.error("[InventorySnapshotScheduler] 스냅샷 배치 저장 실패 — 수동 확인 필요: date={}", today, e);
+            throw new RuntimeException("재고 스냅샷 저장 실패: " + today, e);
         }
     }
 }
