@@ -160,6 +160,13 @@ public class OrderService {
 
         // 4. Order 생성 (확정된 totalAmount 사용)
         long usePointsLong = request.getUsePoints() != null ? request.getUsePoints() : 0L;
+
+        // 4-1. 포인트 잔액 사전 검증 (fail-fast)
+        // 재고 예약·쿠폰 적용 등 뮤테이션 전에 검증하여 불필요한 롤백을 방지한다.
+        // use()가 REQUIRED이므로 롤백 시 쿠폰·재고도 함께 되돌려지나, 조기 검증으로 DB 작업을 줄인다.
+        if (usePointsLong > 0) {
+            pointService.validateBalance(userId, usePointsLong);
+        }
         Order order = Order.builder()
                 .userId(userId)
                 .totalAmount(totalAmount)
@@ -245,11 +252,9 @@ public class OrderService {
      */
     public Page<OrderResponse> getList(Long userId, boolean isAdmin,
                                        OrderSearchRequest request, Pageable pageable) {
-        if (!isAdmin) {
-            // USER: 본인 주문만 조회 (컨트롤러에서 전달된 userId로 강제 필터)
-            request.setUserId(userId);
-        }
-        return orderRepository.findAll(OrderSpecification.of(request), pageable)
+        // USER: 본인 주문만 조회 — DTO를 직접 변경하지 않고 forceUserId로 Specification에 주입
+        Long forceUserId = isAdmin ? null : userId;
+        return orderRepository.findAll(OrderSpecification.of(request, forceUserId), pageable)
                 .map(OrderResponse::from);
     }
 
@@ -332,6 +337,34 @@ public class OrderService {
         recordHistory(order.getId(), OrderStatus.PENDING, OrderStatus.CANCELLED, null);
         outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "PENDING_CANCELLED"));
         return OrderResponse.from(order);
+    }
+
+    /**
+     * 시스템(스케줄러)에 의한 자동 취소 — userId 없이 호출되는 전용 진입점.
+     *
+     * <p>일반 {@link #cancel(Long, Long, boolean)}과 달리 소유권 검증을 수행하지 않는다.
+     * userId가 null인 채로 cancel()을 호출하면 포인트 환불·쿠폰 반환 로직에서
+     * NPE가 발생할 가능성이 있으므로 Order에서 직접 userId를 조회한다.
+     *
+     * @param id 취소할 주문 ID
+     */
+    @Transactional
+    @CacheEvict(cacheNames = "orders", key = "#id")
+    public void cancelBySystem(Long id) {
+        Order order = orderRepository.findByIdWithItemsForUpdate(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        order.cancel();
+
+        for (OrderItem item : order.getItems()) {
+            inventoryService.releaseReservation(item.getProduct().getId(), item.getQuantity());
+        }
+
+        couponService.releaseCoupon(order.getId());
+        pointService.refundByOrder(order.getUserId(), order.getId());
+
+        recordHistory(order.getId(), OrderStatus.PENDING, OrderStatus.CANCELLED, "system:expiry");
+        outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "SYSTEM_EXPIRY"));
     }
 
     /**

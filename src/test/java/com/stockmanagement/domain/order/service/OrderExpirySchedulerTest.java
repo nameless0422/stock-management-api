@@ -17,7 +17,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
@@ -51,16 +52,16 @@ class OrderExpirySchedulerTest {
     }
 
     @Test
-    @DisplayName("만료 주문이 있으면 각 주문에 대해 cancel을 호출한다")
+    @DisplayName("만료 주문이 있으면 각 주문에 대해 cancelBySystem을 호출한다")
     void expiredOrdersExist_cancelsAll() {
         given(orderRepository.findExpiredPendingOrderIds(any(LocalDateTime.class)))
                 .willReturn(List.of(1L, 2L, 3L));
 
         scheduler.cancelExpiredOrders();
 
-        verify(orderService).cancel(eq(1L), isNull(), eq(true));
-        verify(orderService).cancel(eq(2L), isNull(), eq(true));
-        verify(orderService).cancel(eq(3L), isNull(), eq(true));
+        verify(orderService).cancelBySystem(1L);
+        verify(orderService).cancelBySystem(2L);
+        verify(orderService).cancelBySystem(3L);
         verifyNoMoreInteractions(orderService);
     }
 
@@ -69,13 +70,13 @@ class OrderExpirySchedulerTest {
     void partialFailure_continuesWithOthers() {
         given(orderRepository.findExpiredPendingOrderIds(any(LocalDateTime.class)))
                 .willReturn(List.of(1L, 2L, 3L));
-        doThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND)).when(orderService).cancel(eq(2L), isNull(), eq(true));
+        doThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND)).when(orderService).cancelBySystem(2L);
 
         scheduler.cancelExpiredOrders();
 
-        verify(orderService).cancel(eq(1L), isNull(), eq(true));
-        verify(orderService).cancel(eq(2L), isNull(), eq(true));
-        verify(orderService).cancel(eq(3L), isNull(), eq(true));
+        verify(orderService).cancelBySystem(1L);
+        verify(orderService).cancelBySystem(2L);
+        verify(orderService).cancelBySystem(3L);
     }
 
     @Test

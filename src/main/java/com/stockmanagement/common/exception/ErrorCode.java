@@ -25,6 +25,7 @@ public enum ErrorCode {
     // ===== Inventory =====
     INVENTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "재고 정보를 찾을 수 없습니다."),
     INSUFFICIENT_STOCK(HttpStatus.CONFLICT, "재고가 부족합니다."),
+    INVENTORY_STATE_INCONSISTENT(HttpStatus.INTERNAL_SERVER_ERROR, "재고 상태가 불일치합니다. 관리자에게 문의하세요."),
 
     // ===== Order =====
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다."),

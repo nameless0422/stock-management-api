@@ -177,20 +177,19 @@ class RefundServiceTest {
         @DisplayName("존재하면 반환")
         void found() {
             User user = mockUser(1L);
-            Order order = Order.builder().userId(1L).idempotencyKey("k").build();
-            ReflectionTestUtils.setField(order, "id", 100L);
+            // Refund.userId(비정규화)로 소유권 검증 — orderRepository 조회 없음
             Refund refund = Refund.builder()
-                    .paymentId(10L).orderId(100L)
+                    .paymentId(10L).orderId(100L).userId(1L)
                     .amount(BigDecimal.valueOf(50000)).reason("변심")
                     .build();
             ReflectionTestUtils.setField(refund, "id", 5L);
             given(userRepository.findByUsername("user1")).willReturn(Optional.of(user));
             given(refundRepository.findByPaymentId(10L)).willReturn(Optional.of(refund));
-            given(orderRepository.findById(100L)).willReturn(Optional.of(order));
 
             RefundResponse response = refundService.getByPaymentId(10L, "user1", false);
 
             assertThat(response.getId()).isEqualTo(5L);
+            verify(orderRepository, never()).findById(any());
         }
 
         @Test
@@ -209,10 +208,8 @@ class RefundServiceTest {
         @DisplayName("ADMIN은 타인 환불도 조회 가능")
         void adminCanAccessAnyRefund() {
             User admin = mockUser(99L);
-            Order order = Order.builder().userId(1L).idempotencyKey("k").build();
-            ReflectionTestUtils.setField(order, "id", 100L);
             Refund refund = Refund.builder()
-                    .paymentId(10L).orderId(100L)
+                    .paymentId(10L).orderId(100L).userId(1L)
                     .amount(BigDecimal.valueOf(50000)).reason("변심")
                     .build();
             ReflectionTestUtils.setField(refund, "id", 5L);
