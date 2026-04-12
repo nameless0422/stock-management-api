@@ -115,20 +115,39 @@ jacocoTestReport {
 pitest {
 	junit5PluginVersion = '1.2.1'
 	targetClasses = [
+		// 재고·주문·결제·쿠폰·포인트·환불 (핵심 거래 흐름)
 		'com.stockmanagement.domain.inventory.service.*',
 		'com.stockmanagement.domain.order.service.*',
+		'com.stockmanagement.domain.order.cart.service.*',
 		'com.stockmanagement.domain.payment.service.*',
 		'com.stockmanagement.domain.coupon.service.*',
 		'com.stockmanagement.domain.point.service.*',
 		'com.stockmanagement.domain.refund.service.*',
+		'com.stockmanagement.domain.shipment.service.*',
+		// 상품·카테고리·리뷰·위시리스트 (상품 도메인)
+		'com.stockmanagement.domain.product.service.*',
+		'com.stockmanagement.domain.product.category.service.*',
+		'com.stockmanagement.domain.product.review.service.*',
+		'com.stockmanagement.domain.product.wishlist.service.*',
+		// 사용자·배송지 (사용자 도메인)
+		'com.stockmanagement.domain.user.service.*',
+		'com.stockmanagement.domain.user.address.service.*',
 	]
 	targetTests = [
 		'com.stockmanagement.domain.inventory.service.*',
 		'com.stockmanagement.domain.order.service.*',
+		'com.stockmanagement.domain.order.cart.service.*',
 		'com.stockmanagement.domain.payment.service.*',
 		'com.stockmanagement.domain.coupon.service.*',
 		'com.stockmanagement.domain.point.service.*',
 		'com.stockmanagement.domain.refund.service.*',
+		'com.stockmanagement.domain.shipment.service.*',
+		'com.stockmanagement.domain.product.service.*',
+		'com.stockmanagement.domain.product.category.service.*',
+		'com.stockmanagement.domain.product.review.service.*',
+		'com.stockmanagement.domain.product.wishlist.service.*',
+		'com.stockmanagement.domain.user.service.*',
+		'com.stockmanagement.domain.user.address.service.*',
 	]
 	threads = 4
 	outputFormats = ['HTML', 'XML']
