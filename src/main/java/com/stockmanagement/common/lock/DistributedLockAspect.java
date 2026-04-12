@@ -70,6 +70,9 @@ public class DistributedLockAspect {
 
     /**
      * SpEL 표현식을 메서드 파라미터 컨텍스트로 평가하여 락 키를 반환한다.
+     *
+     * <p>SpEL 평가 중 예외가 발생하거나 결과가 null이면 {@link BusinessException}을 던진다.
+     * null 키로 {@code getLock(null)}을 호출하면 NPE가 발생하므로 여기서 차단한다.
      */
     private String resolveKey(ProceedingJoinPoint joinPoint, String keyExpression) {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
@@ -82,6 +85,19 @@ public class DistributedLockAspect {
                 context.setVariable(paramNames[i], args[i]);
             }
         }
-        return parser.parseExpression(keyExpression).getValue(context, String.class);
+
+        String resolved;
+        try {
+            resolved = parser.parseExpression(keyExpression).getValue(context, String.class);
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR,
+                    "분산 락 키 SpEL 평가 실패: " + keyExpression);
+        }
+
+        if (resolved == null) {
+            throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR,
+                    "분산 락 키가 null입니다: " + keyExpression);
+        }
+        return resolved;
     }
 }
