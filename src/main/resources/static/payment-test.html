@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>결제 E2E 테스트</title>
+  <script src="https://js.tosspayments.com/v1"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f5; color: #333; }
+    .container { max-width: 600px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 24px; }
+    .card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .card h2 { font-size: 15px; font-weight: 600; margin-bottom: 16px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+    label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; margin-top: 12px; }
+    label:first-of-type { margin-top: 0; }
+    input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
+    input:focus { border-color: #3182f6; }
+    button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 16px; transition: opacity 0.15s; }
+    button:hover:not(:disabled) { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: #3182f6; color: #fff; }
+    .btn-success { background: #00C896; color: #fff; }
+    .btn-pay { background: #2d2d2d; color: #fff; font-size: 16px; padding: 14px; }
+    .step-badge { display: inline-block; background: #3182f6; color: #fff; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; font-size: 12px; font-weight: 700; margin-right: 8px; }
+    .status { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-top: 12px; }
+    .status.ok { background: #e8f8f2; color: #00824a; border: 1px solid #b3ebd6; }
+    .status.err { background: #fff0f0; color: #c0392b; border: 1px solid #f5c6c6; }
+    .status.info { background: #eef5ff; color: #1a5cb5; border: 1px solid #c3d9ff; }
+    pre { background: #f8f8f8; border: 1px solid #eee; border-radius: 8px; padding: 12px; font-size: 12px; overflow-x: auto; margin-top: 12px; white-space: pre-wrap; }
+    .hidden { display: none; }
+    .divider { height: 1px; background: #f0f0f0; margin: 16px 0; }
+    #step2, #step3, #step4 { opacity: 0.4; pointer-events: none; }
+    #step2.active, #step3.active, #step4.active { opacity: 1; pointer-events: auto; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🧪 Toss 결제 E2E 테스트</h1>
+
+  <!-- 성공/실패 리다이렉트 결과 -->
+  <div id="redirect-result" class="hidden">
+    <div class="card">
+      <h2>결제 결과 처리 중...</h2>
+      <div id="redirect-status" class="status info">Toss에서 돌아왔습니다. 승인 요청 중...</div>
+      <pre id="redirect-data"></pre>
+    </div>
+  </div>
+
+  <!-- 정상 테스트 플로우 -->
+  <div id="test-flow">
+
+    <!-- Step 0: Client Key -->
+    <div class="card">
+      <h2>⚙️ 설정</h2>
+      <label>Toss Client Key (개발자센터 → API 키)</label>
+      <input id="clientKey" type="text" placeholder="test_ck_..." value="">
+      <div class="status info" style="margin-top:12px">
+        시크릿 키와 쌍을 이루는 클라이언트 키를 입력하세요.<br>
+        테스트 키는 <code>test_ck_</code>로 시작합니다.
+      </div>
+    </div>
+
+    <!-- Step 1: 로그인 -->
+    <div class="card" id="step1">
+      <h2><span class="step-badge">1</span>로그인</h2>
+      <label>아이디</label>
+      <input id="username" type="text" value="admin">
+      <label>비밀번호</label>
+      <input id="password" type="password" value="admin1234">
+      <button class="btn-primary" onclick="login()">로그인</button>
+      <div id="login-status"></div>
+    </div>
+
+    <!-- Step 2: 주문 생성 -->
+    <div class="card" id="step2">
+      <h2><span class="step-badge">2</span>주문 생성</h2>
+      <label>상품 ID</label>
+      <input id="productId" type="number" value="1">
+      <label>수량</label>
+      <input id="quantity" type="number" value="1">
+      <label>단가 (원)</label>
+      <input id="unitPrice" type="number" value="10000">
+      <button class="btn-primary" onclick="createOrder()">주문 생성</button>
+      <div id="order-status"></div>
+    </div>
+
+    <!-- Step 3: 결제 준비 -->
+    <div class="card" id="step3">
+      <h2><span class="step-badge">3</span>결제 준비</h2>
+      <div id="order-info" class="status info">주문이 생성되면 정보가 표시됩니다.</div>
+      <button class="btn-success" onclick="preparePayment()">결제 준비 (tossOrderId 발급)</button>
+      <div id="prepare-status"></div>
+    </div>
+
+    <!-- Step 4: 결제 실행 -->
+    <div class="card" id="step4">
+      <h2><span class="step-badge">4</span>결제 실행</h2>
+      <div id="prepare-info" class="status info">결제 준비가 완료되면 정보가 표시됩니다.</div>
+      <button class="btn-pay" onclick="requestPayment()">💳 Toss 결제창 열기</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const API = 'http://localhost:8080';
+  let token = '';
+  let orderId = null;
+  let tossOrderId = null;
+  let payAmount = 0;
+  let orderName = '';
+
+  // 페이지 로드 시 리다이렉트 파라미터 확인
+  window.onload = () => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentKey = params.get('paymentKey');
+    const returnOrderId = params.get('orderId');
+    const amount = params.get('amount');
+
+    if (paymentKey) {
+      // Toss 성공 리다이렉트
+      document.getElementById('test-flow').classList.add('hidden');
+      document.getElementById('redirect-result').classList.remove('hidden');
+      handlePaymentSuccess(paymentKey, returnOrderId, amount);
+    } else if (params.get('code')) {
+      // Toss 실패 리다이렉트
+      document.getElementById('test-flow').classList.add('hidden');
+      document.getElementById('redirect-result').classList.remove('hidden');
+      const status = document.getElementById('redirect-status');
+      status.className = 'status err';
+      status.textContent = `결제 실패: ${params.get('message')} (${params.get('code')})`;
+    }
+
+    // 저장된 토큰이 있으면 복원
+    const saved = sessionStorage.getItem('test_token');
+    if (saved) {
+      token = saved;
+      setStatus('login-status', '✅ 이전 세션 토큰 복원됨', 'ok');
+      activateStep('step2');
+    }
+  };
+
+  async function handlePaymentSuccess(paymentKey, returnOrderId, amount) {
+    // 저장된 토큰 복원
+    token = sessionStorage.getItem('test_token') || '';
+    const statusEl = document.getElementById('redirect-status');
+    const dataEl = document.getElementById('redirect-data');
+
+    try {
+      const res = await fetch(`${API}/api/payments/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ paymentKey, tossOrderId: returnOrderId, amount: Number(amount) })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        statusEl.className = 'status ok';
+        statusEl.textContent = '✅ 결제 승인 완료!';
+        dataEl.textContent = JSON.stringify(data.data, null, 2);
+      } else {
+        statusEl.className = 'status err';
+        statusEl.textContent = `❌ 승인 실패: ${data.message}`;
+        dataEl.textContent = JSON.stringify(data, null, 2);
+      }
+    } catch (e) {
+      statusEl.className = 'status err';
+      statusEl.textContent = `❌ 오류: ${e.message}`;
+    }
+  }
+
+  async function login() {
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+
+    try {
+      const res = await fetch(`${API}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        token = data.data.accessToken;
+        sessionStorage.setItem('test_token', token);
+        setStatus('login-status', `✅ 로그인 성공 (${username})`, 'ok');
+        activateStep('step2');
+      } else {
+        setStatus('login-status', `❌ ${data.message}`, 'err');
+      }
+    } catch (e) {
+      setStatus('login-status', `❌ 오류: ${e.message}`, 'err');
+    }
+  }
+
+  async function createOrder() {
+    const productId = Number(document.getElementById('productId').value);
+    const quantity = Number(document.getElementById('quantity').value);
+    const unitPrice = Number(document.getElementById('unitPrice').value);
+    const idempotencyKey = `test-${Date.now()}`;
+
+    try {
+      // 사용자 ID는 토큰에서 가져올 수 없으므로 DB에서 admin=1로 고정
+      const res = await fetch(`${API}/api/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          userId: 1,
+          idempotencyKey,
+          items: [{ productId, quantity, unitPrice }]
+        })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        orderId = data.data.id;
+        payAmount = data.data.totalAmount;
+        orderName = data.data.items.map(i => i.productName).join(', ');
+        setStatus('order-status', `✅ 주문 생성 완료 (orderId: ${orderId}, 금액: ${payAmount.toLocaleString()}원)`, 'ok');
+        document.getElementById('order-info').textContent =
+          `orderId: ${orderId} | 금액: ${payAmount.toLocaleString()}원 | 상품: ${orderName}`;
+        activateStep('step3');
+      } else {
+        setStatus('order-status', `❌ ${data.message}`, 'err');
+      }
+    } catch (e) {
+      setStatus('order-status', `❌ 오류: ${e.message}`, 'err');
+    }
+  }
+
+  async function preparePayment() {
+    try {
+      const res = await fetch(`${API}/api/payments/prepare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ orderId, amount: payAmount })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        tossOrderId = data.data.tossOrderId;
+        orderName = data.data.orderName;
+        setStatus('prepare-status', `✅ 준비 완료 (tossOrderId: ${tossOrderId})`, 'ok');
+        document.getElementById('prepare-info').textContent =
+          `tossOrderId: ${tossOrderId} | 금액: ${payAmount.toLocaleString()}원`;
+        activateStep('step4');
+      } else {
+        setStatus('prepare-status', `❌ ${data.message}`, 'err');
+      }
+    } catch (e) {
+      setStatus('prepare-status', `❌ 오류: ${e.message}`, 'err');
+    }
+  }
+
+  function requestPayment() {
+    const clientKey = document.getElementById('clientKey').value.trim();
+    if (!clientKey || !clientKey.startsWith('test_ck_')) {
+      alert('Client Key를 입력해주세요. (test_ck_... 형식)');
+      return;
+    }
+    if (!tossOrderId) {
+      alert('결제 준비를 먼저 실행하세요.');
+      return;
+    }
+
+    const tossPayments = TossPayments(clientKey);
+    const successUrl = window.location.origin + window.location.pathname;
+    const failUrl = window.location.origin + window.location.pathname;
+
+    tossPayments.requestPayment('카드', {
+      amount: payAmount,
+      orderId: tossOrderId,
+      orderName: orderName,
+      customerName: '테스트유저',
+      successUrl,
+      failUrl,
+    }).catch(err => {
+      if (err.code !== 'USER_CANCEL') {
+        alert(`결제 오류: ${err.message}`);
+      }
+    });
+  }
+
+  function activateStep(stepId) {
+    document.getElementById(stepId).classList.add('active');
+  }
+
+  function setStatus(elId, msg, type) {
+    const el = document.getElementById(elId);
+    el.className = `status ${type}`;
+    el.textContent = msg;
+  }
+</script>
+</body>
+</html>

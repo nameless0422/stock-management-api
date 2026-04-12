@@ -1,0 +1,2110 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>재고 관리 시스템 - 관리자</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background: #f0f2f5; }
+    .navbar { background: #1a1a2e !important; }
+    .nav-tabs .nav-link { color: #495057; font-weight: 500; }
+    .nav-tabs .nav-link.active { color: #1a1a2e; font-weight: 700; border-bottom: 3px solid #1a1a2e; }
+    .stat-card { border: none; border-radius: 12px; transition: transform .15s; }
+    .stat-card:hover { transform: translateY(-2px); }
+    .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+    /* 주문 상태 배지 */
+    .badge-PENDING   { background:#ffc107; color:#000; }
+    .badge-CONFIRMED { background:#198754; color:#fff; }
+    .badge-CANCELLED { background:#6c757d; color:#fff; }
+    /* 결제 상태 배지 */
+    .badge-DONE   { background:#198754; color:#fff; }
+    .badge-FAILED { background:#dc3545; color:#fff; }
+    /* 배송 상태 배지 */
+    .badge-PREPARING { background:#6c757d;  color:#fff; }
+    .badge-SHIPPED   { background:#0dcaf0;  color:#000; }
+    .badge-DELIVERED { background:#198754;  color:#fff; }
+    .badge-RETURNED  { background:#dc3545;  color:#fff; }
+    /* 사용자 / 상품 배지 */
+    .badge-USER         { background:#0dcaf0; color:#000; }
+    .badge-ADMIN        { background:#1a1a2e; color:#fff; }
+    .badge-ACTIVE       { background:#198754; color:#fff; }
+    .badge-DISCONTINUED { background:#6c757d; color:#fff; }
+    /* 쿠폰 배지 */
+    .badge-coupon-on  { background:#198754; color:#fff; }
+    .badge-coupon-off { background:#6c757d; color:#fff; }
+    .table-hover tbody tr:hover { background: #f8f9ff; }
+    tr.discontinued td { opacity: .55; }
+    #loginScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
+    .login-card { width: 380px; border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+    .stock-bar  { height: 6px; border-radius: 3px; background: #e9ecef; }
+    .stock-fill { height: 100%; border-radius: 3px; transition: width .3s; }
+    #app { display: none; }
+    code[data-action="copy-code"] { cursor: pointer; user-select: all; }
+    code[data-action="copy-code"]:hover { opacity: .7; text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<!-- 토스트 알림 -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:9999">
+  <div id="toast" class="toast align-items-center border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body fw-semibold d-flex align-items-center gap-2"><i id="toastIcon" class="bi"></i><span id="toastMsg"></span></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 로그인 화면 ─── -->
+<div id="loginScreen">
+  <div class="card login-card p-4">
+    <div class="text-center mb-4">
+      <div class="fs-1 mb-2">📦</div>
+      <h4 class="fw-bold mb-1">재고 관리 시스템</h4>
+      <small class="text-muted">관리자 전용</small>
+    </div>
+    <form id="loginForm">
+      <div class="mb-3">
+        <label class="form-label fw-semibold">아이디</label>
+        <input id="loginUsername" type="text" class="form-control form-control-lg" placeholder="username" autofocus>
+      </div>
+      <div class="mb-4">
+        <label class="form-label fw-semibold">비밀번호</label>
+        <input id="loginPassword" type="password" class="form-control form-control-lg" placeholder="password">
+      </div>
+      <div id="loginError" class="alert alert-danger d-none py-2 mb-3"></div>
+      <button type="submit" id="loginBtn" class="btn btn-dark btn-lg w-100 fw-bold">
+        <span id="loginSpinner" class="spinner-border spinner-border-sm me-2 d-none"></span>로그인
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ─── 메인 앱 ─── -->
+<div id="app">
+  <!-- 네비게이션 바 -->
+  <nav class="navbar navbar-dark px-4 py-3 mb-0">
+    <span class="navbar-brand fw-bold fs-5">📦 재고 관리 시스템</span>
+    <div class="d-flex align-items-center gap-3">
+      <span class="text-white-50 small"><i class="bi bi-person-circle me-1"></i><span id="navUsername"></span></span>
+      <button class="btn btn-outline-light btn-sm" id="logoutBtn"><i class="bi bi-box-arrow-right me-1"></i>로그아웃</button>
+    </div>
+  </nav>
+
+  <!-- 탭 네비게이션 -->
+  <div class="bg-white border-bottom px-4">
+    <ul class="nav nav-tabs border-0" id="mainTabs">
+      <li class="nav-item"><a class="nav-link active px-4 py-3" data-tab="dashboard" href="#"><i class="bi bi-grid me-2"></i>대시보드</a></li>
+      <li class="nav-item"><a class="nav-link px-4 py-3" data-tab="products" href="#"><i class="bi bi-tag me-2"></i>상품 관리</a></li>
+      <li class="nav-item"><a class="nav-link px-4 py-3" data-tab="inventory" href="#"><i class="bi bi-box-seam me-2"></i>재고 관리<span id="inventoryLowStockBadge" class="badge bg-danger ms-2 d-none">0</span></a></li>
+      <li class="nav-item"><a class="nav-link px-4 py-3" data-tab="orders" href="#"><i class="bi bi-bag me-2"></i>주문 관리</a></li>
+      <li class="nav-item"><a class="nav-link px-4 py-3" data-tab="coupons" href="#"><i class="bi bi-ticket-perforated me-2"></i>쿠폰 관리</a></li>
+      <li class="nav-item"><a class="nav-link px-4 py-3" data-tab="users" href="#"><i class="bi bi-people me-2"></i>사용자 관리</a></li>
+    </ul>
+  </div>
+
+  <div class="container-fluid p-4">
+
+    <!-- ─── 대시보드 ─── -->
+    <div id="tab-dashboard">
+      <div class="d-flex justify-content-end align-items-center mb-3 gap-2">
+        <span class="text-muted small" id="dashLastUpdated"></span>
+        <button class="btn btn-outline-secondary btn-sm" id="dashRefreshBtn" title="새로고침">
+          <i class="bi bi-arrow-clockwise"></i>
+        </button>
+      </div>
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-2">
+          <div class="card stat-card p-3 h-100">
+            <div class="stat-icon bg-primary bg-opacity-10 text-primary mb-2"><i class="bi bi-bag"></i></div>
+            <div class="text-muted small">총 주문</div>
+            <div class="fw-bold fs-4" id="d-total">-</div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-2">
+          <div class="card stat-card p-3 h-100">
+            <div class="stat-icon bg-warning bg-opacity-10 text-warning mb-2"><i class="bi bi-hourglass-split"></i></div>
+            <div class="text-muted small">대기 중</div>
+            <div class="fw-bold fs-4" id="d-pending">-</div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-2">
+          <div class="card stat-card p-3 h-100">
+            <div class="stat-icon bg-success bg-opacity-10 text-success mb-2"><i class="bi bi-check-circle"></i></div>
+            <div class="text-muted small">완료</div>
+            <div class="fw-bold fs-4" id="d-confirmed">-</div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-2">
+          <div class="card stat-card p-3 h-100">
+            <div class="stat-icon bg-secondary bg-opacity-10 text-secondary mb-2"><i class="bi bi-x-circle"></i></div>
+            <div class="text-muted small">취소</div>
+            <div class="fw-bold fs-4" id="d-cancelled">-</div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-2">
+          <div class="card stat-card p-3 h-100">
+            <div class="stat-icon bg-danger bg-opacity-10 text-danger mb-2"><i class="bi bi-currency-exchange"></i></div>
+            <div class="text-muted small">총 매출</div>
+            <div class="fw-bold fs-5" id="d-revenue">-</div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-2">
+          <div class="card stat-card p-3 h-100">
+            <div class="stat-icon bg-info bg-opacity-10 text-info mb-2"><i class="bi bi-people"></i></div>
+            <div class="text-muted small">사용자 수</div>
+            <div class="fw-bold fs-4" id="d-users">-</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 차트 영역 -->
+      <div class="row g-3 mb-4">
+        <div class="col-lg-5">
+          <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-bold py-3">
+              <i class="bi bi-pie-chart text-primary me-2"></i>주문 현황
+            </div>
+            <div class="card-body d-flex flex-column align-items-center justify-content-center py-4">
+              <div style="position:relative; width:240px; height:240px">
+                <canvas id="orderStatusChart"></canvas>
+              </div>
+              <p id="orderChartEmpty" class="text-muted small mt-3 d-none">주문 데이터 없음</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-7">
+          <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-bold py-3">
+              <i class="bi bi-bar-chart-horizontal text-danger me-2"></i>저재고 상품 가용재고
+            </div>
+            <div class="card-body d-flex align-items-center">
+              <canvas id="lowStockChart" style="max-height:220px; width:100%"></canvas>
+              <p id="lowStockChartEmpty" class="text-center text-success w-100 d-none">
+                <i class="bi bi-check-circle me-1"></i>저재고 상품 없음
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white fw-bold py-3">
+          <i class="bi bi-exclamation-triangle text-warning me-2"></i>저재고 경보
+          <span class="badge bg-danger ms-1" id="d-lowstock-count">0</span>
+          <small class="text-muted fw-normal ms-2">(가용재고 &lt; 10)</small>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-hover mb-0">
+            <thead class="table-light"><tr>
+              <th>상품명</th><th>SKU</th><th>실재고</th><th>예약</th><th>배정</th><th>가용</th><th></th>
+            </tr></thead>
+            <tbody id="lowStockBody"><tr><td colspan="7" class="text-center text-muted py-4">저재고 상품 없음</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── 상품 관리 ─── -->
+    <div id="tab-products" style="display:none">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+          <span class="fw-bold"><i class="bi bi-tag me-2"></i>상품 목록</span>
+          <div class="d-flex gap-2">
+            <div class="input-group" style="width:260px">
+              <input id="productMgmtSearch" type="text" class="form-control form-control-sm" placeholder="상품명 또는 SKU 검색">
+              <button class="btn btn-outline-secondary btn-sm" id="productMgmtSearchBtn"><i class="bi bi-search"></i></button>
+            </div>
+            <button class="btn btn-dark btn-sm" id="openAddProductBtn">
+              <i class="bi bi-plus-circle me-1"></i>상품 추가
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light"><tr>
+              <th class="text-muted" style="width:60px">ID</th>
+              <th>상품명</th><th>SKU</th><th>가격</th><th>카테고리</th><th>상태</th><th>등록일</th>
+              <th class="text-end">액션</th>
+            </tr></thead>
+            <tbody id="productMgmtBody">
+              <tr><td colspan="8" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center" id="productMgmtPager"></div>
+      </div>
+    </div>
+
+    <!-- ─── 재고 관리 ─── -->
+    <div id="tab-inventory" style="display:none">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+          <div class="d-flex align-items-center gap-3">
+            <span class="fw-bold"><i class="bi bi-box-seam me-2"></i>재고 현황</span>
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" id="lowStockOnly">
+              <label class="form-check-label small text-danger fw-semibold" for="lowStockOnly">저재고만 보기</label>
+            </div>
+          </div>
+          <div class="input-group" style="width:260px">
+            <input id="inventorySearch" type="text" class="form-control form-control-sm" placeholder="상품명 또는 SKU 검색">
+            <button class="btn btn-outline-secondary btn-sm" id="inventorySearchBtn"><i class="bi bi-search"></i></button>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" id="inventoryRefreshBtn" title="새로고침">
+              <i class="bi bi-arrow-clockwise"></i>
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" id="exportInventoryBtn" title="CSV 내보내기">
+              <i class="bi bi-download me-1"></i>CSV
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light"><tr>
+              <th>상품명</th><th>SKU</th><th style="width:180px">가용 / 실재고</th>
+              <th>예약</th><th>배정</th><th class="text-end">액션</th>
+            </tr></thead>
+            <tbody id="inventoryBody">
+              <tr><td colspan="6" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center" id="inventoryPager"></div>
+      </div>
+    </div>
+
+    <!-- ─── 주문 관리 ─── -->
+    <div id="tab-orders" style="display:none">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+          <div class="d-flex gap-2 flex-wrap" id="orderFilterBtns">
+            <button class="btn btn-dark btn-sm order-filter-btn active" data-status="">전체</button>
+            <button class="btn btn-outline-warning btn-sm order-filter-btn" data-status="PENDING">대기 중</button>
+            <button class="btn btn-outline-success btn-sm order-filter-btn" data-status="CONFIRMED">완료</button>
+            <button class="btn btn-outline-secondary btn-sm order-filter-btn" data-status="CANCELLED">취소</button>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" id="ordersRefreshBtn" title="새로고침">
+              <i class="bi bi-arrow-clockwise"></i>
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" id="exportOrdersBtn" title="CSV 내보내기">
+              <i class="bi bi-download me-1"></i>CSV
+            </button>
+          </div>
+        </div>
+        <div id="ordersUserFilterBar" class="px-3 py-2 bg-warning bg-opacity-10 border-bottom d-none">
+          <i class="bi bi-person-fill me-1 text-warning"></i>
+          <span class="small fw-semibold">사용자 필터: </span>
+          <span id="ordersUserFilterLabel" class="small fw-bold text-dark"></span>
+          <button class="btn btn-sm btn-link text-danger p-0 ms-2" id="clearUserFilterBtn">
+            <i class="bi bi-x-circle"></i> 필터 해제
+          </button>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light"><tr>
+              <th>주문 ID</th><th>주문자</th><th>상태</th><th>금액</th><th>주문일시</th><th class="text-end">액션</th>
+            </tr></thead>
+            <tbody id="ordersBody">
+              <tr><td colspan="6" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center" id="ordersPager"></div>
+      </div>
+    </div>
+
+    <!-- ─── 쿠폰 관리 ─── -->
+    <div id="tab-coupons" style="display:none">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+          <span class="fw-bold"><i class="bi bi-ticket-perforated me-2"></i>쿠폰 목록</span>
+          <button class="btn btn-dark btn-sm" id="openAddCouponBtn">
+            <i class="bi bi-plus-circle me-1"></i>쿠폰 추가
+          </button>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light"><tr>
+              <th>코드</th><th>이름</th><th>할인</th><th>최소 주문</th><th>유효기간</th>
+              <th>사용 / 최대</th><th>상태</th><th class="text-end">액션</th>
+            </tr></thead>
+            <tbody id="couponsBody">
+              <tr><td colspan="8" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center" id="couponsPager"></div>
+      </div>
+    </div>
+
+    <!-- ─── 사용자 관리 ─── -->
+    <div id="tab-users" style="display:none">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+          <span class="fw-bold"><i class="bi bi-people me-2"></i>전체 사용자</span>
+          <div class="d-flex gap-2">
+            <div class="input-group" style="width:260px">
+              <input id="usersSearch" type="text" class="form-control form-control-sm" placeholder="아이디 또는 이메일 검색">
+              <button class="btn btn-outline-secondary btn-sm" id="usersSearchBtn"><i class="bi bi-search"></i></button>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" id="usersRefreshBtn" title="새로고침">
+              <i class="bi bi-arrow-clockwise"></i>
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light"><tr>
+              <th>ID</th><th>아이디</th><th>이메일</th><th>권한</th><th>가입일</th><th class="text-end">액션</th>
+            </tr></thead>
+            <tbody id="usersBody">
+              <tr><td colspan="6" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center" id="usersPager"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ─── 상품 상세 모달 ─── -->
+<div class="modal fade" id="productDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:460px">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold"><i class="bi bi-info-circle text-primary me-2"></i><span id="pdName"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <table class="table table-sm table-borderless mb-0">
+          <tbody>
+            <tr><th class="text-muted w-25">SKU</th><td><code id="pdSku"></code></td></tr>
+            <tr><th class="text-muted">가격</th><td id="pdPrice"></td></tr>
+            <tr><th class="text-muted">카테고리</th><td id="pdCategory"></td></tr>
+            <tr><th class="text-muted">상태</th><td id="pdStatus"></td></tr>
+            <tr><th class="text-muted">등록일</th><td id="pdCreatedAt" class="small text-muted"></td></tr>
+            <tr><th class="text-muted">설명</th><td id="pdDescription" class="small text-muted"></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 상품 추가 모달 ─── -->
+<div class="modal fade" id="addProductModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold"><i class="bi bi-plus-circle text-dark me-2"></i>상품 추가</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-8">
+            <label class="form-label fw-semibold">상품명 <span class="text-danger">*</span></label>
+            <input id="addProductName" type="text" class="form-control" placeholder="예) 노트북 A1">
+          </div>
+          <div class="col-4">
+            <label class="form-label fw-semibold">가격 <span class="text-danger">*</span></label>
+            <input id="addProductPrice" type="number" class="form-control" placeholder="0" min="1">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">SKU <span class="text-danger">*</span></label>
+            <input id="addProductSku" type="text" class="form-control" placeholder="예) LAPTOP-A1-001">
+            <div class="form-text">등록 후 변경 불가</div>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">카테고리</label>
+            <select id="addProductCategory" class="form-select">
+              <option value="">카테고리 없음</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">설명</label>
+            <textarea id="addProductDescription" class="form-control" rows="2" placeholder="상품 설명 (선택)"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+        <button id="addProductBtn" class="btn btn-dark btn-sm"><i class="bi bi-check2 me-1"></i>등록</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 상품 수정 모달 ─── -->
+<div class="modal fade" id="editProductModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold"><i class="bi bi-pencil text-primary me-2"></i>상품 수정</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold text-muted small">SKU (변경 불가)</label>
+            <input id="editProductSku" type="text" class="form-control form-control-sm bg-light" readonly>
+          </div>
+          <div class="col-8">
+            <label class="form-label fw-semibold">상품명 <span class="text-danger">*</span></label>
+            <input id="editProductName" type="text" class="form-control">
+          </div>
+          <div class="col-4">
+            <label class="form-label fw-semibold">가격 <span class="text-danger">*</span></label>
+            <input id="editProductPrice" type="number" class="form-control" min="1">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">카테고리</label>
+            <select id="editProductCategory" class="form-select">
+              <option value="">카테고리 없음</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">설명</label>
+            <textarea id="editProductDescription" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+        <button id="editProductBtn" class="btn btn-primary btn-sm"><i class="bi bi-check2 me-1"></i>저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 입고 처리 모달 ─── -->
+<div class="modal fade" id="receiveModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold"><i class="bi bi-arrow-down-circle text-success me-2"></i>입고 처리</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3 small text-muted fw-semibold" id="receiveProductName"></p>
+        <label class="form-label fw-semibold">입고 수량</label>
+        <input id="receiveQty" type="number" class="form-control" min="1" value="1">
+        <label class="form-label fw-semibold mt-3">사유 (선택)</label>
+        <input id="receiveNote" type="text" class="form-control" placeholder="예) 정기 발주">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+        <button id="receiveBtn" class="btn btn-success btn-sm">입고 처리</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 재고 조정 모달 ─── -->
+<div class="modal fade" id="adjustModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold"><i class="bi bi-sliders text-warning me-2"></i>재고 조정</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1 small fw-semibold text-muted" id="adjustProductName"></p>
+        <p class="mb-3 small">현재 가용재고: <strong id="adjustAvailable" class="text-primary">-</strong></p>
+        <label class="form-label fw-semibold">조정 수량</label>
+        <input id="adjustQty" type="number" class="form-control" value="0">
+        <div class="form-text">양수(+) = 재고 증가 / 음수(-) = 재고 감소</div>
+        <label class="form-label fw-semibold mt-3">사유 (선택)</label>
+        <input id="adjustNote" type="text" class="form-control" placeholder="예) 파손 5개 폐기">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+        <button id="adjustBtn" class="btn btn-warning btn-sm">조정 처리</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 주문 상세 모달 ─── -->
+<div class="modal fade" id="orderDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold"><i class="bi bi-receipt me-2"></i>주문 상세 — <span id="orderDetailTitle"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <!-- 주문자 정보 -->
+        <div class="px-3 py-2 bg-light border-bottom small text-muted">
+          <i class="bi bi-person-fill me-1"></i>
+          <span id="orderDetailUsername" class="fw-semibold text-dark"></span>
+          <span class="ms-1">(ID: <span id="orderDetailUserId"></span>)</span>
+        </div>
+        <!-- 결제 정보 -->
+        <div id="orderDetailPayment" class="px-3 py-2 border-bottom small d-none">
+          <div class="d-flex flex-wrap gap-3">
+            <span><span class="text-muted">결제 상태</span>&nbsp;<span id="pdPayStatus"></span></span>
+            <span><span class="text-muted">결제 수단</span>&nbsp;<span id="pdPayMethod" class="fw-semibold">-</span></span>
+            <span><span class="text-muted">결제 금액</span>&nbsp;<span id="pdPayAmount" class="fw-semibold text-success">-</span></span>
+            <span><span class="text-muted">승인일시</span>&nbsp;<span id="pdPayApprovedAt" class="text-muted">-</span></span>
+          </div>
+          <div id="pdPayCancelRow" class="mt-1 d-none">
+            <span class="text-muted">취소 사유</span>&nbsp;<span id="pdPayCancelReason" class="text-danger small"></span>
+          </div>
+          <div id="pdPayFailRow" class="mt-1 d-none">
+            <span class="text-muted">실패 사유</span>&nbsp;<span id="pdPayFailMsg" class="text-danger small"></span>
+          </div>
+        </div>
+        <!-- 배송 정보 -->
+        <div id="orderDetailShipment" class="px-3 py-2 border-bottom small d-none">
+          <div class="d-flex flex-wrap gap-3 align-items-center">
+            <span><span class="text-muted">배송 상태</span>&nbsp;<span id="shipStatus"></span></span>
+            <span><span class="text-muted">택배사</span>&nbsp;<span id="shipCarrier" class="fw-semibold">-</span></span>
+            <span><span class="text-muted">운송장</span>&nbsp;<code id="shipTracking">-</code></span>
+          </div>
+          <div id="shipActionRow" class="mt-2 d-flex gap-2"></div>
+        </div>
+        <!-- 주문 항목 -->
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-light sticky-top"><tr>
+            <th>상품명</th><th class="text-end">단가</th><th class="text-center">수량</th><th class="text-end">소계</th>
+          </tr></thead>
+          <tbody id="orderDetailBody"></tbody>
+          <tfoot class="table-light">
+            <tr id="orderDetailDiscountRow" class="d-none">
+              <td colspan="3" class="text-end text-muted small">쿠폰 할인</td>
+              <td class="text-end text-danger small fw-semibold" id="orderDetailDiscount"></td>
+            </tr>
+            <tr id="orderDetailPointsRow" class="d-none">
+              <td colspan="3" class="text-end text-muted small">포인트 사용</td>
+              <td class="text-end text-primary small fw-semibold" id="orderDetailPoints"></td>
+            </tr>
+            <tr><td colspan="3" class="text-end fw-bold">합계</td><td class="text-end fw-bold" id="orderDetailTotal"></td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 재고 이력 모달 ─── -->
+<div class="modal fade" id="historyModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold"><i class="bi bi-clock-history me-2"></i>재고 변동 이력 — <span id="historyProductName"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="px-3 py-2 border-bottom bg-light d-flex flex-wrap gap-1" id="historyTypeFilter">
+        <button class="btn btn-dark btn-sm" data-type="" data-color="dark">전체</button>
+        <button class="btn btn-outline-success btn-sm" data-type="RECEIVE" data-color="success">입고</button>
+        <button class="btn btn-outline-primary btn-sm" data-type="RESERVE" data-color="primary">예약</button>
+        <button class="btn btn-outline-secondary btn-sm" data-type="RELEASE_RESERVATION" data-color="secondary">예약해제</button>
+        <button class="btn btn-outline-info btn-sm" data-type="CONFIRM_ALLOCATION" data-color="info">배정확정</button>
+        <button class="btn btn-outline-danger btn-sm" data-type="RELEASE_ALLOCATION" data-color="danger">배정해제</button>
+        <button class="btn btn-outline-warning btn-sm" data-type="ADJUSTMENT" data-color="warning">재고조정</button>
+      </div>
+      <div class="modal-body p-0">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-light sticky-top"><tr>
+            <th>유형</th><th class="text-end">변동량</th><th class="text-end">실재고</th>
+            <th class="text-end">예약</th><th class="text-end">배정</th><th>사유</th><th>일시</th>
+          </tr></thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 쿠폰 추가 모달 ─── -->
+<div class="modal fade" id="addCouponModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold"><i class="bi bi-plus-circle text-dark me-2"></i>쿠폰 추가</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold">쿠폰 코드 <span class="text-danger">*</span></label>
+            <input id="cpCode" type="text" class="form-control" placeholder="예) SUMMER2024">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">이름 <span class="text-danger">*</span></label>
+            <input id="cpName" type="text" class="form-control" placeholder="예) 여름 특별 할인">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">할인 유형 <span class="text-danger">*</span></label>
+            <select id="cpType" class="form-select">
+              <option value="FIXED_AMOUNT">정액 할인 (원)</option>
+              <option value="PERCENTAGE">퍼센트 할인 (%)</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">할인 값 <span class="text-danger">*</span></label>
+            <input id="cpValue" type="number" class="form-control" placeholder="0" min="1">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">최소 주문 금액</label>
+            <input id="cpMinOrder" type="number" class="form-control" placeholder="0" min="0" value="0">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">최대 할인 금액 <span class="text-muted small">(% 할인 시)</span></label>
+            <input id="cpMaxDiscount" type="number" class="form-control" placeholder="제한 없음" min="0">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">유효 시작일 <span class="text-danger">*</span></label>
+            <input id="cpValidFrom" type="datetime-local" class="form-control">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">유효 종료일 <span class="text-danger">*</span></label>
+            <input id="cpValidUntil" type="datetime-local" class="form-control">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">최대 발급 수</label>
+            <input id="cpMaxUsage" type="number" class="form-control" placeholder="제한 없음" min="1">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">1인당 최대 사용 횟수</label>
+            <input id="cpMaxPerUser" type="number" class="form-control" value="1" min="1">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">설명</label>
+            <textarea id="cpDescription" class="form-control" rows="2"></textarea>
+          </div>
+          <div class="col-12">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="cpIsPublic" checked>
+              <label class="form-check-label fw-semibold" for="cpIsPublic">
+                공개 쿠폰
+                <span class="text-muted fw-normal small ms-1">(해제 시 관리자 발급 전용 비공개 쿠폰)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+        <button id="addCouponBtn" class="btn btn-dark btn-sm"><i class="bi bi-check2 me-1"></i>등록</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 쿠폰 발급 모달 ─── -->
+<div class="modal fade" id="couponIssueModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold"><i class="bi bi-send text-primary me-2"></i>쿠폰 발급</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted fw-semibold mb-3" id="issueCouponName"></p>
+        <label class="form-label fw-semibold">사용자 ID <span class="text-danger">*</span></label>
+        <input id="issueUserId" type="number" class="form-control" placeholder="사용자 ID" min="1">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+        <button id="issueCouponBtn" class="btn btn-primary btn-sm">발급</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 확인 모달 (browser confirm 대체) ─── -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title fw-bold" id="confirmTitle">확인</h6>
+      </div>
+      <div class="modal-body pt-2" id="confirmBody"></div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+        <button id="confirmOkBtn" class="btn btn-danger btn-sm">확인</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+'use strict';
+
+// ─── 상태 ───────────────────────────────────────────────
+let token            = localStorage.getItem('admin_token');
+let currentUser      = null;
+let receiveProductId = null;
+let adjustProductId  = null;
+let editingProductId = null;
+let issuingCouponId  = null;
+let currentShipmentId = null;
+let orderStatusChartInst = null;
+let lowStockChartInst    = null;
+let productMgmtPage = 0;
+let inventoryPage   = 0;
+let ordersPage      = 0;
+let ordersStatus    = '';
+let couponsPage     = 0;
+let usersPage       = 0;
+let historyList     = [];
+let historyTypeFilter = '';
+let inventoryCache  = [];
+let ordersCache     = [];
+let dashboardTimer  = null;
+let ordersUserId    = null;
+let ordersUsername  = '';
+
+// 모달에 넘길 데이터를 Map에 캐싱 (onclick 문자열 인자 제거)
+const productMap = new Map();
+
+// ─── 유틸 ───────────────────────────────────────────────
+/** HTML 특수문자 이스케이프 (XSS 방어) */
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+const fmt = {
+  money: n  => Number(n).toLocaleString('ko-KR') + '원',
+  date:  dt => dt ? new Date(dt).toLocaleString('ko-KR', { hour12: false }) : '-',
+  badge: (val, map) => `<span class="badge badge-${esc(val)}">${esc(map[val] ?? val)}</span>`,
+};
+
+const txTypeLabel = {
+  RECEIVE:             '입고',
+  RESERVE:             '예약',
+  RELEASE_RESERVATION: '예약 해제',
+  CONFIRM_ALLOCATION:  '배정 확정',
+  RELEASE_ALLOCATION:  '배정 해제',
+  ADJUSTMENT:          '재고 조정',
+};
+
+const statusLabel  = { PENDING:'대기 중', CONFIRMED:'완료', CANCELLED:'취소' };
+const shipLabel    = { PREPARING:'준비 중', SHIPPED:'배송 중', DELIVERED:'배송 완료', RETURNED:'반품' };
+const payStatusLabel = { PENDING:'결제 대기', DONE:'결제 완료', CANCELLED:'결제 취소', FAILED:'결제 실패' };
+const payStatusBadge = { PENDING:'warning text-dark', DONE:'success', CANCELLED:'secondary', FAILED:'danger' };
+
+function pager(pageNum, totalPages, onPrev, onNext) {
+  if (totalPages <= 1) return '';
+  return `
+    <span class="text-muted small">${pageNum + 1} / ${Math.max(1, totalPages)} 페이지</span>
+    <div class="btn-group btn-group-sm">
+      <button class="btn btn-outline-secondary" ${pageNum === 0 ? 'disabled' : ''} onclick="(${onPrev})()">
+        <i class="bi bi-chevron-left"></i>
+      </button>
+      <button class="btn btn-outline-secondary" ${pageNum >= totalPages - 1 ? 'disabled' : ''} onclick="(${onNext})()">
+        <i class="bi bi-chevron-right"></i>
+      </button>
+    </div>`;
+}
+
+function stockBar(available, onHand) {
+  const pct   = onHand === 0 ? 0 : Math.min(100, Math.round(available / onHand * 100));
+  const color = pct > 30 ? '#198754' : pct > 10 ? '#ffc107' : '#dc3545';
+  return `<div class="stock-bar"><div class="stock-fill" style="width:${pct}%;background:${color}"></div></div>
+          <small class="text-muted">${available} / ${onHand}</small>`;
+}
+
+/** 버튼 로딩 상태 토글 */
+function setLoading(btn, loading) {
+  if (!btn) return;
+  if (loading) {
+    btn.dataset.orig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.disabled = true;
+  } else {
+    btn.innerHTML = btn.dataset.orig ?? btn.innerHTML;
+    btn.disabled = false;
+  }
+}
+
+// ─── API ────────────────────────────────────────────────
+async function api(method, path, body, silent = false) {
+  try {
+    const res = await fetch(path, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      await logout();
+      return null;
+    }
+
+    // 204 No Content
+    if (res.status === 204) return true;
+
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || '오류가 발생했습니다');
+    return json.data;
+  } catch (e) {
+    if (!silent) showToast(e.message, 'danger');
+    return null;
+  }
+}
+
+// ─── 인증 ───────────────────────────────────────────────
+document.getElementById('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl    = document.getElementById('loginError');
+  const btn      = document.getElementById('loginBtn');
+
+  errEl.classList.add('d-none');
+  setLoading(btn, true);
+
+  try {
+    const res  = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || '로그인 실패');
+
+    token = json.data.accessToken;
+    localStorage.setItem('admin_token', token);
+    await verifyAndShowApp(username);
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove('d-none');
+  } finally {
+    setLoading(btn, false);
+  }
+});
+
+/** 로그인 후 ADMIN 권한 검증 */
+async function verifyAndShowApp(usernameHint) {
+  const errEl = document.getElementById('loginError');
+  try {
+    const res  = await fetch('/api/users/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json();
+    if (json.success && json.data) {
+      if (json.data.role !== 'ADMIN') {
+        token = null;
+        localStorage.removeItem('admin_token');
+        errEl.textContent = '관리자 계정이 아닙니다';
+        errEl.classList.remove('d-none');
+        return;
+      }
+      currentUser = json.data.username;
+    } else {
+      // me API 미지원 시 힌트 사용
+      currentUser = usernameHint;
+    }
+  } catch {
+    currentUser = usernameHint;
+  }
+  showApp();
+}
+
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('navUsername').textContent = currentUser ?? '관리자';
+  loadCategories();
+  loadDashboard();
+  dashboardTimer = setInterval(() => {
+    const active = document.querySelector('[data-tab].active')?.dataset.tab;
+    if (!active || active === 'dashboard') loadDashboard();
+  }, 30000);
+}
+
+document.getElementById('logoutBtn').addEventListener('click', logout);
+
+async function logout() {
+  clearInterval(dashboardTimer);
+  dashboardTimer = null;
+  if (token) {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+    } catch { /* 네트워크 오류 무시 */ }
+  }
+  token = null;
+  currentUser = null;
+  localStorage.removeItem('admin_token');
+  document.getElementById('loginScreen').style.display = '';
+  document.getElementById('app').style.display = 'none';
+}
+
+// ─── 탭 전환 ────────────────────────────────────────────
+const tabIds = {
+  dashboard: 'tab-dashboard',
+  products:  'tab-products',
+  inventory: 'tab-inventory',
+  orders:    'tab-orders',
+  coupons:   'tab-coupons',
+  users:     'tab-users',
+};
+
+document.querySelectorAll('[data-tab]').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    document.querySelectorAll('[data-tab]').forEach(l => l.classList.remove('active'));
+    link.classList.add('active');
+    Object.values(tabIds).forEach(id => document.getElementById(id).style.display = 'none');
+    const tab = link.dataset.tab;
+    document.getElementById(tabIds[tab]).style.display = '';
+    if (tab === 'dashboard') loadDashboard();
+    if (tab === 'products')  loadProductsMgmt(0);
+    if (tab === 'inventory') loadInventoryTab(0);
+    if (tab === 'orders')    loadOrders(0, ordersStatus);
+    if (tab === 'coupons')   loadCoupons(0);
+    if (tab === 'users')     loadUsers(0);
+  });
+});
+
+// ─── 대시보드 ────────────────────────────────────────────
+async function loadDashboard() {
+  const d = await api('GET', '/api/admin/dashboard');
+  if (!d) return;
+
+  document.getElementById('d-total').textContent     = d.totalOrders?.toLocaleString()     ?? '-';
+  document.getElementById('d-pending').textContent   = d.pendingOrders?.toLocaleString()   ?? '-';
+  document.getElementById('d-confirmed').textContent = d.confirmedOrders?.toLocaleString() ?? '-';
+  document.getElementById('d-cancelled').textContent = d.cancelledOrders?.toLocaleString() ?? '-';
+  document.getElementById('d-revenue').textContent   = fmt.money(d.totalRevenue ?? 0);
+  document.getElementById('d-users').textContent     = d.totalUsers?.toLocaleString()      ?? '-';
+
+  const cnt = d.lowStockItems?.length ?? 0;
+  document.getElementById('d-lowstock-count').textContent = cnt;
+
+  const invBadge = document.getElementById('inventoryLowStockBadge');
+  invBadge.textContent = cnt;
+  invBadge.classList.toggle('d-none', cnt === 0);
+
+  const body = document.getElementById('lowStockBody');
+  if (cnt === 0) {
+    body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">저재고 상품 없음 🎉</td></tr>';
+  } else {
+    body.innerHTML = d.lowStockItems.map(i => `
+      <tr>
+        <td class="fw-semibold">${esc(i.productName)}</td>
+        <td><code>${esc(i.sku)}</code></td>
+        <td>${i.onHand}</td>
+        <td class="text-warning">${i.reserved}</td>
+        <td class="text-info">${i.allocated}</td>
+        <td><span class="fw-bold text-danger">${i.available}</span></td>
+        <td class="text-end">
+          <button class="btn btn-success btn-sm"
+                  data-action="receive" data-pid="${i.productId}" data-pname="${esc(i.productName)}">
+            <i class="bi bi-plus-circle me-1"></i>입고
+          </button>
+        </td>
+      </tr>`).join('');
+  }
+
+  renderCharts(d);
+  const lastUpdatedEl = document.getElementById('dashLastUpdated');
+  if (lastUpdatedEl) lastUpdatedEl.textContent = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' 갱신';
+}
+
+// ─── 대시보드 차트 ─────────────────────────────────────
+function renderCharts(d) {
+  renderOrderStatusChart(d);
+  renderLowStockChart(d);
+}
+
+function renderOrderStatusChart(d) {
+  const total = (d.pendingOrders ?? 0) + (d.confirmedOrders ?? 0) + (d.cancelledOrders ?? 0);
+  if (orderStatusChartInst) { orderStatusChartInst.destroy(); orderStatusChartInst = null; }
+
+  const canvas = document.getElementById('orderStatusChart');
+  const empty  = document.getElementById('orderChartEmpty');
+  if (total === 0) {
+    canvas.style.display = 'none';
+    empty.classList.remove('d-none');
+    return;
+  }
+  canvas.style.display = '';
+  empty.classList.add('d-none');
+
+  orderStatusChartInst = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: ['대기 중', '완료', '취소'],
+      datasets: [{
+        data: [d.pendingOrders, d.confirmedOrders, d.cancelledOrders],
+        backgroundColor: ['#ffc107', '#198754', '#6c757d'],
+        borderWidth: 3, borderColor: '#fff',
+      }],
+    },
+    options: {
+      cutout: '68%',
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 20, font: { size: 13 }, usePointStyle: true } },
+        tooltip: { callbacks: { label: ctx => {
+          const pct = total > 0 ? Math.round(ctx.parsed / total * 100) : 0;
+          return ` ${ctx.label}: ${ctx.parsed.toLocaleString()}건 (${pct}%)`;
+        }}},
+      },
+    },
+  });
+}
+
+function renderLowStockChart(d) {
+  if (lowStockChartInst) { lowStockChartInst.destroy(); lowStockChartInst = null; }
+
+  const items  = d.lowStockItems ?? [];
+  const canvas = document.getElementById('lowStockChart');
+  const empty  = document.getElementById('lowStockChartEmpty');
+  if (items.length === 0) {
+    canvas.style.display = 'none';
+    empty.classList.remove('d-none');
+    return;
+  }
+  canvas.style.display = '';
+  empty.classList.add('d-none');
+
+  const colors = items.map(i => i.available <= 3 ? '#dc3545' : i.available <= 6 ? '#fd7e14' : '#ffc107');
+  const labels = items.map(i => i.productName.length > 18 ? i.productName.slice(0, 18) + '…' : i.productName);
+
+  lowStockChartInst = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '가용재고',
+        data: items.map(i => i.available),
+        backgroundColor: colors,
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          title: ctx => items[ctx[0].dataIndex].productName,
+          label: ctx => ` 가용: ${ctx.parsed.x}개 (실재고: ${items[ctx.dataIndex].onHand}개)`,
+        }},
+      },
+      scales: {
+        x: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 }, grid: { color: '#f0f2f5' } },
+        y: { grid: { display: false } },
+      },
+    },
+  });
+}
+
+document.getElementById('dashRefreshBtn').addEventListener('click', () => loadDashboard());
+
+// 저재고 테이블 입고 버튼 이벤트 위임
+document.getElementById('lowStockBody').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action="receive"]');
+  if (btn) openReceiveModal(+btn.dataset.pid, btn.dataset.pname);
+});
+
+// ─── 카테고리 ────────────────────────────────────────────
+let categoriesFlat = [];
+
+async function loadCategories() {
+  const data = await api('GET', '/api/categories', null, true);
+  if (!data) return;
+  categoriesFlat = flattenCategories(Array.isArray(data) ? data : (data.content ?? []));
+  updateCategorySelects();
+}
+
+function flattenCategories(tree, prefix = '') {
+  return tree.flatMap(c => {
+    const label = prefix ? `${prefix} > ${c.name}` : c.name;
+    return [{ id: c.id, label }, ...flattenCategories(c.children ?? [], label)];
+  });
+}
+
+function updateCategorySelects() {
+  const opts = `<option value="">카테고리 없음</option>` +
+    categoriesFlat.map(c => `<option value="${c.id}">${esc(c.label)}</option>`).join('');
+  document.getElementById('addProductCategory').innerHTML = opts;
+  document.getElementById('editProductCategory').innerHTML = opts;
+}
+
+// ─── 상품 관리 ──────────────────────────────────────────
+async function loadProductsMgmt(page = 0) {
+  productMgmtPage = page;
+  const q    = document.getElementById('productMgmtSearch').value.trim();
+  const path = `/api/products?page=${page}&size=10&sort=createdAt,desc${q ? '&q=' + encodeURIComponent(q) : ''}`;
+  const body = document.getElementById('productMgmtBody');
+  body.innerHTML = '<tr><td colspan="8" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></td></tr>';
+
+  const d = await api('GET', path);
+  if (!d) return;
+
+  const rows = d.content ?? [];
+  if (rows.length === 0) {
+    body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">상품 없음</td></tr>';
+  } else {
+    rows.forEach(p => productMap.set(p.id, p));
+    body.innerHTML = rows.map(p => {
+      const isActive = p.status === 'ACTIVE';
+      return `
+      <tr class="${isActive ? '' : 'discontinued'}">
+        <td class="text-muted small">${p.id}</td>
+        <td>
+          <span class="fw-semibold text-primary" role="button" data-action="product-detail" data-id="${p.id}">
+            ${esc(p.name)}
+          </span>
+        </td>
+        <td><code>${esc(p.sku)}</code></td>
+        <td>${fmt.money(p.price)}</td>
+        <td class="text-muted small">${esc(p.category ?? '-')}</td>
+        <td>${fmt.badge(p.status, { ACTIVE:'판매 중', DISCONTINUED:'판매 중단' })}</td>
+        <td class="text-muted small">${fmt.date(p.createdAt)}</td>
+        <td class="text-end">
+          <button class="btn btn-outline-primary btn-sm me-1" data-action="product-edit" data-id="${p.id}">
+            <i class="bi bi-pencil"></i>
+          </button>
+          <button class="btn ${isActive ? 'btn-outline-warning' : 'btn-outline-success'} btn-sm me-1"
+                  data-action="product-toggle" data-id="${p.id}">
+            <i class="bi bi-${isActive ? 'pause-circle' : 'play-circle'}"></i>
+          </button>
+          ${isActive ? `
+          <button class="btn btn-outline-danger btn-sm" data-action="product-delete" data-id="${p.id}">
+            <i class="bi bi-trash"></i>
+          </button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  document.getElementById('productMgmtPager').innerHTML =
+    pager(d.number, d.totalPages,
+      () => loadProductsMgmt(productMgmtPage - 1),
+      () => loadProductsMgmt(productMgmtPage + 1));
+}
+
+// 상품 테이블 이벤트 위임
+document.getElementById('productMgmtBody').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const id = +btn.dataset.id;
+  switch (btn.dataset.action) {
+    case 'product-detail': openProductDetail(id);   break;
+    case 'product-edit':   openEditProductModal(id); break;
+    case 'product-toggle': {
+      const p = productMap.get(id);
+      if (!p) return;
+      const newStatus  = p.status === 'ACTIVE' ? 'DISCONTINUED' : 'ACTIVE';
+      const actionText = newStatus === 'DISCONTINUED' ? '판매 중단' : '판매 재개';
+      showConfirm(`"${p.name}" 상품을 ${actionText} 처리하시겠습니까?`, async () => {
+        const d = await api('PATCH', `/api/products/${id}/status`, { status: newStatus });
+        if (!d) return;
+        showToast(`"${p.name}" ${actionText} 완료`);
+        loadProductsMgmt(productMgmtPage);
+      });
+      break;
+    }
+    case 'product-delete': {
+      const p = productMap.get(id);
+      if (!p) return;
+      showConfirm(`"${p.name}" 상품을 삭제하시겠습니까?\n연관 재고가 있으면 삭제되지 않습니다.`, async () => {
+        const ok = await api('DELETE', `/api/products/${id}`);
+        if (ok === null) return;
+        showToast(`"${p.name}" 삭제 완료`);
+        loadProductsMgmt(productMgmtPage);
+      });
+      break;
+    }
+  }
+});
+
+// 상품 검색
+document.getElementById('productMgmtSearchBtn').addEventListener('click', () => loadProductsMgmt(0));
+document.getElementById('productMgmtSearch').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadProductsMgmt(0);
+});
+document.getElementById('openAddProductBtn').addEventListener('click', openAddProductModal);
+
+// 상품 상세 모달
+const productDetailModal = new bootstrap.Modal(document.getElementById('productDetailModal'));
+
+function openProductDetail(id) {
+  const p = productMap.get(id);
+  if (!p) return;
+  document.getElementById('pdName').textContent        = p.name;
+  document.getElementById('pdSku').textContent         = p.sku;
+  document.getElementById('pdPrice').textContent       = fmt.money(p.price);
+  document.getElementById('pdCategory').textContent    = p.category || '-';
+  document.getElementById('pdStatus').innerHTML        = fmt.badge(p.status, { ACTIVE:'판매 중', DISCONTINUED:'판매 중단' });
+  document.getElementById('pdCreatedAt').textContent   = fmt.date(p.createdAt);
+  document.getElementById('pdDescription').textContent = p.description || '-';
+  productDetailModal.show();
+}
+
+// 상품 추가 모달
+const addProductModal = new bootstrap.Modal(document.getElementById('addProductModal'));
+
+function openAddProductModal() {
+  document.getElementById('addProductName').value        = '';
+  document.getElementById('addProductPrice').value       = '';
+  document.getElementById('addProductSku').value         = '';
+  document.getElementById('addProductCategory').value    = '';
+  document.getElementById('addProductDescription').value = '';
+  addProductModal.show();
+}
+
+document.getElementById('addProductBtn').addEventListener('click', async () => {
+  const name        = document.getElementById('addProductName').value.trim();
+  const price       = parseFloat(document.getElementById('addProductPrice').value);
+  const sku         = document.getElementById('addProductSku').value.trim();
+  const categoryId  = document.getElementById('addProductCategory').value || null;
+  const description = document.getElementById('addProductDescription').value.trim() || null;
+
+  if (!name || !sku || !price || price <= 0) {
+    showToast('상품명, SKU, 가격은 필수입니다', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('addProductBtn');
+  setLoading(btn, true);
+  const d = await api('POST', '/api/products', {
+    name, price, sku,
+    categoryId: categoryId ? +categoryId : null,
+    description,
+  });
+  setLoading(btn, false);
+  if (!d) return;
+
+  addProductModal.hide();
+  showToast(`"${name}" 등록 완료`);
+  loadProductsMgmt(productMgmtPage);
+});
+
+// 상품 수정 모달
+const editProductModal = new bootstrap.Modal(document.getElementById('editProductModal'));
+
+function openEditProductModal(id) {
+  const p = productMap.get(id);
+  if (!p) return;
+  editingProductId = id;
+  document.getElementById('editProductSku').value         = p.sku;
+  document.getElementById('editProductName').value        = p.name;
+  document.getElementById('editProductPrice').value       = p.price;
+  document.getElementById('editProductCategory').value    = p.categoryId ?? '';
+  document.getElementById('editProductDescription').value = p.description ?? '';
+  editProductModal.show();
+}
+
+document.getElementById('editProductBtn').addEventListener('click', async () => {
+  const name        = document.getElementById('editProductName').value.trim();
+  const price       = parseFloat(document.getElementById('editProductPrice').value);
+  const categoryId  = document.getElementById('editProductCategory').value || null;
+  const description = document.getElementById('editProductDescription').value.trim() || null;
+
+  if (!name || !price || price <= 0) {
+    showToast('상품명과 가격은 필수입니다', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('editProductBtn');
+  setLoading(btn, true);
+  const d = await api('PUT', `/api/products/${editingProductId}`, {
+    name, price,
+    categoryId: categoryId ? +categoryId : null,
+    description,
+  });
+  setLoading(btn, false);
+  if (!d) return;
+
+  editProductModal.hide();
+  showToast(`"${name}" 수정 완료`);
+  loadProductsMgmt(productMgmtPage);
+});
+
+// ─── 재고 관리 ───────────────────────────────────────────
+document.getElementById('lowStockOnly').addEventListener('change', () => loadInventoryTab(0));
+document.getElementById('inventorySearchBtn').addEventListener('click', () => loadInventoryTab(0));
+document.getElementById('inventorySearch').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadInventoryTab(0);
+});
+document.getElementById('inventoryRefreshBtn').addEventListener('click', () => loadInventoryTab(inventoryPage));
+document.getElementById('exportInventoryBtn').addEventListener('click', exportInventoryCSV);
+
+async function loadInventoryTab(page = 0) {
+  inventoryPage  = page;
+  inventoryCache = [];
+  const body        = document.getElementById('inventoryBody');
+  const lowStockOnly = document.getElementById('lowStockOnly').checked;
+  body.innerHTML = '<tr><td colspan="6" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></td></tr>';
+
+  if (lowStockOnly) {
+    const dash = await api('GET', '/api/admin/dashboard');
+    if (!dash) return;
+    const items = dash.lowStockItems ?? [];
+    document.getElementById('inventoryPager').innerHTML = '';
+    if (items.length === 0) {
+      body.innerHTML = '<tr><td colspan="6" class="text-center text-success py-4"><i class="bi bi-check-circle me-1"></i>저재고 상품 없음</td></tr>';
+      return;
+    }
+    inventoryCache = items.map(i => ({
+      name: i.productName, sku: i.sku,
+      available: i.available, onHand: i.onHand, reserved: i.reserved, allocated: i.allocated,
+    }));
+    body.innerHTML = items.map(i => `
+      <tr>
+        <td class="fw-semibold">${esc(i.productName)}</td>
+        <td><code>${esc(i.sku)}</code></td>
+        <td>${stockBar(i.available, i.onHand)}</td>
+        <td><span class="text-warning fw-semibold">${i.reserved}</span></td>
+        <td><span class="text-info fw-semibold">${i.allocated}</span></td>
+        <td class="text-end">
+          <button class="btn btn-success btn-sm me-1"
+                  data-action="receive" data-pid="${i.productId}" data-pname="${esc(i.productName)}">
+            <i class="bi bi-plus-circle"></i> 입고
+          </button>
+          <button class="btn btn-warning btn-sm me-1"
+                  data-action="adjust" data-pid="${i.productId}" data-pname="${esc(i.productName)}"
+                  data-available="${i.available}">
+            <i class="bi bi-sliders"></i> 조정
+          </button>
+          <button class="btn btn-outline-secondary btn-sm"
+                  data-action="history" data-pid="${i.productId}" data-pname="${esc(i.productName)}">
+            <i class="bi bi-clock-history"></i>
+          </button>
+        </td>
+      </tr>`).join('');
+    return;
+  }
+
+  const q    = document.getElementById('inventorySearch').value.trim();
+  const path = `/api/products?page=${page}&size=10&sort=createdAt,desc${q ? '&q=' + encodeURIComponent(q) : ''}`;
+  const d    = await api('GET', path);
+  if (!d) return;
+
+  const rows = d.content ?? [];
+  if (rows.length === 0) {
+    body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">상품 없음</td></tr>';
+  } else {
+    body.innerHTML = rows.map(p => `
+      <tr id="invrow-${p.id}">
+        <td class="fw-semibold">${esc(p.name)}</td>
+        <td><code>${esc(p.sku)}</code></td>
+        <td id="invbar-${p.id}"><div class="spinner-border spinner-border-sm text-muted"></div></td>
+        <td id="invres-${p.id}" class="text-muted small">-</td>
+        <td id="invall-${p.id}" class="text-muted small">-</td>
+        <td class="text-end">
+          <button class="btn btn-success btn-sm me-1"
+                  data-action="receive" data-pid="${p.id}" data-pname="${esc(p.name)}">
+            <i class="bi bi-plus-circle"></i> 입고
+          </button>
+          <button id="adjbtn-${p.id}" class="btn btn-warning btn-sm me-1 d-none"
+                  data-action="adjust" data-pid="${p.id}" data-pname="${esc(p.name)}">
+            <i class="bi bi-sliders"></i> 조정
+          </button>
+          <button class="btn btn-outline-secondary btn-sm"
+                  data-action="history" data-pid="${p.id}" data-pname="${esc(p.name)}">
+            <i class="bi bi-clock-history"></i>
+          </button>
+        </td>
+      </tr>`).join('');
+
+    const invResults = await Promise.all(rows.map(p => fetchInventoryForRow(p.id, p.name, p.sku)));
+    inventoryCache = invResults.filter(Boolean);
+  }
+
+  document.getElementById('inventoryPager').innerHTML =
+    pager(d.number, d.totalPages,
+      () => loadInventoryTab(inventoryPage - 1),
+      () => loadInventoryTab(inventoryPage + 1));
+}
+
+async function fetchInventoryForRow(productId, productName, sku) {
+  const inv = await api('GET', `/api/inventory/${productId}`, null, true);
+  if (!inv) {
+    const el = document.getElementById(`invbar-${productId}`);
+    if (el) el.innerHTML = '<span class="text-muted small">재고 없음</span>';
+    return null;
+  }
+  const barEl  = document.getElementById(`invbar-${productId}`);
+  const resEl  = document.getElementById(`invres-${productId}`);
+  const allEl  = document.getElementById(`invall-${productId}`);
+  const adjBtn = document.getElementById(`adjbtn-${productId}`);
+  if (barEl) barEl.innerHTML = stockBar(inv.available, inv.onHand);
+  if (resEl) resEl.innerHTML = `<span class="text-warning fw-semibold">${inv.reserved}</span>`;
+  if (allEl) allEl.innerHTML = `<span class="text-info fw-semibold">${inv.allocated}</span>`;
+  if (adjBtn) {
+    adjBtn.classList.remove('d-none');
+    adjBtn.dataset.available = inv.available;
+  }
+  return { name: productName, sku, available: inv.available, onHand: inv.onHand, reserved: inv.reserved, allocated: inv.allocated };
+}
+
+// 재고 테이블 이벤트 위임
+document.getElementById('inventoryBody').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const pid   = +btn.dataset.pid;
+  const pname = btn.dataset.pname;
+  if (btn.dataset.action === 'receive') openReceiveModal(pid, pname);
+  if (btn.dataset.action === 'adjust')  openAdjustModal(pid, pname, btn.dataset.available);
+  if (btn.dataset.action === 'history') openHistoryModal(pid, pname);
+});
+
+// ─── 입고 처리 ──────────────────────────────────────────
+const receiveModal = new bootstrap.Modal(document.getElementById('receiveModal'));
+
+function openReceiveModal(productId, productName) {
+  receiveProductId = productId;
+  document.getElementById('receiveProductName').textContent = productName;
+  document.getElementById('receiveQty').value  = 1;
+  document.getElementById('receiveNote').value = '';
+  receiveModal.show();
+}
+
+document.getElementById('receiveBtn').addEventListener('click', async () => {
+  const qty  = parseInt(document.getElementById('receiveQty').value);
+  const note = document.getElementById('receiveNote').value.trim() || null;
+  if (!qty || qty < 1) { showToast('수량을 입력하세요', 'warning'); return; }
+
+  const btn = document.getElementById('receiveBtn');
+  setLoading(btn, true);
+  const d = await api('POST', `/api/inventory/${receiveProductId}/receive`, { quantity: qty, note });
+  setLoading(btn, false);
+  if (!d) return;
+
+  receiveModal.hide();
+  showToast(`입고 완료 (가용재고: ${d.available}개)`);
+  updateInventoryRow(receiveProductId, d);
+  loadDashboard();
+});
+
+// ─── 재고 조정 ──────────────────────────────────────────
+const adjustModal = new bootstrap.Modal(document.getElementById('adjustModal'));
+
+function openAdjustModal(productId, productName, available) {
+  adjustProductId = productId;
+  document.getElementById('adjustProductName').textContent = productName;
+  document.getElementById('adjustAvailable').textContent   = available ?? '-';
+  document.getElementById('adjustQty').value  = 0;
+  document.getElementById('adjustNote').value = '';
+  adjustModal.show();
+}
+
+document.getElementById('adjustBtn').addEventListener('click', async () => {
+  const qty  = parseInt(document.getElementById('adjustQty').value);
+  const note = document.getElementById('adjustNote').value.trim() || null;
+  if (qty === 0 || isNaN(qty)) { showToast('0이 아닌 조정 수량을 입력하세요', 'warning'); return; }
+
+  const btn = document.getElementById('adjustBtn');
+  setLoading(btn, true);
+  const d = await api('POST', `/api/inventory/${adjustProductId}/adjust`, { quantity: qty, note });
+  setLoading(btn, false);
+  if (!d) return;
+
+  adjustModal.hide();
+  showToast(`조정 완료 (가용재고: ${d.available}개)`);
+  updateInventoryRow(adjustProductId, d);
+  loadDashboard();
+});
+
+function updateInventoryRow(productId, inv) {
+  const barEl  = document.getElementById(`invbar-${productId}`);
+  const resEl  = document.getElementById(`invres-${productId}`);
+  const allEl  = document.getElementById(`invall-${productId}`);
+  const adjBtn = document.getElementById(`adjbtn-${productId}`);
+  if (barEl)  barEl.innerHTML  = stockBar(inv.available, inv.onHand);
+  if (resEl)  resEl.innerHTML  = `<span class="text-warning fw-semibold">${inv.reserved}</span>`;
+  if (allEl)  allEl.innerHTML  = `<span class="text-info fw-semibold">${inv.allocated}</span>`;
+  if (adjBtn) { adjBtn.classList.remove('d-none'); adjBtn.dataset.available = inv.available; }
+}
+
+// ─── 재고 이력 ──────────────────────────────────────────
+const historyModal = new bootstrap.Modal(document.getElementById('historyModal'));
+
+async function openHistoryModal(productId, productName) {
+  document.getElementById('historyProductName').textContent = productName;
+  document.getElementById('historyBody').innerHTML =
+    '<tr><td colspan="7" class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></td></tr>';
+
+  historyTypeFilter = '';
+  document.querySelectorAll('#historyTypeFilter button').forEach(b => {
+    b.className = `btn btn-outline-${b.dataset.color} btn-sm`;
+  });
+  const allBtn = document.querySelector('#historyTypeFilter button[data-type=""]');
+  if (allBtn) allBtn.className = `btn btn-${allBtn.dataset.color} btn-sm`;
+
+  historyModal.show();
+
+  const data = await api('GET', `/api/inventory/${productId}/transactions`);
+  // Page 응답 또는 List 응답 모두 처리
+  historyList = Array.isArray(data) ? data : (data?.content ?? []);
+  renderHistoryRows();
+}
+
+document.getElementById('historyTypeFilter').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-type]');
+  if (!btn) return;
+  historyTypeFilter = btn.dataset.type;
+  document.querySelectorAll('#historyTypeFilter button').forEach(b => {
+    b.className = `btn btn-outline-${b.dataset.color} btn-sm`;
+  });
+  btn.className = `btn btn-${btn.dataset.color} btn-sm`;
+  renderHistoryRows();
+});
+
+function renderHistoryRows() {
+  const filtered = historyTypeFilter
+    ? historyList.filter(tx => tx.type === historyTypeFilter)
+    : historyList;
+
+  if (filtered.length === 0) {
+    document.getElementById('historyBody').innerHTML =
+      `<tr><td colspan="7" class="text-center text-muted py-3">${historyList.length === 0 ? '이력 없음' : '해당 유형 이력 없음'}</td></tr>`;
+    return;
+  }
+
+  document.getElementById('historyBody').innerHTML = filtered.map(tx => {
+    const isAdj     = tx.type === 'ADJUSTMENT';
+    const isInbound = isAdj
+      ? tx.quantity > 0
+      : ['RECEIVE', 'RELEASE_RESERVATION', 'RELEASE_ALLOCATION'].includes(tx.type);
+    const sign = isInbound ? '+' : '-';
+    const qty  = isAdj ? Math.abs(tx.quantity) : tx.quantity;
+    return `<tr>
+      <td><span class="badge bg-${isAdj ? 'warning text-dark' : isInbound ? 'success' : 'primary'}">${esc(txTypeLabel[tx.type] ?? tx.type)}</span></td>
+      <td class="text-end fw-semibold ${isInbound ? 'text-success' : 'text-danger'}">${sign}${qty}</td>
+      <td class="text-end">${tx.snapshotOnHand}</td>
+      <td class="text-end">${tx.snapshotReserved}</td>
+      <td class="text-end">${tx.snapshotAllocated}</td>
+      <td class="small text-muted">${esc(tx.note ?? '')}</td>
+      <td class="small text-muted">${fmt.date(tx.createdAt)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── 주문 관리 ───────────────────────────────────────────
+function statusColor(s) {
+  return { PENDING:'warning', CONFIRMED:'success', CANCELLED:'secondary' }[s] ?? 'dark';
+}
+
+document.getElementById('orderFilterBtns').addEventListener('click', e => {
+  const btn = e.target.closest('.order-filter-btn');
+  if (!btn) return;
+  document.querySelectorAll('.order-filter-btn').forEach(b => {
+    b.className = b.dataset.status === ''
+      ? 'btn btn-outline-dark btn-sm order-filter-btn'
+      : `btn btn-outline-${statusColor(b.dataset.status)} btn-sm order-filter-btn`;
+  });
+  btn.className = btn.dataset.status === ''
+    ? 'btn btn-dark btn-sm order-filter-btn active'
+    : `btn btn-${statusColor(btn.dataset.status)} btn-sm order-filter-btn active`;
+  ordersStatus = btn.dataset.status;
+  loadOrders(0, ordersStatus);
+});
+
+document.getElementById('ordersRefreshBtn').addEventListener('click', () => loadOrders(ordersPage, ordersStatus));
+document.getElementById('exportOrdersBtn').addEventListener('click', exportOrdersCSV);
+document.getElementById('clearUserFilterBtn').addEventListener('click', () => {
+  ordersUserId = null; ordersUsername = '';
+  loadOrders(0, ordersStatus, null, '');
+});
+
+async function loadOrders(page = 0, status = '', userId = ordersUserId, username = ordersUsername) {
+  ordersPage    = page;
+  ordersStatus  = status;
+  ordersUserId  = userId ?? null;
+  ordersUsername = username ?? '';
+
+  const filterBar = document.getElementById('ordersUserFilterBar');
+  if (ordersUserId) {
+    document.getElementById('ordersUserFilterLabel').textContent = `${ordersUsername} (ID: ${ordersUserId})`;
+    filterBar.classList.remove('d-none');
+  } else {
+    filterBar.classList.add('d-none');
+  }
+
+  const qs   = `page=${page}&size=15&sort=createdAt,desc${status ? '&status=' + status : ''}${ordersUserId ? '&userId=' + ordersUserId : ''}`;
+  const body = document.getElementById('ordersBody');
+  body.innerHTML = '<tr><td colspan="6" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></td></tr>';
+
+  const d = await api('GET', `/api/admin/orders?${qs}`);
+  if (!d) return;
+
+  const rows = d.content ?? [];
+  ordersCache = rows;
+  if (rows.length === 0) {
+    body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">주문 없음</td></tr>';
+  } else {
+    body.innerHTML = rows.map(o => `
+      <tr>
+        <td><code>#${o.id}</code></td>
+        <td>
+          <span class="fw-semibold">${esc(o.username ?? '-')}</span>
+          <small class="text-muted d-block">ID: ${o.userId}</small>
+        </td>
+        <td>${fmt.badge(o.status, statusLabel)}</td>
+        <td class="fw-semibold">${fmt.money(o.totalAmount)}</td>
+        <td class="small text-muted">${fmt.date(o.createdAt)}</td>
+        <td class="text-end">
+          <button class="btn btn-outline-secondary btn-sm me-1"
+                  data-action="order-detail" data-id="${o.id}"
+                  data-status="${o.status}" data-username="${esc(o.username ?? '')}"
+                  data-uid="${o.userId}">
+            <i class="bi bi-receipt"></i>
+          </button>
+          ${o.status === 'PENDING' ? `
+          <button class="btn btn-outline-danger btn-sm"
+                  data-action="order-cancel" data-id="${o.id}">
+            <i class="bi bi-x-circle me-1"></i>취소
+          </button>` : ''}
+        </td>
+      </tr>`).join('');
+  }
+
+  document.getElementById('ordersPager').innerHTML =
+    pager(d.number, d.totalPages,
+      () => loadOrders(ordersPage - 1, ordersStatus),
+      () => loadOrders(ordersPage + 1, ordersStatus));
+}
+
+function viewUserOrders(userId, username) {
+  document.querySelectorAll('[data-tab]').forEach(l => l.classList.remove('active'));
+  document.querySelector('[data-tab="orders"]').classList.add('active');
+  Object.values(tabIds).forEach(id => document.getElementById(id).style.display = 'none');
+  document.getElementById(tabIds['orders']).style.display = '';
+  document.querySelectorAll('.order-filter-btn').forEach(b => {
+    b.className = b.dataset.status === ''
+      ? 'btn btn-dark btn-sm order-filter-btn active'
+      : `btn btn-outline-${statusColor(b.dataset.status)} btn-sm order-filter-btn`;
+  });
+  loadOrders(0, '', userId, username);
+}
+
+// 주문 테이블 이벤트 위임
+document.getElementById('ordersBody').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const id = +btn.dataset.id;
+  if (btn.dataset.action === 'order-detail') {
+    openOrderDetail(id, btn.dataset.status, btn.dataset.username, +btn.dataset.uid);
+  }
+  if (btn.dataset.action === 'order-cancel') {
+    showConfirm(`주문 #${id}을 취소하시겠습니까?`, async () => {
+      const d = await api('POST', `/api/orders/${id}/cancel`);
+      if (!d) return;
+      showToast(`주문 #${id} 취소 완료`);
+      loadOrders(ordersPage, ordersStatus);
+    });
+  }
+});
+
+// ─── 주문 상세 모달 ──────────────────────────────────────
+const orderDetailModal = new bootstrap.Modal(document.getElementById('orderDetailModal'));
+
+async function openOrderDetail(orderId, status, username, userId) {
+  document.getElementById('orderDetailTitle').innerHTML =
+    `<code>#${orderId}</code> <span class="badge badge-${esc(status)} ms-1">${esc(statusLabel[status] ?? status)}</span>`;
+  document.getElementById('orderDetailUsername').textContent = username || '-';
+  document.getElementById('orderDetailUserId').textContent   = userId ?? '-';
+  document.getElementById('orderDetailBody').innerHTML =
+    '<tr><td colspan="4" class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></td></tr>';
+  document.getElementById('orderDetailTotal').textContent = '-';
+  document.getElementById('orderDetailPayment').classList.add('d-none');
+  document.getElementById('orderDetailShipment').classList.add('d-none');
+  document.getElementById('orderDetailDiscountRow').classList.add('d-none');
+  document.getElementById('orderDetailPointsRow').classList.add('d-none');
+  currentShipmentId = null;
+  orderDetailModal.show();
+
+  const [d, p, s] = await Promise.all([
+    api('GET', `/api/orders/${orderId}`),
+    api('GET', `/api/payments/order/${orderId}`, null, true),
+    api('GET', `/api/shipments/orders/${orderId}`, null, true),
+  ]);
+
+  // 결제 정보
+  if (p) {
+    const bs = payStatusBadge[p.status] ?? 'secondary';
+    document.getElementById('pdPayStatus').innerHTML =
+      `<span class="badge bg-${bs}">${esc(payStatusLabel[p.status] ?? p.status)}</span>`;
+    document.getElementById('pdPayMethod').textContent    = p.method || '-';
+    document.getElementById('pdPayAmount').textContent    = fmt.money(p.amount);
+    document.getElementById('pdPayApprovedAt').textContent = p.approvedAt ? fmt.date(p.approvedAt) : '-';
+
+    const cancelRow = document.getElementById('pdPayCancelRow');
+    document.getElementById('pdPayCancelReason').textContent = p.cancelReason ?? '';
+    cancelRow.classList.toggle('d-none', !p.cancelReason);
+
+    const failRow = document.getElementById('pdPayFailRow');
+    document.getElementById('pdPayFailMsg').textContent = p.failureMessage
+      ? `[${p.failureCode ?? ''}] ${p.failureMessage}` : '';
+    failRow.classList.toggle('d-none', !p.failureMessage);
+
+    document.getElementById('orderDetailPayment').classList.remove('d-none');
+  }
+
+  // 배송 정보
+  if (s) {
+    currentShipmentId = s.id;
+    document.getElementById('shipStatus').innerHTML =
+      `<span class="badge badge-${esc(s.status)}">${esc(shipLabel[s.status] ?? s.status)}</span>`;
+    document.getElementById('shipCarrier').textContent  = s.carrier   || '-';
+    document.getElementById('shipTracking').textContent = s.trackingNumber || '-';
+
+    const actionRow = document.getElementById('shipActionRow');
+    actionRow.innerHTML = '';
+    if (s.status === 'PREPARING') {
+      actionRow.innerHTML = `
+        <button class="btn btn-sm btn-primary" onclick="shipAction(${s.id},'ship')">
+          <i class="bi bi-truck me-1"></i>배송 시작
+        </button>`;
+    } else if (s.status === 'SHIPPED') {
+      actionRow.innerHTML = `
+        <button class="btn btn-sm btn-success me-2" onclick="shipAction(${s.id},'deliver')">
+          <i class="bi bi-check-circle me-1"></i>배송 완료
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="shipAction(${s.id},'return')">
+          <i class="bi bi-arrow-return-left me-1"></i>반품
+        </button>`;
+    }
+
+    document.getElementById('orderDetailShipment').classList.remove('d-none');
+  }
+
+  if (!d) return;
+  if (!d.items?.length) {
+    document.getElementById('orderDetailBody').innerHTML =
+      '<tr><td colspan="4" class="text-center text-muted py-3">항목 없음</td></tr>';
+    return;
+  }
+  document.getElementById('orderDetailBody').innerHTML = d.items.map(item => `
+    <tr>
+      <td class="fw-semibold">${esc(item.productName)}</td>
+      <td class="text-end">${fmt.money(item.unitPrice)}</td>
+      <td class="text-center">${item.quantity}</td>
+      <td class="text-end">${fmt.money(item.subtotal)}</td>
+    </tr>`).join('');
+  document.getElementById('orderDetailTotal').textContent = fmt.money(d.totalAmount);
+  if ((d.discountAmount ?? 0) > 0) {
+    document.getElementById('orderDetailDiscountRow').classList.remove('d-none');
+    document.getElementById('orderDetailDiscount').textContent = '- ' + fmt.money(d.discountAmount);
+  }
+  if ((d.usedPoints ?? 0) > 0) {
+    document.getElementById('orderDetailPointsRow').classList.remove('d-none');
+    document.getElementById('orderDetailPoints').textContent = '- ' + d.usedPoints.toLocaleString() + 'P';
+  }
+}
+
+async function shipAction(shipmentId, action) {
+  const labelMap = { ship:'배송 시작', deliver:'배송 완료 처리', return:'반품 처리' };
+  showConfirm(`${labelMap[action]} 하시겠습니까?`, async () => {
+    const d = await api('PATCH', `/api/shipments/${shipmentId}/${action}`);
+    if (!d) return;
+    showToast(`${labelMap[action]} 완료`);
+    orderDetailModal.hide();
+    loadOrders(ordersPage, ordersStatus);
+  });
+}
+
+// ─── 쿠폰 관리 ──────────────────────────────────────────
+document.getElementById('openAddCouponBtn').addEventListener('click', openAddCouponModal);
+
+async function loadCoupons(page = 0) {
+  couponsPage = page;
+  const body  = document.getElementById('couponsBody');
+  body.innerHTML = '<tr><td colspan="8" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></td></tr>';
+
+  const d = await api('GET', `/api/coupons?page=${page}&size=10&sort=id,desc`);
+  if (!d) return;
+
+  const rows = d.content ?? [];
+  if (rows.length === 0) {
+    body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">쿠폰 없음</td></tr>';
+  } else {
+    body.innerHTML = rows.map(c => {
+      const discount = c.discountType === 'FIXED_AMOUNT'
+        ? fmt.money(c.discountValue)
+        : `${c.discountValue}%${c.maxDiscountAmount ? ` (최대 ${fmt.money(c.maxDiscountAmount)})` : ''}`;
+      return `
+      <tr>
+        <td><code data-action="copy-code" data-code="${esc(c.code)}" title="클릭하여 복사">${esc(c.code)}</code></td>
+        <td class="fw-semibold">${esc(c.name)}</td>
+        <td>${esc(discount)}</td>
+        <td class="small text-muted">${c.minimumOrderAmount > 0 ? fmt.money(c.minimumOrderAmount) : '-'}</td>
+        <td class="small text-muted">
+          ${fmt.date(c.validFrom).slice(0, 10)} ~<br>${fmt.date(c.validUntil).slice(0, 10)}
+        </td>
+        <td class="text-center">
+          ${c.usageCount} / ${c.maxUsageCount ?? '∞'}
+        </td>
+        <td>
+          <span class="badge ${c.active ? 'badge-coupon-on' : 'badge-coupon-off'}">
+            ${c.active ? '활성' : '비활성'}
+          </span>
+        </td>
+        <td class="text-end">
+          <button class="btn btn-outline-primary btn-sm me-1" data-action="coupon-issue" data-id="${c.id}" data-name="${esc(c.name)}">
+            <i class="bi bi-send me-1"></i>발급
+          </button>
+          ${c.active ? `
+          <button class="btn btn-outline-secondary btn-sm" data-action="coupon-deactivate" data-id="${c.id}" data-name="${esc(c.name)}">
+            <i class="bi bi-pause-circle"></i>
+          </button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  document.getElementById('couponsPager').innerHTML =
+    pager(d.number, d.totalPages,
+      () => loadCoupons(couponsPage - 1),
+      () => loadCoupons(couponsPage + 1));
+}
+
+// 쿠폰 테이블 이벤트 위임
+document.getElementById('couponsBody').addEventListener('click', e => {
+  const codeEl = e.target.closest('code[data-action="copy-code"]');
+  if (codeEl) {
+    navigator.clipboard?.writeText(codeEl.dataset.code)
+      .then(() => showToast(`"${codeEl.dataset.code}" 복사됨`, 'info'))
+      .catch(() => showToast('클립보드 복사 실패', 'warning'));
+    return;
+  }
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const id   = +btn.dataset.id;
+  const name = btn.dataset.name;
+  if (btn.dataset.action === 'coupon-issue') openCouponIssueModal(id, name);
+  if (btn.dataset.action === 'coupon-deactivate') {
+    showConfirm(`"${name}" 쿠폰을 비활성화하시겠습니까?`, async () => {
+      const d = await api('PATCH', `/api/coupons/${id}/deactivate`);
+      if (d === null) return;
+      showToast(`"${name}" 비활성화 완료`);
+      loadCoupons(couponsPage);
+    });
+  }
+});
+
+// 쿠폰 추가 모달
+const addCouponModal = new bootstrap.Modal(document.getElementById('addCouponModal'));
+
+function openAddCouponModal() {
+  ['cpCode','cpName','cpValue','cpMinOrder','cpMaxDiscount','cpValidFrom','cpValidUntil','cpDescription'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('cpMinOrder').value  = '0';
+  document.getElementById('cpMaxPerUser').value = '1';
+  document.getElementById('cpType').value = 'FIXED_AMOUNT';
+  document.getElementById('cpIsPublic').checked = true;
+  addCouponModal.show();
+}
+
+document.getElementById('addCouponBtn').addEventListener('click', async () => {
+  const code        = document.getElementById('cpCode').value.trim();
+  const name        = document.getElementById('cpName').value.trim();
+  const type        = document.getElementById('cpType').value;
+  const value       = parseFloat(document.getElementById('cpValue').value);
+  const minOrder    = parseFloat(document.getElementById('cpMinOrder').value) || 0;
+  const maxDiscount = parseFloat(document.getElementById('cpMaxDiscount').value) || null;
+  const validFrom   = document.getElementById('cpValidFrom').value;
+  const validUntil  = document.getElementById('cpValidUntil').value;
+  const maxUsage    = parseInt(document.getElementById('cpMaxUsage').value) || null;
+  const maxPerUser  = parseInt(document.getElementById('cpMaxPerUser').value) || 1;
+  const description = document.getElementById('cpDescription').value.trim() || null;
+  const isPublic    = document.getElementById('cpIsPublic').checked;
+
+  if (!code || !name || !value || value <= 0 || !validFrom || !validUntil) {
+    showToast('필수 항목을 모두 입력하세요', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('addCouponBtn');
+  setLoading(btn, true);
+  const d = await api('POST', '/api/coupons', {
+    code, name, description,
+    discountType:       type,
+    discountValue:      value,
+    minimumOrderAmount: minOrder,
+    maxDiscountAmount:  maxDiscount,
+    validFrom:          validFrom + ':00',
+    validUntil:         validUntil + ':00',
+    maxUsageCount:      maxUsage,
+    maxUsagePerUser:    maxPerUser,
+    isPublic,
+  });
+  setLoading(btn, false);
+  if (!d) return;
+
+  addCouponModal.hide();
+  showToast(`"${name}" 쿠폰 등록 완료`);
+  loadCoupons(couponsPage);
+});
+
+// 쿠폰 발급 모달
+const couponIssueModal = new bootstrap.Modal(document.getElementById('couponIssueModal'));
+
+function openCouponIssueModal(couponId, couponName) {
+  issuingCouponId = couponId;
+  document.getElementById('issueCouponName').textContent = couponName;
+  document.getElementById('issueUserId').value = '';
+  couponIssueModal.show();
+}
+
+document.getElementById('issueCouponBtn').addEventListener('click', async () => {
+  const userId = parseInt(document.getElementById('issueUserId').value);
+  if (!userId || userId < 1) { showToast('사용자 ID를 입력하세요', 'warning'); return; }
+
+  const btn = document.getElementById('issueCouponBtn');
+  setLoading(btn, true);
+  const d = await api('POST', `/api/coupons/${issuingCouponId}/issue`, { userId });
+  setLoading(btn, false);
+  if (d === null) return;
+
+  couponIssueModal.hide();
+  showToast('쿠폰 발급 완료');
+});
+
+// ─── 사용자 관리 ─────────────────────────────────────────
+document.getElementById('usersSearchBtn').addEventListener('click', () => loadUsers(0));
+document.getElementById('usersSearch').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadUsers(0);
+});
+document.getElementById('usersRefreshBtn').addEventListener('click', () => loadUsers(usersPage));
+
+async function loadUsers(page = 0) {
+  usersPage = page;
+  const q    = document.getElementById('usersSearch').value.trim();
+  const body = document.getElementById('usersBody');
+  body.innerHTML = '<tr><td colspan="6" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></td></tr>';
+
+  const d = await api('GET', `/api/admin/users?page=${page}&size=15&sort=createdAt,desc${q ? '&search=' + encodeURIComponent(q) : ''}`);
+  if (!d) return;
+
+  const rows = d.content ?? [];
+  if (rows.length === 0) {
+    body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">사용자 없음</td></tr>';
+  } else {
+    body.innerHTML = rows.map(u => `
+      <tr>
+        <td class="text-muted small">${u.id}</td>
+        <td class="fw-semibold">${esc(u.username)}</td>
+        <td class="text-muted small">${esc(u.email)}</td>
+        <td>${fmt.badge(u.role, { USER:'일반', ADMIN:'관리자' })}</td>
+        <td class="small text-muted">${fmt.date(u.createdAt)}</td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-outline-primary me-1"
+                  data-action="view-orders" data-uid="${u.id}" data-uname="${esc(u.username)}">
+            <i class="bi bi-bag me-1"></i>주문
+          </button>
+          <button class="btn btn-sm ${u.role === 'ADMIN' ? 'btn-outline-secondary' : 'btn-outline-dark'}"
+                  data-action="change-role" data-uid="${u.id}" data-role="${u.role}">
+            ${u.role === 'ADMIN'
+              ? '<i class="bi bi-arrow-down-circle me-1"></i>USER 강등'
+              : '<i class="bi bi-arrow-up-circle me-1"></i>ADMIN 승격'}
+          </button>
+        </td>
+      </tr>`).join('');
+  }
+
+  document.getElementById('usersPager').innerHTML =
+    pager(d.number, d.totalPages,
+      () => loadUsers(usersPage - 1),
+      () => loadUsers(usersPage + 1));
+}
+
+// 사용자 테이블 이벤트 위임
+document.getElementById('usersBody').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  if (btn.dataset.action === 'view-orders') {
+    viewUserOrders(+btn.dataset.uid, btn.dataset.uname);
+  }
+  if (btn.dataset.action === 'change-role') {
+    const uid     = +btn.dataset.uid;
+    const curRole = btn.dataset.role;
+    const newRole = curRole === 'ADMIN' ? 'USER' : 'ADMIN';
+    showConfirm(`사용자 #${uid}의 권한을 ${newRole}로 변경하시겠습니까?`, async () => {
+      btn.disabled = true;
+      const d = await api('PATCH', `/api/admin/users/${uid}/role`, { role: newRole });
+      if (!d) { btn.disabled = false; return; }
+      showToast(`권한이 ${newRole}로 변경되었습니다`);
+      loadUsers(usersPage);
+    });
+  }
+});
+
+// ─── CSV 내보내기 ─────────────────────────────────────────
+function exportCSV(filename, headers, rows) {
+  const cell  = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [headers.map(cell).join(','), ...rows.map(r => r.map(cell).join(','))];
+  const blob  = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportInventoryCSV() {
+  if (!inventoryCache.length) { showToast('내보낼 데이터가 없습니다', 'warning'); return; }
+  exportCSV(
+    `inventory_${new Date().toISOString().slice(0, 10)}.csv`,
+    ['상품명', 'SKU', '가용재고', '실재고', '예약', '배정'],
+    inventoryCache.map(i => [i.name, i.sku, i.available, i.onHand, i.reserved, i.allocated])
+  );
+  showToast('재고 CSV 내보내기 완료');
+}
+
+function exportOrdersCSV() {
+  if (!ordersCache.length) { showToast('내보낼 데이터가 없습니다', 'warning'); return; }
+  exportCSV(
+    `orders_${new Date().toISOString().slice(0, 10)}.csv`,
+    ['주문ID', '주문자', '사용자ID', '상태', '금액(원)', '주문일시'],
+    ordersCache.map(o => [o.id, o.username ?? '', o.userId, o.status, o.totalAmount, fmt.date(o.createdAt)])
+  );
+  showToast('주문 CSV 내보내기 완료');
+}
+
+// ─── 토스트 ──────────────────────────────────────────────
+const toastEl = document.getElementById('toast');
+const TOAST_ICON  = { success: 'bi-check-circle-fill', danger: 'bi-x-circle-fill', warning: 'bi-exclamation-triangle-fill', info: 'bi-info-circle-fill' };
+const TOAST_DELAY = { success: 3000, danger: 5000, warning: 4000, info: 3000 };
+
+function showToast(msg, type = 'success') {
+  bootstrap.Toast.getInstance(toastEl)?.hide();
+  toastEl.className = `toast align-items-center border-0 text-bg-${type}`;
+  document.getElementById('toastIcon').className = `bi ${TOAST_ICON[type] ?? 'bi-bell-fill'}`;
+  document.getElementById('toastMsg').textContent = msg;
+  new bootstrap.Toast(toastEl, { delay: TOAST_DELAY[type] ?? 3000 }).show();
+}
+
+// ─── 확인 모달 ───────────────────────────────────────────
+const confirmModalInst = new bootstrap.Modal(document.getElementById('confirmModal'));
+
+function showConfirm(message, onConfirm, danger = true) {
+  document.getElementById('confirmBody').textContent = message;
+  const okBtn = document.getElementById('confirmOkBtn');
+  okBtn.className = `btn btn-sm btn-${danger ? 'danger' : 'primary'}`;
+  okBtn.onclick = () => { confirmModalInst.hide(); onConfirm(); };
+  confirmModalInst.show();
+}
+
+// ─── 초기 진입 ───────────────────────────────────────────
+if (token) { verifyAndShowApp(null); }
+</script>
+</body>
+</html>

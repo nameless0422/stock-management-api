@@ -1,0 +1,160 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.11'
+	id 'io.spring.dependency-management' version '1.1.7'
+	id 'jacoco'
+	// PIT 뮤테이션 테스트 — 비즈니스 로직의 경계값·조건 변이에 대한 실제 동작 검증
+	id 'info.solidsoft.pitest' version '1.15.0'
+}
+
+group = 'com'
+version = '0.0.1-SNAPSHOT'
+description = 'stock-management-api'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17)
+	}
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-mail'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-aop'
+	implementation 'org.springframework.boot:spring-boot-starter-cache'
+	// Redisson — 분산 락 (멀티 인스턴스 동시성 제어)
+	implementation 'org.redisson:redisson-spring-boot-starter:3.27.2'
+	// Swagger / OpenAPI UI
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.4'
+	// Spring Boot Admin (인프라 모니터링 Web UI)
+	implementation 'de.codecentric:spring-boot-admin-starter-server:3.4.3'
+	implementation 'de.codecentric:spring-boot-admin-starter-client:3.4.3'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	compileOnly 'org.projectlombok:lombok'
+	runtimeOnly 'com.mysql:mysql-connector-j'
+	implementation 'org.flywaydb:flyway-core'
+	implementation 'org.flywaydb:flyway-mysql'
+	// Resilience4j Circuit Breaker
+	implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+	// JWT
+	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+	annotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.security:spring-security-test'
+	// Testcontainers — 통합 테스트에서 실제 MySQL·Redis 컨테이너 사용
+	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.testcontainers:mysql'
+	testImplementation 'org.testcontainers:elasticsearch'
+	// P6Spy — SQL 실행 시간 로깅 및 슬로우 쿼리 감지
+	implementation 'com.github.gavlyukovskiy:p6spy-spring-boot-starter:1.9.2'
+	// AWS SDK v2 — MinIO(S3 호환) 오브젝트 스토리지 연동
+	implementation platform('software.amazon.awssdk:bom:2.26.31')
+	implementation 'software.amazon.awssdk:s3'
+	// Prometheus — Micrometer 메트릭 노출 (/actuator/prometheus)
+	implementation 'io.micrometer:micrometer-registry-prometheus'
+	// Micrometer Tracing — Brave 브리지 (traceId/spanId MDC 자동 주입)
+	implementation 'io.micrometer:micrometer-tracing-bridge-brave'
+	// Zipkin — 트레이스 데이터 전송 (Spring Boot BOM 관리)
+	implementation 'io.zipkin.reporter2:zipkin-reporter-brave'
+	testRuntimeOnly 'com.h2database:h2'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	finalizedBy jacocoTestReport
+}
+
+// 커버리지 측정 대상에서 제외할 클래스 목록 (공통 적용)
+def jacocoExcludes = [
+	'com/stockmanagement/StockManagementApiApplication.class',
+	'com/stockmanagement/common/config/**',        // 설정 클래스
+	'com/stockmanagement/**/dto/**',               // DTO (순수 데이터 클래스)
+	'com/stockmanagement/**/entity/**',            // Entity (JPA 매핑 클래스)
+	'com/stockmanagement/**/document/**',          // ES Document
+]
+
+jacocoTestReport {
+	dependsOn test
+	reports {
+		html.required = true
+		xml.required = true   // CI에서 커버리지 수치 파싱용
+		csv.required = false
+	}
+	afterEvaluate {
+		classDirectories.setFrom(files(classDirectories.files.collect {
+			fileTree(dir: it, exclude: jacocoExcludes)
+		}))
+	}
+}
+
+// ===== PIT 뮤테이션 테스트 설정 =====
+// 실행: ./gradlew pitest
+// 리포트 위치: build/reports/pitest/index.html
+//
+// 대상: 재고·결제·쿠폰 등 핵심 비즈니스 로직 서비스 (설정/DTO/Entity 제외)
+// 목표: mutation score 60% 이상
+// 주의: 전체 실행은 느리다. CI에서는 jacoco 후 별도 파이프라인으로 분리 권장.
+pitest {
+	junit5PluginVersion = '1.2.1'
+	targetClasses = [
+		'com.stockmanagement.domain.inventory.service.*',
+		'com.stockmanagement.domain.order.service.*',
+		'com.stockmanagement.domain.payment.service.*',
+		'com.stockmanagement.domain.coupon.service.*',
+		'com.stockmanagement.domain.point.service.*',
+		'com.stockmanagement.domain.refund.service.*',
+	]
+	targetTests = [
+		'com.stockmanagement.domain.inventory.service.*',
+		'com.stockmanagement.domain.order.service.*',
+		'com.stockmanagement.domain.payment.service.*',
+		'com.stockmanagement.domain.coupon.service.*',
+		'com.stockmanagement.domain.point.service.*',
+		'com.stockmanagement.domain.refund.service.*',
+	]
+	threads = 4
+	outputFormats = ['HTML', 'XML']
+	timestampedReports = false // 매번 같은 경로에 덮어써서 비교 용이
+	// 변이 연산자: 기본 + 경계값 변이 (< → <=, > → >=) 포함
+	mutators = ['DEFAULTS', 'STRONGER']
+	// 단위 테스트만 대상 (통합 테스트 제외 — 수행 시간 수 배 차이)
+	excludedTestClasses = ['com.stockmanagement.integration.*']
+	// 변이 Score 임계값: 60% 미만 시 빌드 실패
+	mutationThreshold = 60
+}
+
+// 커버리지 임계값 검증 — 기준 미달 시 빌드 실패
+jacocoTestCoverageVerification {
+	afterEvaluate {
+		classDirectories.setFrom(files(classDirectories.files.collect {
+			fileTree(dir: it, exclude: jacocoExcludes)
+		}))
+	}
+	violationRules {
+		rule {
+			limit {
+				counter = 'LINE'
+				value   = 'COVEREDRATIO'
+				minimum = 0.70  // 라인 커버리지 70% 미달 시 빌드 실패
+			}
+		}
+	}
+}

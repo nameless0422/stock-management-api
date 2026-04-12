@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="app"/>
+
+    <!--
+        민감 정보 마스킹 (logback %replace 두 단계 적용):
+        1. Authorization Bearer 토큰: "Bearer eyJ..." -> "Bearer [MASKED]"
+        2. JSON password 필드: "password":"secret" -> "password":"[MASKED]"
+    -->
+
+    <!-- requestId + 민감 정보 마스킹이 적용된 콘솔 패턴 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{requestId:-?}] %logger{36} - %replace(%replace(%msg){'(?i)(bearer\s+)\S+','$1[MASKED]'}){'(?i)("password"\s*:\s*")[^"]*(")', '$1[MASKED]$2'}%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 개발/테스트: DEBUG 레벨 허용 -->
+    <springProfile name="!production">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+        <logger name="com.stockmanagement" level="DEBUG"/>
+        <logger name="org.hibernate.SQL" level="DEBUG"/>
+    </springProfile>
+
+    <!-- 운영: INFO 이상만 출력 -->
+    <springProfile name="production">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+</configuration>

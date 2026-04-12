@@ -9,14 +9,39 @@ Spring Boot 기반 **쇼핑몰 백엔드 포트폴리오 프로젝트**.
 
 | 주제 | 내용 |
 |---|---|
-| **동시성 제어** | 재고 뮤테이션에 분산 락(Redisson) + 비관적 락(DB) 2중 적용 — 멀티 인스턴스 환경의 overselling 원천 차단 |
-| **결제 멱등성** | `prepare`·`confirm`·`cancel` 3단계에 레이어별 멱등 전략 — DB UNIQUE, Redis SETNX, Toss `Idempotency-Key` 헤더 |
+| **동시성 제어** | 재고 뮤테이션에 분산 락(Redisson) + 비관적 락(DB) 2중 적용 — EC2 2대 멀티 인스턴스 환경의 overselling 차단. 결제 취소에 비관적 락으로 TOCTOU 경쟁 조건(이중 환불) 차단 |
+| **결제 정합성** | `Propagation.REQUIRES_NEW`로 결제 커밋 보장 — 배송·포인트 실패 시 `UnexpectedRollbackException`으로 결제가 롤백되는 버그 수정. `prepare`·`confirm`·`cancel` 3단계 멱등성(DB UNIQUE + Redis SETNX + Toss `Idempotency-Key`) |
+| **이벤트 신뢰성** | Transactional Outbox 패턴 — 이벤트와 비즈니스 로직을 동일 트랜잭션으로 묶어 JVM 크래시 시 이벤트 유실 0 보장. Prometheus `outbox.dead_letters` 게이지로 실시간 모니터링 |
+| **N+1 최적화** | `getMyCoupons()` 쿼리 101→3건(97% 감소), 스냅샷 INSERT 1,000→1건. `@EntityGraph` + `default_batch_fetch_size=50` + 복합 인덱스 |
+| **Redis 원자성** | 로그인 Rate Limit INCR+EXPIRE 비원자 연산 → Lua 스크립트 원자화 — 앱 크래시 시 TTL 누락으로 계정이 영구 잠금되는 버그 수정 |
 | **쿠폰 동시성** | 한정 수량 쿠폰 차감 시 `PESSIMISTIC_WRITE` + TOCTOU 재검증 — 이중 사용 및 초과 발급 방지 |
+| **보안** | IDOR 소유권 검증 4개 엔드포인트, 가격 조작 방어(DB canonical price 강제), JWT `userId` 클레임으로 인증 DB round-trip 제거, Toss Webhook HMAC-SHA256 서명 검증 |
 | **ES 검색 + Fallback** | 상품 키워드·가격·카테고리 복합 검색(Elasticsearch), 장애 시 자동 MySQL fallback |
 | **Circuit Breaker** | TossPayments HTTP 호출 실패 누적 시 회로 차단 → 빠른 실패 응답 |
 | **배치 처리** | 쿠폰 만료 비활성화·일별 재고 스냅샷·일별 주문 통계 스케줄러 (`@Scheduled`, `@ConditionalOnProperty`, 멱등성 보장) |
-| **IDOR 방어** | 주문·결제·배송·환불 전 엔드포인트에 소유자 검증 (username + isAdmin 파라미터 패턴) |
-| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **580개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
+| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **601개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
+
+---
+
+## 기술적 개선 사항
+
+개발 중 발견한 버그·성능 문제·보안 취약점과 해결 과정을 정리한 문서입니다.
+
+→ **[docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md)**
+
+각 항목은 **문제 인식 → 해결 방법 → Trade-off → 결과** 순으로 기술하며,
+DAU 50,000명 / 피크 TPS 1,000 req/s / EC2 2대(ALB 뒤 독립 JVM) 규모를 가정한다.
+
+| # | 항목 | 핵심 |
+|---|---|---|
+| 1 | 재고 동시성 | 분산 락 + 비관적 락 2중 전략, overselling 0건 |
+| 2 | 결제 취소 TOCTOU | 비관적 락으로 이중 환불 경쟁 조건 제거 |
+| 3 | Redis Lua 원자성 | INCR+EXPIRE 원자화 → 영구 계정 잠금 버그 수정 |
+| 4 | 결제 트랜잭션 정합성 | REQUIRES_NEW → UnexpectedRollbackException + 결제 유실 버그 수정 |
+| 5 | 결제 멱등성 | 3중 방어 + Redis SPOF 대응 전략 |
+| 6 | Transactional Outbox | 이벤트 유실 0 보장 |
+| 7 | N+1 / 배치 최적화 | 쿼리 97% 감소, INSERT 99.9% 감소 |
+| 8 | 보안 취약점 | IDOR·가격 조작·JWT round-trip·Webhook 위조 |
 
 ---
 
@@ -71,7 +96,7 @@ docker compose -f docker/docker-compose.yml up -d mysql redis elasticsearch
 ./gradlew bootRun
 ```
 
-Flyway가 기동 시 V1~V21 마이그레이션을 자동 실행합니다.
+Flyway가 기동 시 V1~V24 마이그레이션을 자동 실행합니다.
 
 ### 환경 변수
 
@@ -113,7 +138,7 @@ Flyway가 기동 시 V1~V21 마이그레이션을 자동 실행합니다.
 | 통합 | `integration/` | Testcontainers (MySQL + Redis + ES), Flyway 실행, 실제 HTTP 흐름 E2E |
 | 동시성 | `integration/InventoryConcurrencyTest` | 동시 입고 lost update · 재고 예약 overselling 검증 |
 
-현재 총 **580개** 테스트 전체 통과.
+현재 총 **601개** 테스트 전체 통과.
 
 ---
 
@@ -152,6 +177,7 @@ com.stockmanagement/
 │   ├── user/            # 회원가입·로그인, ADMIN/USER 역할, Refresh Token
 │   │   └── address/     # 배송지 관리 (기본 배송지, 주문 연동)
 │   └── admin/           # 관리자 대시보드, 사용자 관리, 전체 주문 조회, 배치 통계 조회
+│       └── setting/     # 시스템 설정 (저재고 임계값 동적 관리)
 └── security/            # JwtTokenProvider, JwtAuthenticationFilter
 ```
 
@@ -352,6 +378,16 @@ erDiagram
         varchar reason
         varchar status "PENDING|COMPLETED|FAILED"
         datetime completed_at
+    }
+
+    %% ── SYSTEM ───────────────────────────────────────────
+    system_settings {
+        bigint id PK
+        varchar setting_key UK
+        varchar setting_value
+        varchar description
+        datetime updated_at
+        varchar updated_by
     }
 
     %% ── RELATIONSHIPS ────────────────────────────────────
@@ -700,6 +736,9 @@ available = onHand - reserved - allocated
 | V19 | `reviews`, `wishlist_items` — 리뷰 · 위시리스트 |
 | V20 | `user_points`, `point_transactions`, `orders.used_points` — 포인트 |
 | V21 | `refunds` — 환불 이력 |
+| V22 | `user_coupons` — 관리자 쿠폰 발급 이력 |
+| V23 | `orders` 복합 인덱스 추가 (성능) |
+| V24 | `system_settings` — 동적 시스템 설정 (저재고 임계값 등) |
 
 ---
 
@@ -861,6 +900,8 @@ ADMIN JWT 인증 필요.
 | GET | `/api/admin/products` | 전체 상품 목록 (ACTIVE + DISCONTINUED) |
 | GET | `/api/admin/stats/orders` | 기간별 일별 주문·매출 통계 (`?from=&to=`) |
 | GET | `/api/admin/stats/inventory` | 특정 날짜 전체 재고 스냅샷 (`?date=`) |
+| GET | `/api/admin/settings/low-stock-threshold` | 저재고 경보 임계값 조회 |
+| PUT | `/api/admin/settings/low-stock-threshold` | 저재고 경보 임계값 변경 |
 
 ---
 
