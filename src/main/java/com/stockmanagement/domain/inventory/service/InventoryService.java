@@ -199,8 +199,11 @@ public class InventoryService {
     public void releaseReservation(Long productId, int quantity) {
         Inventory inventory = findByProductIdWithLock(productId);
         if (inventory.getReserved() < quantity) {
-            log.warn("[Inventory] 예약 해제 수량이 현재 reserved보다 큽니다 (데이터 불일치): " +
-                    "productId={}, reserved={}, 요청={}", productId, inventory.getReserved(), quantity);
+            // 음수 reserved는 available 계산을 오염시켜 품절 상품이 주문 가능 상태로 노출됨
+            // 경고 후 진행하지 않고 즉시 예외를 던져 데이터 정합성 위반을 빠르게 감지한다
+            throw new BusinessException(ErrorCode.INVENTORY_STATE_INCONSISTENT,
+                    String.format("[Inventory] reserved 불일치: productId=%d, reserved=%d, 해제요청=%d",
+                            productId, inventory.getReserved(), quantity));
         }
         inventory.releaseReservation(quantity);
         recordTransaction(inventory, InventoryTransactionType.RELEASE_RESERVATION, quantity);
@@ -232,8 +235,9 @@ public class InventoryService {
     public void releaseAllocation(Long productId, int quantity) {
         Inventory inventory = findByProductIdWithLock(productId);
         if (inventory.getAllocated() < quantity) {
-            log.warn("[Inventory] 배분 해제 수량이 현재 allocated보다 큽니다 (데이터 불일치): " +
-                    "productId={}, allocated={}, 요청={}", productId, inventory.getAllocated(), quantity);
+            throw new BusinessException(ErrorCode.INVENTORY_STATE_INCONSISTENT,
+                    String.format("[Inventory] allocated 불일치: productId=%d, allocated=%d, 해제요청=%d",
+                            productId, inventory.getAllocated(), quantity));
         }
         inventory.releaseAllocation(quantity);
         recordTransaction(inventory, InventoryTransactionType.RELEASE_ALLOCATION, quantity);
