@@ -1,6 +1,8 @@
 package com.stockmanagement.domain.payment.service;
 
 import com.stockmanagement.common.event.PaymentConfirmedEvent;
+import com.stockmanagement.common.event.PointEarnEvent;
+import com.stockmanagement.common.event.ShipmentCreateEvent;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.outbox.OutboxEventStore;
@@ -13,8 +15,6 @@ import com.stockmanagement.domain.payment.entity.Payment;
 import com.stockmanagement.domain.payment.entity.PaymentStatus;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmResponse;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
-import com.stockmanagement.domain.point.service.PointService;
-import com.stockmanagement.domain.shipment.service.ShipmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -41,8 +41,6 @@ class PaymentTransactionHelper {
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
     private final OrderService orderService;
-    private final ShipmentService shipmentService;
-    private final PointService pointService;
     private final OutboxEventStore outboxEventStore;
 
     // ===== confirm 흐름 =====
@@ -167,13 +165,16 @@ class PaymentTransactionHelper {
      * 결제 승인 후 공통 후처리: 주문 확정, 배송 생성, 포인트 적립, 아웃박스 이벤트 저장.
      *
      * <p>applyConfirmResult()와 applyWebhookConfirmResult() 양쪽에서 재사용된다.
+     *
+     * <p>배송 생성·포인트 적립은 {@link com.stockmanagement.common.outbox.OutboxEventProcessor}가
+     * Outbox를 통해 최대 5회 재시도한다. 실패해도 결제 트랜잭션을 롤백하지 않는다.
      */
     private PaymentResponse doPostConfirmWork(Payment payment) {
         // 주문 확정: PENDING → CONFIRMED, 재고 reserved → allocated
         // 반환된 Order를 재사용하여 이후 orderRepository.findById() 중복 조회 제거
         // 극히 드문 경합: loadAndValidate(검증) → Toss HTTP 대기 → 만료 스케줄러가 취소
         // → 주문이 이미 CANCELLED인 케이스를 방어
-        Order confirmedOrder = null;
+        Order confirmedOrder;
         try {
             confirmedOrder = orderService.confirm(payment.getOrderId());
         } catch (BusinessException e) {
@@ -189,15 +190,10 @@ class PaymentTransactionHelper {
             }
         }
 
-        // 배송 레코드 자동 생성 — 실패해도 결제 트랜잭션을 롤백하지 않는다
-        try {
-            shipmentService.createForOrder(payment.getOrderId());
-        } catch (Exception e) {
-            log.warn("[Payment] 배송 레코드 생성 실패 (결제는 완료됨): orderId={}",
-                    payment.getOrderId(), e);
-        }
+        // 배송 레코드 생성 — Outbox로 위임하여 실패 시 릴레이 스케줄러가 최대 5회 재시도
+        outboxEventStore.save(new ShipmentCreateEvent(payment.getOrderId()));
 
-        // 포인트 적립 (실 결제금액의 1%) — confirm()이 반환한 Order 재사용, 추가 DB 조회 없음
+        // 포인트 적립 — Outbox로 위임하여 실패 시 릴레이 스케줄러가 최대 5회 재시도
         // BigDecimal 전체 연산 후 마지막에 longValue() 호출 —
         // 중간에 longValue()를 끼우면 소수점 버림이 먼저 발생해 포인트 누수 발생
         long paidAmount = confirmedOrder.getTotalAmount()
@@ -206,12 +202,8 @@ class PaymentTransactionHelper {
                 .max(BigDecimal.ZERO)
                 .longValue();
         if (paidAmount > 0) {
-            try {
-                pointService.earn(confirmedOrder.getUserId(), paidAmount, confirmedOrder.getId());
-            } catch (Exception e) {
-                log.warn("[Payment] 포인트 적립 실패 (결제는 완료됨): orderId={}",
-                        confirmedOrder.getId(), e);
-            }
+            outboxEventStore.save(new PointEarnEvent(
+                    confirmedOrder.getUserId(), paidAmount, confirmedOrder.getId()));
         }
 
         outboxEventStore.save(new PaymentConfirmedEvent(
