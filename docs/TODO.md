@@ -103,43 +103,19 @@
 
 ---
 
-## 🟡 기술 부채 — 장기 관리
+## ✅ 기술 부채 완료 (7/8)
 
-### 21. 동시성 통합 테스트 부재
+| # | 항목 | 파일 | 조치 |
+|---|------|------|------|
+| 21 | 동시성 통합 테스트 부재 | `ConcurrencyIntegrationTest`, `InventoryConcurrencyTest` | 이미 구현 완료 (ExecutorService + CountDownLatch, reserve() 재고 불변 조건 검증) |
+| 22 | Pitest targetClasses 제한적 | `build.gradle` | 6개 → 15개로 확장 (shipment·product·review·wishlist·category·user·address·cart 추가) |
+| 23 | 전체 Refresh Token 무효화 불가 | `RefreshTokenStore`, `UserService` | 이미 구현 완료 (`revokeAll()` + 비밀번호 변경 시 자동 호출) |
+| 24 | 쿠폰 코드 엔트로피 검증 없음 | `CouponCreateRequest` | 이미 구현 완료 (`@Pattern` 영문+숫자 혼합 8자 이상 강제) |
+| 26 | Dockerfile HEALTHCHECK 미정의 | `Dockerfile` | 이미 구현 완료 (`--interval=30s --retries=3`) |
+| 27 | `storage.enabled` 문서화 누락 | `application.properties` | 이미 구현 완료 (`storage.enabled=false` + 주석) |
+| 28 | Payment 도메인 주석 언어 불일치 | `PaymentService`, `PaymentTransactionHelper` | 영어 inline 주석·Javadoc·log 메시지 → 한국어(키워드 영문) 통일 |
 
-**문제**: k6는 외부 도구로 JVM 레벨 검증 불가. `ExecutorService` + `CountDownLatch`로 동시 `reserve()` 호출 시 재고 초과 없음을 검증하는 통합 테스트 없음.
-
-**개선**: 동일 상품에 N 스레드 동시 예약 → 재고 이하 성공 / 초과분 실패 검증 테스트 추가.
-
----
-
-### 22. 뮤테이션 테스트 미도입
-
-**문제**: JaCoCo 라인 커버리지는 코드 실행 여부만 측정. `<` → `<=` 변경해도 커버리지 동일. Pitest 설정은 있으나 targetClasses가 6개로 제한적.
-
-**개선**: 재고·결제·쿠폰 핵심 비즈니스 로직으로 mutation score 목표 범위 확대.
-
----
-
-### 23. 특정 사용자 전체 Refresh Token 무효화 불가
-
-**위치**: `common/security/RefreshTokenStore.java`
-
-**문제**: 로그아웃 시 해당 세션 토큰만 revoke. 계정 탈취·비밀번호 변경 시 모든 기기 Refresh Token 일괄 무효화 불가.
-
-**개선**: Redis `refresh:user:{userId}` Set으로 전체 토큰 ID 관리. 비밀번호 변경·계정 잠금 시 Set 전체 삭제.
-
----
-
-### 24. 쿠폰 코드 엔트로피 검증 없음
-
-**위치**: `domain/coupon/service/CouponService.java`
-
-**문제**: 쿠폰 코드 길이·형식 서버 사이드 검증 없음. 단순 코드(`"A"`) 생성 시 무차별 대입으로 쿠폰 탈취 가능.
-
-**개선**: 최소 8자, 영문+숫자 혼합 `@Pattern` 검증 + 랜덤 코드 자동 생성 유틸리티.
-
----
+## 🟡 미처리 기술 부채 (1/8)
 
 ### 25. API 버전 관리 부재
 
@@ -148,34 +124,6 @@
 **문제**: 버전 prefix 없이 `/api/` 직접 사용. 응답 스키마 변경 시 하위 호환성 관리 불가.
 
 **개선**: `/api/v1/` prefix 도입.
-
----
-
-### 26. Dockerfile HEALTHCHECK 미정의
-
-**문제**: `HEALTHCHECK` 없어 컨테이너 오케스트레이터가 앱 준비 상태를 알 수 없음.
-
-**개선**: `HEALTHCHECK --interval=30s CMD wget -qO- http://localhost:8080/actuator/health || exit 1`
-
----
-
-### 27. `storage.enabled` 프로퍼티 문서화 누락
-
-**위치**: `application.properties`
-
-**문제**: `@ConditionalOnProperty(name = "storage.enabled")`에 대응하는 기본값이 `application.properties`에 없어 배포 시 누락 가능.
-
-**개선**: `application.properties`에 `storage.enabled=false` + 주석 추가.
-
----
-
-### 28. 주석 언어 불일치
-
-**위치**: `PaymentService.java`, `PaymentTransactionHelper.java`
-
-**문제**: `OrderService`·`InventoryService`는 한국어 주석, Payment 도메인은 영어 Javadoc. 팀 컨벤션 미통일.
-
-**개선**: 전체 한국어(키워드 영문) 통일.
 
 ---
 
