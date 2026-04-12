@@ -46,16 +46,20 @@ public class OrderExpiryScheduler {
         log.info("만료 주문 자동 취소 시작 — 대상: {}건 (기준: {}분 초과)", expiredIds.size(), expiryMinutes);
 
         int cancelled = 0;
+        int failed = 0;
         for (Long orderId : expiredIds) {
             try {
-                orderService.cancel(orderId, null, true); // 시스템 자동 취소 — ADMIN bypass, userId 불필요
+                // cancelBySystem: userId null 없이 Order에서 직접 조회, NPE 위험 없음
+                orderService.cancelBySystem(orderId);
                 cancelled++;
                 log.debug("주문 {} 자동 취소 완료", orderId);
             } catch (Exception e) {
-                log.warn("주문 {} 자동 취소 실패", orderId, e);
+                failed++;
+                log.error("주문 {} 자동 취소 실패 — 수동 확인 필요", orderId, e);
             }
         }
 
-        log.info("만료 주문 자동 취소 완료 — 성공: {}건 / 전체: {}건", cancelled, expiredIds.size());
+        log.info("만료 주문 자동 취소 완료 — 성공: {}건 / 실패: {}건 / 전체: {}건",
+                cancelled, failed, expiredIds.size());
     }
 }

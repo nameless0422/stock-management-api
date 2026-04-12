@@ -22,6 +22,19 @@ public class OrderSpecification {
      * 모든 조건은 선택적이며, null인 경우 해당 조건은 적용되지 않는다.
      */
     public static Specification<Order> of(OrderSearchRequest request) {
+        return of(request, null);
+    }
+
+    /**
+     * 검색 요청 + 강제 userId 적용 Specification을 생성한다.
+     *
+     * <p>USER 권한에서는 {@code forceUserId}로 본인 ID를 주입하여 타인 주문 조회를 차단한다.
+     * 요청 DTO 자체를 변경하지 않으므로 멀티스레드 환경에서도 안전하다.
+     *
+     * @param request     클라이언트 검색 조건 (status, startDate, endDate 등)
+     * @param forceUserId null이면 request.userId 사용, non-null이면 강제 덮어쓰기
+     */
+    public static Specification<Order> of(OrderSearchRequest request, Long forceUserId) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -30,9 +43,10 @@ public class OrderSpecification {
                 predicates.add(cb.equal(root.get("status"), request.getStatus()));
             }
 
-            // 사용자 ID 필터
-            if (request.getUserId() != null) {
-                predicates.add(cb.equal(root.get("userId"), request.getUserId()));
+            // 사용자 ID 필터 — USER 권한은 forceUserId로 강제 적용 (DTO 변경 없음)
+            Long effectiveUserId = forceUserId != null ? forceUserId : request.getUserId();
+            if (effectiveUserId != null) {
+                predicates.add(cb.equal(root.get("userId"), effectiveUserId));
             }
 
             // 주문 생성일 시작 (해당 날짜 00:00:00 이후)

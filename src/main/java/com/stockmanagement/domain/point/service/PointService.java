@@ -65,6 +65,25 @@ public class PointService {
     // ===== 변경 =====
 
     /**
+     * 포인트 잔액이 충분한지 사전 검증한다.
+     *
+     * <p>주문 생성 시 재고 예약·쿠폰 적용 등 뮤테이션 전에 호출하여,
+     * 포인트 부족으로 인한 불필요한 롤백을 방지한다.
+     * 잔액과 요청 사이 경합이 있을 수 있으므로 실제 차감은 {@link #use}에서 한 번 더 검증한다.
+     *
+     * @throws BusinessException 잔액 부족 시 {@code INSUFFICIENT_POINTS}
+     */
+    @Transactional(readOnly = true)
+    public void validateBalance(Long userId, long requiredPoints) {
+        long balance = userPointRepository.findByUserId(userId)
+                .map(UserPoint::getBalance)
+                .orElse(0L);
+        if (balance < requiredPoints) {
+            throw new BusinessException(ErrorCode.INSUFFICIENT_POINTS);
+        }
+    }
+
+    /**
      * 결제 완료 시 포인트를 적립한다 (결제금액의 1%).
      *
      * <p>{@code REQUIRES_NEW}: 결제 확정 트랜잭션과 독립적으로 커밋/롤백된다.
