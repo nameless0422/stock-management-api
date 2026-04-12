@@ -80,23 +80,23 @@ public class PaymentService {
             throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
         }
 
-        // Only PENDING orders can initiate a new payment
+        // PENDING 주문만 결제 세션을 시작할 수 있다
         if (order.getStatus() != OrderStatus.PENDING) {
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
         }
 
-        // Server-side amount validation to prevent client-side manipulation
+        // 클라이언트 제출 금액을 서버 저장 금액과 비교 — 클라이언트 조작 방지
         if (order.getTotalAmount().compareTo(request.getAmount()) != 0) {
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
         }
 
-        // Idempotency: return existing PENDING payment if already prepared
+        // 멱등성: 이미 PENDING 결제가 존재하면 기존 결제 반환
         Optional<Payment> existing = paymentRepository.findByOrderId(order.getId());
         if (existing.isPresent() && existing.get().getStatus() == PaymentStatus.PENDING) {
             return buildPrepareResponse(existing.get(), order);
         }
 
-        // Generate a unique tossOrderId for this payment attempt
+        // 이번 결제 시도용 고유 tossOrderId 생성
         String tossOrderId = buildTossOrderId(order.getId());
 
         Payment payment = Payment.builder()
@@ -110,9 +110,9 @@ public class PaymentService {
     }
 
     /**
-     * Confirms the payment with TossPayments and updates internal state.
+     * TossPayments에 결제를 확정하고 내부 상태를 갱신한다.
      *
-     * <p>Steps:
+     * <p>처리 흐름:
      * <ol>
      *   <li>Redis 완료 캐시 확인 → 있으면 즉시 반환 (idempotency)
      *   <li>Redis SETNX로 PROCESSING 상태 선점 → 실패 시 처리 중 예외
@@ -171,9 +171,9 @@ public class PaymentService {
     }
 
     /**
-     * Cancels a payment and processes a full or partial refund.
+     * 결제를 취소하고 전액 또는 부분 환불을 처리한다.
      *
-     * <p>Steps:
+     * <p>처리 흐름:
      * <ol>
      *   <li>Redis 완료 캐시 확인 → 있으면 즉시 반환 (idempotency)
      *   <li>Redis SETNX로 PROCESSING 상태 선점 → 실패 시 처리 중 예외

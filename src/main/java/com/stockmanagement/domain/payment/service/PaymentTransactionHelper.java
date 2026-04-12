@@ -116,7 +116,7 @@ class PaymentTransactionHelper {
                 failureMessage = tossResponse.getFailure().getMessage();
             }
             payment.fail(failureCode, failureMessage);
-            log.warn("Payment failed: tossOrderId={}, code={}, message={}",
+            log.warn("[Payment] 결제 승인 실패: tossOrderId={}, code={}, message={}",
                     tossOrderId, failureCode, failureMessage);
             throw new BusinessException(ErrorCode.TOSS_PAYMENTS_ERROR,
                     failureMessage != null ? failureMessage : "결제 승인 실패");
@@ -209,7 +209,7 @@ class PaymentTransactionHelper {
         outboxEventStore.save(new PaymentConfirmedEvent(
                 payment.getId(), payment.getOrderId(), payment.getAmount()));
 
-        log.info("Payment confirmed: paymentKey={}, orderId={}, amount={}",
+        log.info("[Payment] 결제 확정 완료: paymentKey={}, orderId={}, amount={}",
                 payment.getPaymentKey(), payment.getOrderId(), payment.getAmount());
         return PaymentResponse.from(payment);
     }
@@ -275,7 +275,7 @@ class PaymentTransactionHelper {
         payment.cancel(cancelReason);
         orderService.refund(payment.getOrderId());
 
-        log.info("Payment cancelled: paymentKey={}, orderId={}, reason={}",
+        log.info("[Payment] 결제 취소 완료: paymentKey={}, orderId={}, reason={}",
                 paymentKey, payment.getOrderId(), cancelReason);
         return PaymentResponse.from(payment);
     }
