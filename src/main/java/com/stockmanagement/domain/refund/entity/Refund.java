@@ -26,6 +26,10 @@ public class Refund {
     @Column(name = "order_id", nullable = false, updatable = false)
     private Long orderId;
 
+    /** 소유권 검증 시 orders 테이블 추가 조회를 피하기 위한 비정규화 필드. */
+    @Column(name = "user_id", nullable = false, updatable = false)
+    private Long userId;
+
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
@@ -44,9 +48,10 @@ public class Refund {
     private LocalDateTime completedAt;
 
     @Builder
-    private Refund(Long paymentId, Long orderId, BigDecimal amount, String reason) {
+    private Refund(Long paymentId, Long orderId, Long userId, BigDecimal amount, String reason) {
         this.paymentId = paymentId;
         this.orderId = orderId;
+        this.userId = userId;
         this.amount = amount;
         this.reason = reason;
         this.status = RefundStatus.PENDING;

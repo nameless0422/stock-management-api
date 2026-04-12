@@ -57,10 +57,11 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
     }
 
     /** COMPLETED 환불 레코드를 DB에 직접 저장하고 반환한다. */
-    private Refund createCompletedRefund(long paymentId, long orderId) {
+    private Refund createCompletedRefund(long paymentId, long orderId, long userId) {
         Refund refund = Refund.builder()
                 .paymentId(paymentId)
                 .orderId(orderId)
+                .userId(userId)
                 .amount(BigDecimal.valueOf(20000))
                 .reason("단순 변심")
                 .build();
@@ -78,7 +79,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
 
         long orderId = createConfirmedOrder(userId);
         Payment payment = createDonePayment(orderId);
-        Refund refund = createCompletedRefund(payment.getId(), orderId);
+        Refund refund = createCompletedRefund(payment.getId(), orderId, userId);
 
         mockMvc.perform(get("/api/refunds/" + refund.getId())
                         .header("Authorization", "Bearer " + userToken))
@@ -106,7 +107,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
 
         long orderId = createConfirmedOrder(userId);
         Payment payment = createDonePayment(orderId);
-        createCompletedRefund(payment.getId(), orderId);
+        createCompletedRefund(payment.getId(), orderId, userId);
 
         mockMvc.perform(get("/api/refunds/payments/" + payment.getId())
                         .header("Authorization", "Bearer " + userToken))
@@ -124,7 +125,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
         long orderId = createConfirmedOrder(userId);
         Payment payment = createDonePayment(orderId);
         // 이미 환불 레코드가 존재하는 상태
-        createCompletedRefund(payment.getId(), orderId);
+        createCompletedRefund(payment.getId(), orderId, userId);
 
         // 동일 paymentId로 환불 재요청 → 409
         mockMvc.perform(post("/api/refunds")
