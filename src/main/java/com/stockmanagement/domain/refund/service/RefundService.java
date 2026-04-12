@@ -19,7 +19,6 @@ import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -90,6 +89,7 @@ public class RefundService {
                 .orElseGet(() -> refundRepository.save(Refund.builder()
                         .paymentId(payment.getId())
                         .orderId(payment.getOrderId())
+                        .userId(user.getId())
                         .amount(payment.getAmount())
                         .reason(request.getReason())
                         .build()));
@@ -132,12 +132,12 @@ public class RefundService {
     /**
      * 환불 소유권을 검증한다.
      * ADMIN은 모든 환불에 접근 가능하며, USER는 본인 주문의 환불만 조회할 수 있다.
+     *
+     * <p>Refund.userId(비정규화)를 사용하여 orders 테이블 추가 조회를 제거한다.
      */
     private void validateOwnership(Refund refund, User user, boolean isAdmin) {
         if (isAdmin) return;
-        Order order = orderRepository.findById(refund.getOrderId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        if (!order.getUserId().equals(user.getId())) {
+        if (!refund.getUserId().equals(user.getId())) {
             throw new BusinessException(ErrorCode.REFUND_ACCESS_DENIED);
         }
     }
