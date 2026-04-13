@@ -99,6 +99,9 @@ TossPayments 웹훅 수신. **인증 불필요** (Public 엔드포인트).
 `Toss-Signature` 헤더 HMAC-SHA256 서명 검증 후 처리.
 TossPayments는 10초 내 2xx 응답이 없으면 최대 7회 재전송.
 
+처리 이벤트:
+- **가상계좌 입금 완료** (`method=가상계좌`, `status=DONE`): `applyWebhookConfirmResult()` 호출 → 주문 CONFIRMED + 배송 PREPARING 생성 + 포인트 적립 (일반 confirm 흐름 재사용)
+
 ---
 
 ## 핵심 설계 결정사항
@@ -143,8 +146,31 @@ TossPayments 규격: 영문/숫자/`-`/`_`, 6~64자.
 Spring 6.1+ `RestClient` 사용. `SimpleClientHttpRequestFactory`로 connect/read timeout 설정 (application.properties `toss.connect-timeout-ms`, `toss.read-timeout-ms`).
 `TossPaymentsConfig`에서 Base64 인코딩된 `secretKey`를 `Authorization: Basic` 헤더에 주입.
 
-### 8. Shipment 자동 생성
-`confirm()` 성공 시 `ShipmentService.createForOrder()` 호출 → Shipment PREPARING 상태로 자동 생성.
+### 8. Shipment·포인트 자동 처리 — `REQUIRES_NEW`
+
+`confirm()` 성공 시:
+- `ShipmentService.createForOrder()` — `Propagation.REQUIRES_NEW`로 독립 트랜잭션
+- `PointService.earn()` — `Propagation.REQUIRES_NEW`로 독립 트랜잭션
+
+두 메서드가 `REQUIRED`이면 예외 발생 시 `applyConfirmResult()` 내부의 try-catch가 `UnexpectedRollbackException`을 유발 (Spring이 공유 트랜잭션을 rollback-only 표시). 결제는 Toss에서 완료됐지만 DB는 PENDING 상태로 남는 치명적 불일치 발생 → `REQUIRES_NEW`로 분리.
+
+### 9. 가상계좌 Webhook 흐름
+
+가상계좌(virtual account) 결제는 confirm API로 바로 DONE이 되지 않고, 사용자 입금 후 Toss가 Webhook으로 통보한다.
+
+```
+[Toss] POST /api/payments/webhook  { eventType: "DEPOSIT_CALLBACK", ... , status: "DONE" }
+          │
+          ▼
+  applyWebhookConfirmResult(tossOrderId, paymentKey)
+          │
+          ├── Payment: PENDING → DONE
+          ├── Order:   PENDING → CONFIRMED  (reserved → allocated)
+          ├── Shipment: PREPARING 자동 생성  (REQUIRES_NEW)
+          └── PointService.earn()            (REQUIRES_NEW)
+```
+
+`doPostConfirmWork(payment)` private 메서드로 confirm/webhook 공통 후처리 추출.
 
 ---
 

@@ -94,6 +94,26 @@ Authorization: Bearer <accessToken>
 { "id": 1, "username": "user1", "email": "user1@example.com", "role": "USER" }
 ```
 
+### `PATCH /api/users/me`
+
+> 권한: USER | 이메일 수정. 중복 이메일이면 409
+
+```json
+{ "email": "new@example.com" }
+```
+
+### `PATCH /api/users/me/password`
+
+> 권한: USER | 현재 비밀번호 확인 후 변경. 성공 시 Refresh Token 일괄 폐기 (204 No Content)
+
+```json
+{ "currentPassword": "OldPass1!", "newPassword": "NewPass1!" }
+```
+
+### `GET /api/users/me/orders`
+
+> 권한: USER | 내 주문 목록 (최신순, 기본 20건 페이징)
+
 ### `DELETE /api/users/me`
 
 > 권한: USER | Soft Delete (`deleted_at` 설정) + 해당 사용자 Refresh Token 일괄 폐기
@@ -142,9 +162,15 @@ Authorization: Bearer <accessToken>
 
 ## 카테고리
 
+> Redis 캐시 적용 (30분 TTL). 생성·수정·삭제 시 자동 evict.
+
 ### `GET /api/categories`
 
-> 권한: 공개 | parent-child 2단계 트리 in-memory 조립 후 반환
+> 권한: 공개 | flat 목록 (children 빈 리스트). 캐시키: `categories::list`
+
+### `GET /api/categories/tree`
+
+> 권한: 공개 | parent-child 2단계 트리 in-memory 조립. 캐시키: `categories::tree`
 
 ```json
 // 응답 예시
@@ -156,12 +182,24 @@ Authorization: Bearer <accessToken>
 ]
 ```
 
+### `GET /api/categories/{id}`
+
+> 권한: 공개 | 단건 조회. children(하위 카테고리) 포함
+
 ### `POST /api/categories`
 
 > 권한: ADMIN
 
 ```json
 { "name": "노트북", "parentId": 1 }   // parentId null이면 최상위
+```
+
+### `PUT /api/categories/{id}`
+
+> 권한: ADMIN | 이름·설명·부모 카테고리 수정
+
+```json
+{ "name": "노트북 PC", "description": "휴대용 개인 컴퓨터", "parentId": 1 }
 ```
 
 ### `DELETE /api/categories/{id}`
@@ -369,9 +407,36 @@ Authorization: Bearer <accessToken>
 | `FIXED_AMOUNT` | `min(discountValue, orderAmount)` |
 | `PERCENTAGE` | `min(orderAmount × rate / 100, maxDiscountAmount)` |
 
+- `isPublic = true`: 코드를 아는 누구나 claim 가능한 공개 프로모 코드
+- `isPublic = false` (기본값): ADMIN이 특정 사용자에게 직접 발급해야 함
+
+### `GET /api/coupons`
+
+> 권한: ADMIN | 쿠폰 목록 (페이징)
+
+### `GET /api/coupons/{id}`
+
+> 권한: ADMIN | 쿠폰 단건 조회
+
+### `PATCH /api/coupons/{id}/deactivate`
+
+> 권한: ADMIN | 쿠폰 비활성화 (`active = false`). 이미 발급된 쿠폰은 사용 불가 처리
+
+### `POST /api/coupons/{id}/issue`
+
+> 권한: ADMIN | 특정 사용자에게 쿠폰 직접 발급 (`isPublic = false` 쿠폰 배포 시 사용)
+
+```json
+{ "userId": 42 }
+```
+
+### `GET /api/coupons/my`
+
+> 권한: USER | 내 지갑의 쿠폰 목록 + 각 쿠폰별 사용 횟수 포함
+
 ### `POST /api/coupons/claim`
 
-> 권한: USER | `isPublic = true` 쿠폰만 발급 가능. 중복 발급 불가
+> 권한: USER | `isPublic = true` 쿠폰만 등록 가능. 중복 등록 불가
 
 ```json
 { "couponCode": "SUMMER20" }
@@ -427,9 +492,19 @@ Authorization: Bearer <accessToken>
 3. Order `CANCELLED`, allocated 해제
 4. 쿠폰 반환 + 포인트 반환 + 적립 포인트 회수
 
+### `GET /api/payments/order/{orderId}`
+
+> 권한: USER | 주문 ID로 결제 조회. 결제 전이면 `data: null` 반환
+
+### `GET /api/payments/{paymentKey}`
+
+> 권한: USER | 결제 단건 조회
+
 ### `POST /api/payments/webhook`
 
 > 권한: 공개 | `Toss-Signature` 헤더 HMAC-SHA256 검증 후 처리
+>
+> 가상계좌 결제 DONE 이벤트 처리: 주문 CONFIRMED, 배송 PREPARING 자동 생성, 포인트 적립
 
 ---
 

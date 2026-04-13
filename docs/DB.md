@@ -1,6 +1,6 @@
 # DB 스키마
 
-MySQL 8, Flyway 마이그레이션 (V1~V15), ENGINE=InnoDB, CHARSET=utf8mb4
+MySQL 8, Flyway 마이그레이션 (V1~V28), ENGINE=InnoDB, CHARSET=utf8mb4
 
 ---
 
@@ -23,6 +23,19 @@ MySQL 8, Flyway 마이그레이션 (V1~V15), ENGINE=InnoDB, CHARSET=utf8mb4
 | V13 | `coupons`, `coupon_usages` + `orders.coupon_id/discount_amount` | 쿠폰 |
 | V14 | `categories` + `products.category_id` FK (category VARCHAR 제거) | 카테고리 분리 |
 | V15 | `daily_order_stats`, `daily_inventory_snapshots` | 배치 집계 테이블 |
+| V16 | `users.deleted_at` 컬럼 추가 | 회원 Soft Delete |
+| V17 | `product_images` + `products.thumbnail_url` 컬럼 추가 | 상품 이미지 (MinIO Presigned URL) |
+| V18 | `outbox_events` | Transactional Outbox — 이벤트 유실 방지 |
+| V19 | `reviews`, `wishlist_items` | 리뷰(실구매자 한정) + 위시리스트 |
+| V20 | `user_points`, `point_transactions` + `orders.used_points` 컬럼 추가 | 포인트/적립금 시스템 |
+| V21 | `refunds` | 환불 이력 |
+| V22 | `user_coupons` | 사용자별 쿠폰 발급 이력 |
+| V23 | `orders` 인덱스 추가 | `idx_orders_user_id`, `idx_orders_status`, `idx_orders_user_status` |
+| V24 | `system_settings` | 런타임 변경 가능한 시스템 설정 (저재고 임계값 등) |
+| V25 | `inventory_transactions` 복합 인덱스 추가 | `(inventory_id, created_at)` — filesort 제거 |
+| V26 | `coupons.is_public` 컬럼 추가 | 공개 쿠폰 여부 (누구나 claim 가능) |
+| V27 | `orders.created_at` 인덱스, `point_transactions` 복합 인덱스 추가 | 통계 집계 / 환불 조회 최적화 |
+| V28 | `refunds.user_id` 컬럼 추가 | 소유권 검증 시 orders 추가 조회 제거 (비정규화) |
 
 ---
 
@@ -32,17 +45,27 @@ MySQL 8, Flyway 마이그레이션 (V1~V15), ENGINE=InnoDB, CHARSET=utf8mb4
 categories ──────────────┐
                          ▼
 users ──────────── orders ──────── order_items ──── products
-  │                  │   │                             │ 1
-  │                  │   └── coupon_id → coupons       │
-  │                  │   └── delivery_address_id ──┐   │
-  │                  │                             │ inventory
-  │                  ├── order_status_history       │       │
-  │                  ├── payments                  delivery  inventory_transactions
-  │                  └── shipments                 _addresses
-  │
+  │                  │   │                         │     │
+  │                  │   └── coupon_id → coupons   │  inventory
+  │                  │   └── delivery_address_id ─┐│       │
+  │                  │                            ││  inventory_transactions
+  │                  ├── order_status_history      │delivery_addresses
+  │                  ├── payments ──── refunds     │
+  │                  └── shipments                 │
+  │                                               (ON DELETE SET NULL)
   ├── cart_items → products
   ├── delivery_addresses
-  └── coupon_usages → coupons
+  ├── coupon_usages → coupons
+  ├── user_coupons → coupons
+  ├── user_points
+  ├── point_transactions
+  ├── reviews → products
+  └── wishlist_items → products
+
+이벤트 / 설정:
+  outbox_events      (Transactional Outbox 발행 큐)
+  system_settings    (런타임 설정, PK: setting_key)
+  product_images     (MinIO 오브젝트 메타데이터, product FK)
 
 배치 집계:
   daily_order_stats         (일별 주문·매출)
@@ -53,7 +76,7 @@ users ──────────── orders ──────── order
 
 ## 테이블 상세
 
-### products (V1, V14에서 category 컬럼 제거 + category_id 추가)
+### products (V1, V14에서 category_id 추가, V17에서 thumbnail_url 추가)
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
@@ -64,6 +87,7 @@ users ──────────── orders ──────── order
 | sku | VARCHAR(100) | NOT NULL, **UNIQUE** | 재고 관리 코드 |
 | category_id | BIGINT | NULL, FK→categories (ON DELETE SET NULL) | V14에서 추가 |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'ACTIVE' | `ACTIVE` / `INACTIVE` / `DISCONTINUED` |
+| thumbnail_url | VARCHAR(500) | NULL | V17에서 추가. 대표 이미지 URL |
 | created_at | DATETIME(6) | NOT NULL | |
 | updated_at | DATETIME(6) | NOT NULL | |
 
@@ -88,20 +112,23 @@ users ──────────── orders ──────── order
 
 ---
 
-### orders (V3, V5·V12·V13에서 컬럼 추가)
+### orders (V3, V5·V12·V13·V20에서 컬럼 추가)
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
 | id | BIGINT | PK, AUTO_INCREMENT | |
-| user_id | BIGINT | NOT NULL, FK→users | V5에서 추가 |
-| status | VARCHAR(20) | NOT NULL, DEFAULT 'PENDING' | `PENDING` / `CONFIRMED` / `CANCELLED` |
+| user_id | BIGINT | NOT NULL, FK→users, INDEX(V23) | V5에서 추가 |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'PENDING', INDEX(V23) | `PENDING` / `CONFIRMED` / `CANCELLED` |
 | total_amount | DECIMAL(12,2) | NOT NULL | 주문 항목 합계 |
 | idempotency_key | VARCHAR(100) | NOT NULL, **UNIQUE** | 클라이언트 발급 UUID |
 | delivery_address_id | BIGINT | NULL, FK→delivery_addresses (ON DELETE SET NULL) | V12에서 추가 |
 | coupon_id | BIGINT | NULL, FK→coupons (ON DELETE SET NULL) | V13에서 추가 |
 | discount_amount | DECIMAL(19,2) | NOT NULL, DEFAULT 0 | V13에서 추가. 쿠폰 할인 금액 |
-| created_at | DATETIME(6) | NOT NULL | |
+| used_points | BIGINT | NOT NULL, DEFAULT 0 | V20에서 추가. 주문 시 사용 포인트 |
+| created_at | DATETIME(6) | NOT NULL, INDEX(V27) | |
 | updated_at | DATETIME(6) | NOT NULL | |
+
+> 복합 인덱스: `(user_id, status)` — V23 추가
 
 ---
 
@@ -140,7 +167,7 @@ users ──────────── orders ──────── order
 
 ---
 
-### users (V5)
+### users (V5, V16에서 deleted_at 추가)
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
@@ -151,6 +178,7 @@ users ──────────── orders ──────── order
 | role | VARCHAR(20) | NOT NULL, DEFAULT 'USER' | `USER` / `ADMIN` |
 | created_at | DATETIME(6) | NOT NULL | |
 | updated_at | DATETIME(6) | NOT NULL | |
+| deleted_at | DATETIME(6) | NULL | V16에서 추가. NOT NULL이면 탈퇴 계정 (`@SQLRestriction` 자동 필터링) |
 
 ---
 
@@ -233,7 +261,7 @@ users ──────────── orders ──────── order
 
 ---
 
-### coupons (V13)
+### coupons (V13, V26에서 is_public 추가)
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
@@ -251,6 +279,7 @@ users ──────────── orders ──────── order
 | valid_from | DATETIME(6) | NOT NULL | 유효 시작일 |
 | valid_until | DATETIME(6) | NOT NULL | 유효 종료일 |
 | active | TINYINT(1) | NOT NULL, DEFAULT 1 | 활성화 여부 |
+| is_public | TINYINT(1) | NOT NULL, DEFAULT 0 | V26에서 추가. 1이면 누구나 claim 가능한 공개 프로모 쿠폰 |
 | created_at | DATETIME(6) | NOT NULL | |
 | updated_at | DATETIME(6) | NOT NULL | |
 
@@ -268,6 +297,148 @@ users ──────────── orders ──────── order
 | used_at | DATETIME(6) | NOT NULL | |
 
 > INDEX: `(coupon_id, user_id)`
+
+---
+
+### product_images (V17)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| product_id | BIGINT | NOT NULL, FK→products (ON DELETE CASCADE) | |
+| image_url | VARCHAR(500) | NOT NULL | 접근 URL |
+| object_key | VARCHAR(500) | NOT NULL | MinIO(S3) 오브젝트 키 (삭제 시 사용) |
+| image_type | VARCHAR(20) | NOT NULL | `THUMBNAIL` / `GALLERY` 등 |
+| display_order | INT | NOT NULL, DEFAULT 0 | 이미지 노출 순서 |
+| created_at | DATETIME(6) | NOT NULL | |
+
+---
+
+### outbox_events (V18)
+
+> Transactional Outbox 패턴: 비즈니스 TX와 동일 TX에 저장 → `OutboxEventRelayScheduler`(5초 폴링)가 이벤트 발행
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| event_type | VARCHAR(50) | NOT NULL | 이벤트 종류 (`OutboxEventType` enum) |
+| payload | TEXT | NOT NULL | 이벤트 데이터 (JSON) |
+| created_at | DATETIME(6) | NOT NULL | |
+| published_at | DATETIME(6) | NULL | NULL = 미발행 |
+| retry_count | INT | NOT NULL, DEFAULT 0 | 재시도 횟수 |
+| failed_at | DATETIME(6) | NULL | 최근 발행 실패 시각 |
+
+> INDEX: `(published_at, retry_count, created_at)` — 미발행 이벤트 폴링
+
+---
+
+### reviews (V19)
+
+> 실구매자(status=CONFIRMED 주문 보유)만 작성 가능. 상품당 1인 1리뷰
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| product_id | BIGINT | NOT NULL, FK→products (ON DELETE CASCADE) | |
+| user_id | BIGINT | NOT NULL, FK→users | |
+| rating | TINYINT | NOT NULL | 별점 1~5 |
+| title | VARCHAR(100) | NOT NULL | 리뷰 제목 |
+| content | TEXT | NOT NULL | 리뷰 본문 |
+| created_at | DATETIME(6) | NOT NULL | |
+| updated_at | DATETIME(6) | NOT NULL | |
+
+> UK: `(product_id, user_id)` — 1인 1리뷰 제약
+
+---
+
+### wishlist_items (V19)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| user_id | BIGINT | NOT NULL, FK→users | |
+| product_id | BIGINT | NOT NULL, FK→products (ON DELETE CASCADE) | |
+| created_at | DATETIME(6) | NOT NULL | |
+
+> UK: `(user_id, product_id)` — 중복 저장 방지
+
+---
+
+### user_points (V20)
+
+> 사용자별 포인트 잔액 단일 행. 동시성 제어: 비관적 락(SELECT FOR UPDATE)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| user_id | BIGINT | NOT NULL, **UNIQUE**, FK→users | |
+| balance | BIGINT | NOT NULL, DEFAULT 0 | 현재 포인트 잔액 |
+| updated_at | DATETIME(6) | NOT NULL | |
+
+---
+
+### point_transactions (V20)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| user_id | BIGINT | NOT NULL, FK→users | |
+| amount | BIGINT | NOT NULL | 변동 금액 (양수=적립/환불, 음수=사용/소멸) |
+| type | VARCHAR(20) | NOT NULL | `EARN` / `USE` / `REFUND` / `EXPIRE` |
+| description | VARCHAR(200) | NOT NULL | 변동 사유 |
+| order_id | BIGINT | NULL | 연관 주문 ID |
+| created_at | DATETIME(6) | NOT NULL | |
+
+> 복합 인덱스: `(user_id, order_id)` — V27 추가. 환불 시 주문별 포인트 내역 조회
+
+---
+
+### refunds (V21, V28에서 user_id 추가)
+
+> 결제당 1건 환불. 실패(FAILED) 상태이면 `reset()` 후 재시도 가능
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| payment_id | BIGINT | NOT NULL, **UNIQUE**, FK→payments | 결제당 환불 1건 |
+| order_id | BIGINT | NOT NULL, FK→orders | |
+| user_id | BIGINT | NOT NULL, DEFAULT 0 | V28에서 추가. 소유권 검증용 비정규화 |
+| amount | DECIMAL(19,2) | NOT NULL | 환불 금액 |
+| reason | VARCHAR(300) | NOT NULL | 환불 사유 |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'PENDING' | `PENDING` / `COMPLETED` / `FAILED` |
+| created_at | DATETIME(6) | NOT NULL | |
+| completed_at | DATETIME(6) | NULL | 처리 완료 시각 |
+
+---
+
+### user_coupons (V22)
+
+> ADMIN이 특정 사용자에게 직접 발급한 쿠폰 매핑
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| user_id | BIGINT | NOT NULL, FK→users | |
+| coupon_id | BIGINT | NOT NULL, FK→coupons | |
+| issued_at | DATETIME(6) | NOT NULL | |
+
+> UK: `(user_id, coupon_id)` — 중복 발급 방지
+
+---
+
+### system_settings (V24)
+
+> 런타임 변경 가능한 시스템 설정. `setting_key`가 PK (키-값 구조)
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| setting_key | VARCHAR(100) | **PK** | 설정 키 (예: `low_stock_threshold`) |
+| setting_value | VARCHAR(500) | NOT NULL | 설정값 (문자열) |
+| description | VARCHAR(255) | NULL | 설명 |
+| updated_by | VARCHAR(100) | NULL | 마지막 변경자 |
+| updated_at | DATETIME(6) | NOT NULL | |
+
+> 초기값: `low_stock_threshold = '10'`
 
 ---
 
@@ -322,11 +493,11 @@ users ──────────── orders ──────── order
 | `inventory.product_id` | → products.id | UNIQUE (1:1) |
 | `order_items.order_id` | → orders.id | |
 | `order_items.product_id` | → products.id | |
-| `orders.user_id` | → users.id | V5 추가 |
+| `orders.user_id` | → users.id | V5 추가, INDEX(V23) |
 | `orders.delivery_address_id` | → delivery_addresses.id | NULL, ON DELETE SET NULL, V12 추가 |
 | `orders.coupon_id` | → coupons.id | NULL, ON DELETE SET NULL, V13 추가 |
 | `payments.order_id` | → orders.id | UNIQUE (V8), 주문당 결제 1건 |
-| `inventory_transactions.inventory_id` | → inventory.id | INDEX 포함 |
+| `inventory_transactions.inventory_id` | → inventory.id | 복합 INDEX `(inventory_id, created_at)` V25 추가 |
 | `order_status_history.order_id` | → orders.id | ON DELETE CASCADE |
 | `cart_items.product_id` | → products.id | UK: (user_id, product_id) |
 | `shipments.order_id` | → orders.id | UNIQUE, 주문당 배송 1건 |
@@ -337,6 +508,17 @@ users ──────────── orders ──────── order
 | `products.category_id` | → categories.id | NULL, ON DELETE SET NULL, V14 추가 |
 | `categories.parent_id` | → categories.id | Self-referential, ON DELETE SET NULL |
 | `daily_inventory_snapshots.inventory_id` | → inventory.id | ON DELETE CASCADE |
+| `product_images.product_id` | → products.id | ON DELETE CASCADE, V17 추가 |
+| `reviews.product_id` | → products.id | ON DELETE CASCADE, V19 추가 |
+| `reviews.user_id` | → users.id | UK: (product_id, user_id) |
+| `wishlist_items.user_id` | → users.id | UK: (user_id, product_id), V19 추가 |
+| `wishlist_items.product_id` | → products.id | ON DELETE CASCADE |
+| `user_points.user_id` | → users.id | UNIQUE, V20 추가 |
+| `point_transactions.user_id` | → users.id | 복합 INDEX `(user_id, order_id)` V27 추가 |
+| `refunds.payment_id` | → payments.id | UNIQUE, V21 추가 |
+| `refunds.order_id` | → orders.id | INDEX 포함 |
+| `user_coupons.user_id` | → users.id | UK: (user_id, coupon_id), V22 추가 |
+| `user_coupons.coupon_id` | → coupons.id | |
 
 ---
 
