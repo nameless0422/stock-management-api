@@ -9,6 +9,8 @@ import com.stockmanagement.domain.product.category.entity.Category;
 import com.stockmanagement.domain.product.category.repository.CategoryRepository;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 카테고리 비즈니스 로직.
@@ -30,6 +33,7 @@ public class CategoryService {
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
 
+    @CacheEvict(cacheNames = "categories", allEntries = true)
     @Transactional
     public CategoryResponse create(CategoryCreateRequest request) {
         if (categoryRepository.existsByName(request.getName())) {
@@ -45,16 +49,18 @@ public class CategoryService {
     }
 
     /** flat 목록 — 전체 카테고리를 parentId·parentName 포함해 반환 */
+    @Cacheable(cacheNames = "categories", key = "'list'")
     public List<CategoryResponse> getList() {
         return categoryRepository.findAll().stream()
                 .map(CategoryResponse::from)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     /**
      * 트리 구조 — 최상위 카테고리를 루트로 children 목록을 채워 반환.
      * 전체 카테고리를 한 번에 로드해 in-memory로 조립한다.
      */
+    @Cacheable(cacheNames = "categories", key = "'tree'")
     public List<CategoryResponse> getTree() {
         List<Category> all = categoryRepository.findAll();
 
@@ -77,7 +83,7 @@ public class CategoryService {
 
         return roots.stream()
                 .map(r -> CategoryResponse.from(r, childrenMap.get(r.getId())))
-                .toList();
+                .collect(Collectors.toList());
     }
 
     /** 단건 조회 — children(하위 카테고리) 목록 포함 */
@@ -85,10 +91,11 @@ public class CategoryService {
         Category category = findByIdWithChildren(id);
         List<CategoryResponse> children = category.getChildren().stream()
                 .map(CategoryResponse::from)
-                .toList();
+                .collect(Collectors.toList());
         return CategoryResponse.from(category, children);
     }
 
+    @CacheEvict(cacheNames = "categories", allEntries = true)
     @Transactional
     public CategoryResponse update(Long id, CategoryUpdateRequest request) {
         Category category = findById(id);
@@ -109,6 +116,7 @@ public class CategoryService {
         return CategoryResponse.from(category);
     }
 
+    @CacheEvict(cacheNames = "categories", allEntries = true)
     @Transactional
     public void delete(Long id) {
         Category category = findByIdWithChildren(id);

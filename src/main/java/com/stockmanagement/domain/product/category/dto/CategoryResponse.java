@@ -3,8 +3,10 @@ package com.stockmanagement.domain.product.category.dto;
 import com.stockmanagement.domain.product.category.entity.Category;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.extern.jackson.Jacksonized;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -15,6 +17,7 @@ import java.util.List;
  */
 @Getter
 @Builder
+@Jacksonized
 public class CategoryResponse {
 
     private Long id;
@@ -30,7 +33,7 @@ public class CategoryResponse {
 
     /** flat 목록용 — children 빈 리스트 */
     public static CategoryResponse from(Category category) {
-        return from(category, List.of());
+        return from(category, new ArrayList<>());
     }
 
     /** 명시적 children 목록으로 생성 (트리 빌드 시 사용) */
