@@ -12,14 +12,14 @@ Spring Boot 기반 **쇼핑몰 백엔드 포트폴리오 프로젝트**.
 | **동시성 제어** | 재고 뮤테이션에 분산 락(Redisson) + 비관적 락(DB) 2중 적용 — EC2 2대 멀티 인스턴스 환경의 overselling 차단. 결제 취소에 비관적 락으로 TOCTOU 경쟁 조건(이중 환불) 차단 |
 | **결제 정합성** | `Propagation.REQUIRES_NEW`로 결제 커밋 보장 — 배송·포인트 실패 시 `UnexpectedRollbackException`으로 결제가 롤백되는 버그 수정. `prepare`·`confirm`·`cancel` 3단계 멱등성(DB UNIQUE + Redis SETNX + Toss `Idempotency-Key`) |
 | **이벤트 신뢰성** | Transactional Outbox 패턴 — 이벤트와 비즈니스 로직을 동일 트랜잭션으로 묶어 JVM 크래시 시 이벤트 유실 0 보장. Prometheus `outbox.dead_letters` 게이지로 실시간 모니터링 |
-| **N+1 최적화** | `getMyCoupons()` 쿼리 101→3건(97% 감소), 스냅샷 INSERT 1,000→1건. `@EntityGraph` + `default_batch_fetch_size=50` + 복합 인덱스 |
+| **N+1 최적화** | `getMyCoupons()` 쿼리 101→3건(97% 감소), 스냅샷 INSERT 1,000→1건. `@EntityGraph` + `default_batch_fetch_size=50` + 복합 인덱스. `CategoryService.getList/getTree()` Redis 캐시(30분 TTL) — 카테고리 조회 DB I/O 제거 |
 | **Redis 원자성** | 로그인 Rate Limit INCR+EXPIRE 비원자 연산 → Lua 스크립트 원자화 — 앱 크래시 시 TTL 누락으로 계정이 영구 잠금되는 버그 수정 |
 | **쿠폰 동시성** | 한정 수량 쿠폰 차감 시 `PESSIMISTIC_WRITE` + TOCTOU 재검증 — 이중 사용 및 초과 발급 방지 |
 | **보안** | IDOR 소유권 검증 4개 엔드포인트, 가격 조작 방어(DB canonical price 강제), JWT `userId` 클레임으로 인증 DB round-trip 제거, Toss Webhook HMAC-SHA256 서명 검증 |
 | **ES 검색 + Fallback** | 상품 키워드·가격·카테고리 복합 검색(Elasticsearch), 장애 시 자동 MySQL fallback |
 | **Circuit Breaker** | TossPayments HTTP 호출 실패 누적 시 회로 차단 → 빠른 실패 응답 |
 | **배치 처리** | 쿠폰 만료 비활성화·일별 재고 스냅샷·일별 주문 통계 스케줄러 (`@Scheduled`, `@ConditionalOnProperty`, 멱등성 보장) |
-| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **601개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
+| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **605개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
 
 ---
 
@@ -40,8 +40,9 @@ DAU 50,000명 / 피크 TPS 1,000 req/s / EC2 2대(ALB 뒤 독립 JVM) 규모를 
 | 4 | 결제 트랜잭션 정합성 | REQUIRES_NEW → UnexpectedRollbackException + 결제 유실 버그 수정 |
 | 5 | 결제 멱등성 | 3중 방어 + Redis SPOF 대응 전략 |
 | 6 | Transactional Outbox | 이벤트 유실 0 보장 |
-| 7 | N+1 / 배치 최적화 | 쿼리 97% 감소, INSERT 99.9% 감소 |
+| 7 | N+1 / 배치 최적화 | `@EntityGraph` + 페이지 단위 배치 처리, 쿼리 97% 감소 |
 | 8 | 보안 취약점 | IDOR·가격 조작·JWT round-trip·Webhook 위조 |
+| 9 | Redis 캐시 정합성 | `CategoryService` 캐시 직렬화 3중 문제 해결 (WRAPPER_ARRAY·ArrayList·@Jacksonized) |
 
 ---
 
@@ -96,7 +97,7 @@ docker compose -f docker/docker-compose.yml up -d mysql redis elasticsearch
 ./gradlew bootRun
 ```
 
-Flyway가 기동 시 V1~V24 마이그레이션을 자동 실행합니다.
+Flyway가 기동 시 V1~V28 마이그레이션을 자동 실행합니다.
 
 ### 환경 변수
 
@@ -138,7 +139,7 @@ Flyway가 기동 시 V1~V24 마이그레이션을 자동 실행합니다.
 | 통합 | `integration/` | Testcontainers (MySQL + Redis + ES), Flyway 실행, 실제 HTTP 흐름 E2E |
 | 동시성 | `integration/InventoryConcurrencyTest` | 동시 입고 lost update · 재고 예약 overselling 검증 |
 
-현재 총 **601개** 테스트 전체 통과.
+현재 총 **605개** 테스트 전체 통과.
 
 ---
 
@@ -233,7 +234,7 @@ erDiagram
         bigint product_id FK
         varchar image_url
         varchar object_key
-        varchar image_type "THUMBNAIL|DETAIL"
+        varchar image_type "THUMBNAIL|GALLERY"
         int display_order
     }
     reviews {
@@ -312,7 +313,7 @@ erDiagram
         varchar payment_key "Toss 발급, DONE 이후 설정"
         varchar toss_order_id UK
         decimal amount
-        varchar status "PENDING|DONE|FAILED|CANCELLED"
+        varchar status "PENDING|DONE|FAILED|CANCELLED|PARTIAL_CANCELLED"
         varchar method "카드|가상계좌 등"
         datetime requested_at
         datetime approved_at
@@ -333,6 +334,13 @@ erDiagram
         datetime valid_from
         datetime valid_until
         tinyint active
+        tinyint is_public "0=발급 필요, 1=누구나 claim"
+    }
+    user_coupons {
+        bigint id PK
+        bigint user_id FK
+        bigint coupon_id FK
+        datetime issued_at
     }
     coupon_usages {
         bigint id PK
@@ -374,6 +382,7 @@ erDiagram
         bigint id PK
         bigint payment_id UK "FK, 결제당 1건"
         bigint order_id FK
+        bigint user_id "소유권 검증 비정규화"
         decimal amount
         varchar reason
         varchar status "PENDING|COMPLETED|FAILED"
@@ -382,8 +391,7 @@ erDiagram
 
     %% ── SYSTEM ───────────────────────────────────────────
     system_settings {
-        bigint id PK
-        varchar setting_key UK
+        varchar setting_key PK "키-값 구조"
         varchar setting_value
         varchar description
         datetime updated_at
@@ -399,6 +407,7 @@ erDiagram
     users ||--o| user_points : "포인트 잔액 (1:1)"
     users ||--o{ point_transactions : "포인트 이력"
     users ||--o{ coupon_usages : "쿠폰 사용"
+    users ||--o{ user_coupons : "발급 쿠폰"
 
     categories ||--o{ categories : "하위 카테고리"
     categories ||--o{ products : "상품 분류"
@@ -415,6 +424,7 @@ erDiagram
     delivery_addresses ||--o{ orders : "배송지 적용"
 
     coupons ||--o{ coupon_usages : "사용 이력"
+    coupons ||--o{ user_coupons : "발급 이력"
 
     orders ||--|{ order_items : "주문 항목"
     orders ||--o{ order_status_history : "상태 이력"
@@ -587,6 +597,7 @@ stateDiagram-v2
         [*] --> PENDING : 환불 요청
         PENDING --> COMPLETED : Toss 취소 성공
         PENDING --> FAILED : Toss 취소 실패
+        FAILED --> PENDING : 재시도 (reset)
     }
 ```
 
@@ -737,8 +748,12 @@ available = onHand - reserved - allocated
 | V20 | `user_points`, `point_transactions`, `orders.used_points` — 포인트 |
 | V21 | `refunds` — 환불 이력 |
 | V22 | `user_coupons` — 관리자 쿠폰 발급 이력 |
-| V23 | `orders` 복합 인덱스 추가 (성능) |
+| V23 | `orders` 인덱스 추가 (`user_id`, `status`, `user_id+status` 복합) |
 | V24 | `system_settings` — 동적 시스템 설정 (저재고 임계값 등) |
+| V25 | `inventory_transactions(inventory_id, created_at)` 복합 인덱스 — filesort 제거 |
+| V26 | `coupons.is_public` 추가 — 공개 프로모 쿠폰 여부 |
+| V27 | `orders.created_at` 인덱스, `point_transactions(user_id, order_id)` 복합 인덱스 |
+| V28 | `refunds.user_id` 추가 — 소유권 검증 비정규화 |
 
 ---
 
@@ -755,6 +770,9 @@ available = onHand - reserved - allocated
 | POST | `/api/auth/logout` | 로그아웃 (JWT 블랙리스트 + Refresh Token revoke) | 공개 |
 | POST | `/api/auth/refresh` | Access Token 재발급 (Refresh Token rotation) | 공개 |
 | GET | `/api/users/me` | 내 정보 조회 | USER |
+| PATCH | `/api/users/me` | 프로필 수정 (이메일 변경) | USER |
+| PATCH | `/api/users/me/password` | 비밀번호 변경 (성공 시 Refresh Token 일괄 폐기) | USER |
+| GET | `/api/users/me/orders` | 내 주문 목록 (최신순, 페이징) | USER |
 | DELETE | `/api/users/me` | 회원 탈퇴 (Soft Delete + Refresh Token 일괄 폐기) | USER |
 
 ### 상품
@@ -769,11 +787,14 @@ available = onHand - reserved - allocated
 
 ### 카테고리
 
+> Redis 캐시 30분 TTL 적용 (`getList`, `getTree`)
+
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
 | POST | `/api/categories` | 카테고리 생성 | ADMIN |
-| GET | `/api/categories` | 카테고리 트리 조회 (parent-child) | 공개 |
-| GET | `/api/categories/{id}` | 카테고리 단건 조회 | 공개 |
+| GET | `/api/categories` | 카테고리 flat 목록 (children 빈 리스트) | 공개 |
+| GET | `/api/categories/tree` | 카테고리 트리 조회 (parent-child 2단계) | 공개 |
+| GET | `/api/categories/{id}` | 카테고리 단건 조회 (children 포함) | 공개 |
 | PUT | `/api/categories/{id}` | 카테고리 수정 | ADMIN |
 | DELETE | `/api/categories/{id}` | 카테고리 삭제 (하위·상품 존재 시 거부) | ADMIN |
 
@@ -825,10 +846,13 @@ available = onHand - reserved - allocated
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
-| POST | `/api/coupons` | 쿠폰 생성 | ADMIN |
+| POST | `/api/coupons` | 쿠폰 생성 (`isPublic`으로 공개/비공개 구분) | ADMIN |
 | GET | `/api/coupons` | 쿠폰 목록 (페이징) | ADMIN |
 | GET | `/api/coupons/{id}` | 쿠폰 상세 | ADMIN |
 | PATCH | `/api/coupons/{id}/deactivate` | 쿠폰 비활성화 | ADMIN |
+| POST | `/api/coupons/{id}/issue` | 특정 사용자에게 쿠폰 직접 발급 | ADMIN |
+| GET | `/api/coupons/my` | 내 쿠폰 목록 + 사용 횟수 | USER |
+| POST | `/api/coupons/claim` | 공개 쿠폰 코드 등록 (`isPublic=true`만 가능) | USER |
 | POST | `/api/coupons/validate` | 쿠폰 유효성 확인 + 할인 금액 미리보기 | USER |
 
 ### 결제
