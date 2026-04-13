@@ -7,8 +7,6 @@ import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.product.wishlist.dto.WishlistResponse;
 import com.stockmanagement.domain.product.wishlist.entity.WishlistItem;
 import com.stockmanagement.domain.product.wishlist.repository.WishlistRepository;
-import com.stockmanagement.domain.user.entity.User;
-import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,46 +23,57 @@ public class WishlistService {
 
     private final WishlistRepository wishlistRepository;
     private final ProductRepository productRepository;
-    private final UserRepository userRepository;
 
-    /** 위시리스트에 상품을 추가한다. */
+    /**
+     * 위시리스트에 상품을 추가한다.
+     *
+     * <p>userId는 JWT claim에서 추출한 값을 컨트롤러에서 전달받아 DB users 조회를 생략한다.
+     */
     @Transactional
-    public WishlistResponse add(Long productId, String username) {
-        User user = findUser(username);
+    public WishlistResponse add(Long productId, Long userId) {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
-        if (wishlistRepository.existsByUserIdAndProductId(user.getId(), productId)) {
+        if (wishlistRepository.existsByUserIdAndProductId(userId, productId)) {
             throw new BusinessException(ErrorCode.WISHLIST_ALREADY_EXISTS);
         }
 
         WishlistItem item = WishlistItem.builder()
-                .userId(user.getId())
+                .userId(userId)
                 .productId(productId)
                 .build();
 
         return toResponse(wishlistRepository.save(item), product);
     }
 
-    /** 위시리스트에서 상품을 제거한다. */
+    /**
+     * 위시리스트에서 상품을 제거한다.
+     *
+     * <p>userId는 JWT claim에서 추출한 값을 컨트롤러에서 전달받아 DB users 조회를 생략한다.
+     */
     @Transactional
-    public void remove(Long productId, String username) {
-        User user = findUser(username);
-        WishlistItem item = wishlistRepository.findByUserIdAndProductId(user.getId(), productId)
+    public void remove(Long productId, Long userId) {
+        WishlistItem item = wishlistRepository.findByUserIdAndProductId(userId, productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.WISHLIST_ITEM_NOT_FOUND));
         wishlistRepository.delete(item);
     }
 
-    /** 특정 상품의 위시리스트 추가 여부를 반환한다 (상품 상세 페이지 하트 아이콘용). */
-    public boolean isWishlisted(Long productId, String username) {
-        User user = findUser(username);
-        return wishlistRepository.existsByUserIdAndProductId(user.getId(), productId);
+    /**
+     * 특정 상품의 위시리스트 추가 여부를 반환한다 (상품 상세 페이지 하트 아이콘용).
+     *
+     * <p>userId는 JWT claim에서 추출한 값을 컨트롤러에서 전달받아 DB users 조회를 생략한다.
+     */
+    public boolean isWishlisted(Long productId, Long userId) {
+        return wishlistRepository.existsByUserIdAndProductId(userId, productId);
     }
 
-    /** 사용자의 위시리스트 목록을 조회한다. */
-    public List<WishlistResponse> getList(String username) {
-        User user = findUser(username);
-        List<WishlistItem> items = wishlistRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
+    /**
+     * 사용자의 위시리스트 목록을 조회한다.
+     *
+     * <p>userId는 JWT claim에서 추출한 값을 컨트롤러에서 전달받아 DB users 조회를 생략한다.
+     */
+    public List<WishlistResponse> getList(Long userId) {
+        List<WishlistItem> items = wishlistRepository.findByUserIdOrderByCreatedAtDesc(userId);
         if (items.isEmpty()) {
             return List.of();
         }
@@ -79,11 +88,6 @@ public class WishlistService {
                 .filter(item -> productMap.containsKey(item.getProductId()))
                 .map(item -> toResponse(item, productMap.get(item.getProductId())))
                 .toList();
-    }
-
-    private User findUser(String username) {
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
 
     private WishlistResponse toResponse(WishlistItem item, Product product) {

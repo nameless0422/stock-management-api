@@ -13,6 +13,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -65,7 +66,7 @@ public class OutboxEventRelayScheduler {
     @Scheduled(fixedDelayString = "${outbox.relay.interval-ms:5000}")
     public void relay() {
         List<OutboxEvent> pending = repository
-                .findPendingEvents(MAX_RETRY, PageRequest.of(0, batchSize));
+                .findPendingEvents(MAX_RETRY, LocalDateTime.now(), PageRequest.of(0, batchSize));
 
         if (pending.isEmpty()) return;
 

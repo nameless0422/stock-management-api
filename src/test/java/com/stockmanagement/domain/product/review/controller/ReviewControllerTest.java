@@ -6,7 +6,9 @@ import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.product.review.dto.ReviewResponse;
 import com.stockmanagement.domain.product.review.service.ReviewService;
+import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.common.security.JwtTokenProvider;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -41,6 +43,7 @@ class ReviewControllerTest {
     private MockMvc mockMvc;
 
     @MockBean private ReviewService reviewService;
+    @MockBean private UserService userService;
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtBlacklist jwtBlacklist;
 
@@ -49,6 +52,11 @@ class ReviewControllerTest {
                     List.of(new SimpleGrantedAuthority("ROLE_USER")));
 
     private static final String REVIEW_JSON = "{\"rating\":5,\"title\":\"좋아요\",\"content\":\"매우 만족합니다.\"}";
+
+    @BeforeEach
+    void setUp() {
+        given(userService.resolveUserId(anyString())).willReturn(1L);
+    }
 
     // ===== POST /api/products/{id}/reviews =====
 
@@ -59,7 +67,7 @@ class ReviewControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 리뷰 작성 → 201")
         void createsReview() throws Exception {
-            given(reviewService.create(anyLong(), anyString(), any())).willReturn(mock(ReviewResponse.class));
+            given(reviewService.create(anyLong(), anyLong(), any())).willReturn(mock(ReviewResponse.class));
 
             mockMvc.perform(post("/api/products/1/reviews")
                             .with(authentication(USER_AUTH))
@@ -81,7 +89,7 @@ class ReviewControllerTest {
         @Test
         @DisplayName("미구매 상품 리뷰 → 400")
         void notPurchased() throws Exception {
-            given(reviewService.create(anyLong(), anyString(), any()))
+            given(reviewService.create(anyLong(), anyLong(), any()))
                     .willThrow(new BusinessException(ErrorCode.REVIEW_NOT_PURCHASED));
 
             mockMvc.perform(post("/api/products/1/reviews")
@@ -95,7 +103,7 @@ class ReviewControllerTest {
         @Test
         @DisplayName("중복 리뷰 → 409")
         void duplicateReview() throws Exception {
-            given(reviewService.create(anyLong(), anyString(), any()))
+            given(reviewService.create(anyLong(), anyLong(), any()))
                     .willThrow(new BusinessException(ErrorCode.REVIEW_ALREADY_EXISTS));
 
             mockMvc.perform(post("/api/products/1/reviews")

@@ -105,6 +105,215 @@
 
 ---
 
+## ✅ DBA 진단 — 스키마 결함 및 누락 제약 (9/13)
+
+### ✅ 33. `refunds.user_id DEFAULT 0` — 기존 환불 소유권 검증 영구 실패 (V28 결함)
+
+**위치**: `V29__backfill_refunds_user_id.sql`
+
+**조치**: V29 마이그레이션 추가 — `orders.user_id` JOIN 백필 + `fk_refunds_user` FK 제약 추가.
+
+---
+
+### ✅ 34. `payments` 테이블 — `ENGINE` · `CHARSET` · `COLLATE` 미정의 (V4 결함)
+
+**위치**: `V4__create_payment_tables.sql`
+
+**문제**: V4의 `CREATE TABLE payments` 구문에 `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`가 없음. 서버 기본 collation(`utf8mb4_0900_ai_ci`)이 적용되어 다른 테이블(`utf8mb4_unicode_ci`)과 collation이 달라짐. `payments JOIN orders`, `payments JOIN users` 조인 시 `Illegal mix of collations` 에러 또는 인덱스 미사용 가능.
+
+**개선**: V29 마이그레이션:
+```sql
+ALTER TABLE payments CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+---
+
+### ✅ 35. `orders` — `(status, created_at)` 복합 인덱스 누락
+
+**위치**: `V23__add_orders_indexes.sql`, `OrderRepository.countByStatusAndCreatedAtBetween()`
+
+**문제**: `DailyOrderStatsScheduler`가 매일 자정 `countByStatusAndCreatedAtBetween(CONFIRMED, start, end)`과 `countByStatusAndCreatedAtBetween(CANCELLED, start, end)`을 2회 실행. 쿼리: `WHERE status = ? AND created_at >= ? AND created_at < ?`. 현재 `idx_orders_status(status)` + `idx_orders_created_at(created_at)` 각각 존재하나 복합 조건에는 단일 인덱스 선택 후 나머지 필터링(filesort). 운영 주문이 누적될수록 성능 저하.
+
+**개선**: V29 마이그레이션:
+```sql
+ALTER TABLE orders ADD INDEX idx_orders_status_created (status, created_at);
+```
+
+---
+
+### ✅ 36. `coupons` — `(valid_until, active)` 복합 인덱스 누락 + 만료 처리 벌크 UPDATE 미적용
+
+**위치**: `CouponRepository.findExpiredActiveCoupons()`, `CouponExpiryScheduler`
+
+**문제**:
+- 쿼리 `WHERE valid_until < :now AND active = true` — 인덱스 없으면 전체 coupons 테이블 풀스캔 (매일 새벽 1시 실행)
+- `deactivate()` Dirty Checking으로 쿠폰 수만큼 개별 `UPDATE` 발생 — 만료 쿠폰 100건 = 100 UPDATE
+
+**개선**:
+- 인덱스: `ADD INDEX idx_coupons_expiry (valid_until, active)` (V29 마이그레이션)
+- 벌크 UPDATE: `UPDATE coupons SET active = false WHERE valid_until < :now AND active = true` 단일 쿼리로 대체
+
+---
+
+### ✅ 37. `products.status` 인덱스 누락
+
+**위치**: `V1__init_schema.sql`, `ProductRepository`
+
+**문제**: `ProductRepository`의 `findAllActiveBySpec()`, `findWithSpec()` 등이 `WHERE status = 'ACTIVE'` 조건을 항상 포함. status 인덱스가 V1~V28 어디에도 없어 전체 products 스캔 후 필터링. ES fallback 쿼리에서도 동일하게 사용.
+
+**개선**: V29 마이그레이션:
+```sql
+ALTER TABLE products ADD INDEX idx_products_status (status);
+```
+
+---
+
+### ✅ 38. `cart_items.user_id` — FK 누락, 사용자 탈퇴 시 고아 레코드
+
+**위치**: `V10__create_cart_tables.sql`
+
+**문제**: `cart_items`에 `product_id → products FK`는 있지만 `user_id → users FK`가 없음. `users.deleted_at`(소프트 삭제, V16)에도 불구하고, 사용자 삭제 시 `cart_items` 레코드는 고아(orphan)로 남아 user_id가 무효한 상태로 유지됨.
+
+**개선**: V29 마이그레이션:
+```sql
+ALTER TABLE cart_items
+    ADD CONSTRAINT fk_cart_user FOREIGN KEY (user_id) REFERENCES users (id);
+```
+
+---
+
+### ✅ 39. `point_transactions.order_id` — FK 누락, 고아 참조 가능
+
+**위치**: `V20__create_point_tables.sql`
+
+**문제**: `point_transactions.order_id BIGINT NULL`이지만 `orders(id)` FK가 없음. 주문 삭제 시 포인트 이력의 `order_id`는 유효하지 않은 ID를 참조하게 되어 데이터 조회 정합성 훼손 가능. `user_id`에는 FK가 있지만 `order_id`에는 없어 일관성 없음.
+
+**개선**: V29 마이그레이션 (ON DELETE SET NULL — 주문 삭제 시 이력 보존):
+```sql
+ALTER TABLE point_transactions
+    ADD CONSTRAINT fk_pt_order FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE SET NULL;
+```
+
+---
+
+### ✅ 40. `created_at` / `updated_at` — `DEFAULT CURRENT_TIMESTAMP` 없는 테이블 6개
+
+**위치**: V4(`payments`), V10(`cart_items`), V11(`shipments`), V12(`delivery_addresses`), V17(`product_images`), V22(`user_coupons`)
+
+**문제**: 6개 테이블의 `created_at DATETIME(6) NOT NULL`에 `DEFAULT CURRENT_TIMESTAMP(6)`이 없음. Hibernate `@CreationTimestamp`에만 의존 — bulk INSERT 또는 DB 직접 조작 시 `NULL` 삽입으로 `NOT NULL` 제약 위반 또는 묵시적 `'0000-00-00'` 저장 가능. 나머지 테이블들(V1~V3, V5, V6 등)은 모두 DEFAULT가 있어 불일치.
+
+**개선**: V29 마이그레이션으로 각 컬럼 ALTER (6개 테이블):
+```sql
+ALTER TABLE payments   MODIFY created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6);
+ALTER TABLE shipments  MODIFY created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6);
+-- ... (4개 더)
+```
+
+---
+
+### 41. `DECIMAL` precision 불일치 — `DECIMAL(19,2)` vs `DECIMAL(12,2)`
+
+**위치**: `V13__create_coupon_tables.sql`, `V21__create_refunds_table.sql`, `V15__create_batch_tables.sql`
+
+**문제**: 같은 비즈니스 도메인(금액) 컬럼이 두 precision으로 혼재:
+- `DECIMAL(12,2)`: `orders.total_amount`, `payments.amount`, `inventory_transactions` 스냅샷값
+- `DECIMAL(19,2)`: `coupons.discount_value`, `coupon_usages.discount_amount`, `refunds.amount`, `daily_order_stats.total_revenue`
+
+`orders.total_amount(12,2)`와 `coupons.discount_value(19,2)` 비교 시 묵시적 캐스팅 발생. 최대 12자리 금액(9,999,999.99원)으로 충분한 도메인에서 DECIMAL(19,2)는 불필요하게 큰 저장 공간 사용.
+
+**개선**: 금액 컬럼 precision을 `DECIMAL(15,2)`로 통일 (최대 999억원 지원, 일별 매출·누적 집계에 충분).
+
+---
+
+### 42. `delivery_addresses` — 기본 배송지 복수 방지 DB 제약 없음
+
+**위치**: `V12__create_delivery_address_tables.sql`, `DeliveryAddressService`
+
+**문제**: `is_default TINYINT(1)` 컬럼만 있고 "사용자별 `is_default = 1` 레코드는 최대 1개" 제약이 DB에 없음. 애플리케이션 버그 또는 직접 DB 수정 시 기본 배송지가 여러 개 생성될 수 있음. MySQL은 partial unique index를 지원하지 않으므로 트리거 또는 CHECK 제약으로 보완 필요.
+
+**개선 옵션**:
+1. `BEFORE INSERT/UPDATE` 트리거 — `is_default = 1` 설정 시 동일 user의 다른 레코드를 0으로 초기화
+2. 애플리케이션 레벨 검증 강화 + 정기 정합성 점검 쿼리 추가
+
+---
+
+### 43. `orders.findOrderStats()` — 전체 테이블 GROUP BY (대시보드 성능)
+
+**위치**: `OrderRepository.findOrderStats()`, `AdminService.getDashboard()`
+
+**문제**: `SELECT status, COUNT(*), SUM(totalAmount) FROM orders GROUP BY status` — 주문 데이터가 누적될수록 대시보드 API 응답 지연 증가. 현재 `idx_orders_status` 인덱스로 인덱스 스캔은 가능하지만 전체 행을 읽음. `daily_order_stats` 테이블이 이미 존재하지만 실시간 대시보드는 live orders 테이블 집계 사용.
+
+**개선**: 대시보드 통계를 `daily_order_stats` 캐시 + 당일 분만 live 집계로 전환. 또는 `AdminService` 응답에 Redis 캐시(5분 TTL) 적용.
+
+---
+
+### ✅ 44. 일부 테이블 `COLLATE` 미정의 — collation 불일치
+
+**위치**: `V15`(`daily_order_stats`, `daily_inventory_snapshots`), `V18`(`outbox_events`)
+
+**문제**: 3개 테이블이 `DEFAULT CHARSET=utf8mb4` 없이 생성되거나 COLLATE 없이 생성됨. 서버 기본 collation(`utf8mb4_0900_ai_ci`)이 적용되어 나머지 테이블(`utf8mb4_unicode_ci`)과 불일치. 직접 JOIN은 없지만 `SHOW CREATE TABLE`에서 혼재 확인 → 운영 이관 시 혼란.
+
+**개선**: V29 마이그레이션:
+```sql
+ALTER TABLE daily_order_stats        CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE daily_inventory_snapshots CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE outbox_events             CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+---
+
+### 45. `refunds.payment_id UNIQUE` — `PARTIAL_CANCELLED`(부분 취소) 여러 건 이력 불가
+
+**위치**: `V21__create_refunds_table.sql`, `payments.status = PARTIAL_CANCELLED`
+
+**문제**: `payments.status`에 `PARTIAL_CANCELLED`(부분 취소) 상태가 정의되어 있어 한 결제에 대해 여러 차례 부분 환불이 가능해야 하지만, `refunds.payment_id UNIQUE` 제약이 결제당 단 1건의 환불 레코드만 허용. 부분 취소 두 번째 시도 시 DB에서 `Duplicate entry` 에러 발생.
+
+**개선**: 부분 취소 이력이 필요하면 UNIQUE 제약 제거 + `(payment_id, created_at)` 복합 인덱스 전환. 현재는 `reset()` 재사용으로 FAILED 재시도만 지원하나, 부분 취소 누적 이력은 불가.
+
+---
+
+> **요약**: #33~#40 · #44 완료(V29~V34) → 아키텍처 판단(#41~#43 · #45) 보류
+
+---
+
+## ✅ 신규 발굴 성능 병목 (4/4)
+
+### ✅ 29. ReviewService · WishlistService `findByUsername()` DB round-trip
+
+**위치**: `ReviewService.create/update/delete`, `WishlistService.add/remove/isWishlisted/getList`
+
+**문제**: 7개 메서드 전부 `userRepository.findByUsername(username)` 쿼리로 시작. JWT claim에 이미 `userId`가 포함되어 있음에도 매 요청마다 불필요한 DB round-trip 발생. `OrderService`, `ShipmentService`는 이미 `resolveUserId()` 패턴으로 전환됨.
+
+**개선**: 컨트롤러에서 `@AuthenticationPrincipal String username` → `Long userId` (`resolveUserId()` 헬퍼 패턴) 전환. 7개 write 메서드에서 `userRepository.findByUsername()` 제거.
+
+---
+
+### ✅ 30. OutboxEventRelayScheduler 지수 백오프 없음
+
+**위치**: `OutboxEventRepository.findPendingEvents()`, `OutboxEventRelayScheduler`
+
+**문제**: 실패한 이벤트(`failedAt != null`)를 5초 후 무조건 재시도. 다운스트림(ShipmentService · PointService · EmailService) 장애 시 100건 × 5초 간격으로 연속 폭격 발생. `failedAt` 컬럼이 존재하지만 relay 쿼리에서 전혀 활용되지 않음.
+
+**개선**: `findPendingEvents()` 쿼리에 `AND (e.failedAt IS NULL OR e.failedAt <= :cutoff)` 조건 추가. cutoff = `now - min(retryCount² × 5초, 300초)`. 재시도 간격: 1회→5s, 2회→20s, 3회→45s, 4회→80s, 5회→125s.
+
+---
+
+### ~~31. `outbox_events` 쿼리 인덱스 누락~~ ✅ 이미 구현됨
+
+`V18__create_outbox_events.sql`에 `INDEX idx_outbox_unpublished (published_at, retry_count, created_at)` 이미 포함. 조치 불필요.
+
+---
+
+### ✅ 32. ReviewService.create() 불필요한 `Product` 전체 엔티티 로드
+
+**위치**: `ReviewService.create()` L40-41, `ReviewService.getList()` L65-66
+
+**문제**: `productRepository.findById(productId)`로 Product + category(Lazy) 전체를 로드하지만 실제 사용 필드는 `product.getId()` 하나뿐. 1인 1리뷰 검증(`existsByProductIdAndUserId`)과 구매 이력 확인(`existsPurchaseByUserIdAndProductId`)에 productId를 직접 사용 가능.
+
+**개선**: `productRepository.findById()` → `productRepository.existsById()` 전환. 불필요한 Product 객체 생성·category JOIN 제거.
+
+---
+
 ## ✅ 완료
 
 ### 보안·버그 수정
