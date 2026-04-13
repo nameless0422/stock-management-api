@@ -17,35 +17,13 @@
 
 ---
 
-## 🔴 즉시 처리 — 성능 병목
+## ✅ 즉시 처리 — 성능 병목 완료 (3/3)
 
-### 7. InventoryRepository fetch join 누락 (N+1)
-
-**위치**: `domain/inventory/repository/InventoryRepository.java` L31, L45
-
-**문제**: `findByProductId()`, `findAllByProductIdIn()` 에 `@EntityGraph` 없음. `ProductService.enrichPage()` 가 페이지(20건) 처리 시 product 연관을 lazy load → 추가 SELECT 20회 발생.
-
-**개선**: 두 메서드에 `@EntityGraph(attributePaths = {"product"})` 추가.
-
----
-
-### 8. CategoryService.getTree() 캐시 미적용
-
-**위치**: `domain/product/category/service/CategoryService.java` L48, L58
-
-**문제**: `getList()`와 `getTree()` 가 각각 `findAll()` 호출. 트리 조립은 in-memory O(n²) 순회이며 상품 목록 API 호출마다 재실행된다. 카테고리는 변경 빈도가 낮다.
-
-**개선**: `@Cacheable(cacheNames = "categories", key = "'tree'")` 추가, write 메서드에 `@CacheEvict(allEntries = true)`.
-
----
-
-### 9. InventorySnapshotScheduler 전체 로드 → 배치 처리
-
-**위치**: `domain/inventory/scheduler/InventorySnapshotScheduler.java` L37
-
-**문제**: `inventoryRepository.findAll()`로 전체 재고를 단일 트랜잭션에 메모리로 올린다. 대량 재고 시 힙 과부하 + 트랜잭션 유지 중 `inventory` 테이블 shared lock 경합.
-
-**개선**: `Pageable` 기반 1,000건 단위 페이지 배치, 배치마다 커밋.
+| # | 항목 | 파일 | 조치 |
+|---|------|------|------|
+| 7 | InventoryRepository fetch join 누락 (N+1) | `InventoryRepository` | `findByProductId`, `findAllByProductIdIn`에 `@EntityGraph({"product"})` 추가 |
+| 8 | CategoryService.getTree() 캐시 미적용 | `CategoryService`, `CacheConfig`, `CategoryResponse` | `getList/getTree` `@Cacheable`, `create/update/delete` `@CacheEvict(allEntries=true)`, categories 30분 TTL, `@Jacksonized` + `ArrayList` 적용 |
+| 9 | InventorySnapshotScheduler 전체 로드 | `InventorySnapshotScheduler`, `InventorySnapshotProcessor` | 1,000건 페이지 루프 + 배치마다 독립 트랜잭션 커밋 (`@Component` 분리) |
 
 ---
 

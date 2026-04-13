@@ -44,7 +44,7 @@ public class CacheConfig {
                 .activateDefaultTyping(
                         LaissezFaireSubTypeValidator.instance,
                         ObjectMapper.DefaultTyping.NON_FINAL,
-                        JsonTypeInfo.As.PROPERTY
+                        JsonTypeInfo.As.WRAPPER_ARRAY
                 );
 
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(cacheMapper);
@@ -65,6 +65,8 @@ public class CacheConfig {
                         "inventory", base.entryTtl(Duration.ofMinutes(5)),
                         // 주문: 상태 변경 가능 → 5분 + 명시적 evict
                         "orders", base.entryTtl(Duration.ofMinutes(5)),
+                        // 카테고리 트리: 변경 빈도 매우 낮음 → 30분 + 명시적 evict
+                        "categories", base.entryTtl(Duration.ofMinutes(30)),
                         // 시스템 설정: 변경 빈도 매우 낮음 → 1시간 + 명시적 evict
                         "settings", base.entryTtl(Duration.ofHours(1))
                 ))
