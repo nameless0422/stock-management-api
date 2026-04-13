@@ -27,7 +27,8 @@ import java.util.Optional;
  */
 public interface InventoryRepository extends JpaRepository<Inventory, Long>, JpaSpecificationExecutor<Inventory> {
 
-    /** 상품 ID로 재고를 조회한다 (읽기 전용) */
+    /** 상품 ID로 재고를 조회한다 (읽기 전용). product를 JOIN FETCH하여 N+1 방지. */
+    @EntityGraph(attributePaths = {"product"})
     Optional<Inventory> findByProductId(Long productId);
 
     /**
@@ -41,7 +42,8 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long>, Jpa
     @Query("SELECT i FROM Inventory i WHERE i.product.id = :productId")
     Optional<Inventory> findByProductIdWithLock(@Param("productId") Long productId);
 
-    /** 여러 상품의 재고를 한 번에 조회한다 (목록 조회 N+1 방지). */
+    /** 여러 상품의 재고를 한 번에 조회한다. product를 JOIN FETCH하여 N+1 방지. */
+    @EntityGraph(attributePaths = {"product"})
     List<Inventory> findAllByProductIdIn(Collection<Long> productIds);
 
     /** available(= onHand - reserved - allocated)이 threshold 미만인 저재고 목록 (대시보드용) */
