@@ -1,6 +1,5 @@
 package com.stockmanagement.domain.inventory.scheduler;
 
-import com.stockmanagement.domain.inventory.entity.DailyInventorySnapshot;
 import com.stockmanagement.domain.inventory.entity.Inventory;
 import com.stockmanagement.domain.inventory.repository.DailyInventorySnapshotRepository;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
@@ -10,6 +9,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -26,38 +28,39 @@ class InventorySnapshotSchedulerTest {
 
     @Mock InventoryRepository inventoryRepository;
     @Mock DailyInventorySnapshotRepository snapshotRepository;
+    @Mock InventorySnapshotProcessor snapshotProcessor;
     @InjectMocks InventorySnapshotScheduler scheduler;
 
     @Test
-    @DisplayName("스냅샷 미존재 시 saveAll()로 배치 저장")
+    @DisplayName("스냅샷 미존재 시 processBatch() 호출")
     void savesSnapshotWhenNotExists() {
         Inventory inv = buildInventory(1L, 100, 10, 5);
-        given(inventoryRepository.findAll()).willReturn(List.of(inv));
-        // 오늘 스냅샷이 없는 상태 — 빈 Set 반환
+        Page<Inventory> page = new PageImpl<>(List.of(inv));
+        given(inventoryRepository.findAll(any(Pageable.class))).willReturn(page);
         given(snapshotRepository.findInventoryIdsBySnapshotDate(any(LocalDate.class)))
                 .willReturn(Set.of());
-        given(snapshotRepository.saveAll(anyList()))
-                .willAnswer(invocation -> invocation.getArgument(0));
+        given(snapshotProcessor.processBatch(anyList(), anySet(), any(LocalDate.class)))
+                .willReturn(1);
 
         scheduler.takeSnapshot();
 
-        verify(snapshotRepository).saveAll(anyList());
+        verify(snapshotProcessor).processBatch(anyList(), anySet(), any(LocalDate.class));
     }
 
     @Test
-    @DisplayName("스냅샷 이미 존재 시 saveAll()에 빈 목록 전달 (저장 없음)")
-    void skipsWhenSnapshotAlreadyExists() {
+    @DisplayName("스냅샷 이미 존재 시 alreadySnapped에 inventoryId 포함하여 processor에 전달")
+    void passesAlreadySnappedToProcessor() {
         Inventory inv = buildInventory(1L, 100, 10, 5);
-        given(inventoryRepository.findAll()).willReturn(List.of(inv));
-        // inventoryId=1L이 이미 존재하는 상태
+        Page<Inventory> page = new PageImpl<>(List.of(inv));
+        given(inventoryRepository.findAll(any(Pageable.class))).willReturn(page);
         given(snapshotRepository.findInventoryIdsBySnapshotDate(any(LocalDate.class)))
                 .willReturn(Set.of(1L));
-        given(snapshotRepository.saveAll(anyList()))
-                .willAnswer(invocation -> invocation.getArgument(0));
+        given(snapshotProcessor.processBatch(anyList(), anySet(), any(LocalDate.class)))
+                .willReturn(0);
 
         scheduler.takeSnapshot();
 
-        verify(snapshotRepository).saveAll(List.of());
+        verify(snapshotProcessor).processBatch(anyList(), eq(Set.of(1L)), any(LocalDate.class));
     }
 
     // ===== 헬퍼 =====
