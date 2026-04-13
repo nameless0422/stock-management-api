@@ -71,6 +71,9 @@ ALB가 요청을 두 인스턴스에 분산하므로 동일 상품 주문이 Ser
 |-----------|-----------|------|
 | API Server 2대 이상 | [1. 재고 동시성](#1-재고-동시성-제어) | JVM `synchronized`로는 인스턴스 간 동시성 제어 불가 → 분산 락 필요 |
 | 피크 TPS 1,000 | [8. JWT round-trip](#8-보안-취약점) | 인증마다 DB SELECT → 초당 1,000번 불필요한 쿼리 |
+| 피크 TPS 1,000 | [9. CategoryService 캐시](#9-categoryservice-redis-캐시) | 캐시 미적용 시 상품 목록 API 호출마다 `categories` SELECT → 초당 1,000번 불필요한 쿼리 |
+| 상품 페이지 조회 (20건) | [7. N+1 최적화](#7-n1-쿼리-및-배치-처리-최적화) | `InventoryRepository` `@EntityGraph` 누락 → product SELECT 20회 추가 |
+| 자정 배치 (재고 10,000건) | [7. N+1 최적화](#7-n1-쿼리-및-배치-처리-최적화) | 전체 재고 단일 트랜잭션 로드 → 힙 과부하 + 테이블 락 장시간 점유 |
 | 동시 주문 100건/분 | [1. 재고 동시성](#1-재고-동시성-제어), [2. TOCTOU](#2-결제-취소-이중-처리-경쟁-조건) | 재고 1개 남은 상품에 수십 건 동시 진입 → 초과 예약·이중 처리 현실화 |
 | 일 주문 5,000건 | [5. 결제 멱등성](#5-결제-멱등성) | 재시도율 0.1%만 가정해도 하루 5건의 중복 결제 위험 |
 | Redis 단일 인스턴스 | [3. Lua 원자성](#3-redis-rate-limit-원자성-결함), [5. 결제 멱등성](#5-결제-멱등성) | Redis 장애 시 3중 방어의 1레이어 소실 → 나머지 레이어 역할 명확화 |
@@ -87,6 +90,7 @@ ALB가 요청을 두 인스턴스에 분산하므로 동일 상품 주문이 Ser
 6. [이벤트 유실 — Transactional Outbox](#6-이벤트-유실--transactional-outbox)
 7. [N+1 쿼리 및 배치 처리 최적화](#7-n1-쿼리-및-배치-처리-최적화)
 8. [보안 취약점](#8-보안-취약점)
+9. [CategoryService Redis 캐시](#9-categoryservice-redis-캐시)
 
 ---
 
@@ -459,6 +463,25 @@ ReviewStats findReviewStatsByProductId(Long id);
 `OrderItem → Product`, `CartItem → Product` 등 연관 엔티티를 개별 접근할 때마다 SELECT 1건씩 추가.
 기본 설정에서는 배치 없이 1건씩만 로딩.
 
+**`InventoryRepository` — product fetch join 누락 (N+1)**
+
+`findByProductId()`, `findAllByProductIdIn()`이 `@EntityGraph` 없이 `Inventory`를 Lazy 로딩한다.
+`ProductService.enrichPage()`가 페이지 20건을 처리하며 각 `inventory.product`에 접근하면 product SELECT가 20번 추가 발생한다.
+
+```
+상품 목록 20건 조회 시:
+  SELECT * FROM inventory WHERE product_id = ?   →  20번 (N+1)
+  (Inventory 20개 × product Lazy 로딩)
+```
+
+**`InventorySnapshotScheduler` — 단일 트랜잭션 전체 로드**
+
+자정 스케줄러가 `inventoryRepository.findAll()`로 전체 재고를 한 번에 메모리에 올린다.
+재고 10,000건 기준:
+- JVM 힙에 수백 MB 객체 적재 → GC 압박
+- `findAll()` 부터 `saveAll()` 완료까지 트랜잭션이 유지되어 `inventory` 테이블 shared lock이 장시간 점유됨
+- 단일 커밋 실패 시 전체 스냅샷이 롤백되어 재시도 비용이 크다
+
 ### 해결 방법
 
 | 위치 | 변경 전 | 변경 후 |
@@ -469,6 +492,8 @@ ReviewStats findReviewStatsByProductId(Long id);
 | `ReviewRepository` | 집계 쿼리 2번 | avgRating + reviewCount 통합 단일 JPQL |
 | 전체 `@ManyToOne` | 1건씩 Lazy | `hibernate.default_batch_fetch_size=50` |
 | `inventory_transactions` | `inventory_id` 단일 인덱스 | `(inventory_id, created_at)` 복합 인덱스 |
+| `InventoryRepository` | `product` Lazy 로딩 (N+1) | `@EntityGraph({"product"})` — `findByProductId`, `findAllByProductIdIn` |
+| `InventorySnapshotScheduler` | `findAll()` 단일 트랜잭션 전체 로드 | `findAll(PageRequest.of(page, 1000))` 페이지 루프 + `InventorySnapshotProcessor`(@Component 분리)로 배치마다 독립 트랜잭션 커밋 |
 
 > **주의**: `@BatchSize`는 `@OneToMany`/`@ManyToMany` 컬렉션에만 적용 가능.
 > `@ManyToOne`에 붙이면 `AnnotationException` 발생 → `default_batch_fetch_size` 사용.
@@ -477,14 +502,20 @@ ReviewStats findReviewStatsByProductId(Long id);
 
 `default_batch_fetch_size`는 전역 설정이므로 배치 로딩이 불필요한 단건 조회에도 적용되어 미세한 메모리 오버헤드가 발생한다. `@EntityGraph` fetch join은 페이징(`Pageable`)과 함께 사용 시 `HibernateJpaDialect` 경고가 발생하므로, 컬렉션이 아닌 단일 연관 엔티티(`@ManyToOne`)에만 적용했다.
 
+`InventorySnapshotProcessor`를 별도 `@Component`로 분리한 이유: Spring AOP는 프록시 기반으로 동작하므로 동일 클래스 내 self-call은 프록시를 거치지 않아 `@Transactional`이 적용되지 않는다. 스케줄러 내부에 `@Transactional processBatch()` 메서드를 두어도 배치마다 독립 커밋이 되지 않기 때문에 외부 빈으로 분리해 호출해야 한다. 클래스가 하나 늘어나지만 `@Transactional` 전파 범위를 명시적으로 제어하기 위한 불가피한 설계다.
+
+페이지 단위 처리는 `findAll()` 한 번으로 전체를 보는 것보다 부분 실패 시 롤백 범위가 1페이지(1,000건)로 제한되는 장점도 있다. 단, 첫 페이지 조회 후 다른 인스턴스가 동일 날짜 스냅샷을 삽입하는 레이스 컨디션은 `DataIntegrityViolationException` catch로 방어하며 해당 배치를 스킵한다.
+
 ### 결과
 
 | 위치 | 변경 전 | 변경 후 | 개선율 |
 |------|---------|---------|--------|
 | `getMyCoupons()` (쿠폰 50개 기준) | 쿼리 101번 | 3번 | **97% 감소** |
-| `InventorySnapshotScheduler` (재고 1000건) | INSERT 1,000번 | 1번 | **99.9% 감소** |
+| `InventorySnapshotScheduler` (재고 1,000건) | INSERT 1,000번 | 1번 (`saveAll`) | **99.9% 감소** |
 | 상품 목록 `ReviewRepository` (상품 20개) | 집계 쿼리 40번 | 1번 | **97% 감소** |
 | `inventory_transactions` 이력 조회 | filesort 발생 | 인덱스 스캔 | filesort 제거 |
+| `InventoryRepository.findAllByProductIdIn` (상품 페이지 20건) | product SELECT 20번 (N+1) | JOIN 1번 | **95% 감소** |
+| `InventorySnapshotScheduler` 페이지 처리 (재고 10,000건) | 단일 트랜잭션, 힙 전체 로드 | 1,000건 단위 10회 독립 커밋 | 힙 사용량 **~1/10**, 락 점유 시간 **~1/10** |
 
 ---
 
@@ -555,6 +586,76 @@ JWT에 `userId`를 포함하면 토큰 크기가 소폭 증가한다. 또한 `us
 
 ---
 
+## 9. CategoryService Redis 캐시
+
+### 문제 인식
+
+`CategoryService.getList()`와 `getTree()`는 호출할 때마다 `categoryRepository.findAll()`을 실행하고, `getTree()`는 추가로 전체 카테고리를 순회해 부모-자식 트리를 in-memory에서 조립한다.
+
+카테고리는 관리자가 생성·수정·삭제할 때만 변경되는 **거의 정적인 데이터**다. 그런데 상품 목록 API(`GET /api/products`)는 카테고리 정보를 참조하기 위해 매 요청마다 이 메서드를 호출한다.
+
+```
+피크 TPS 1,000 기준:
+  상품 목록 API 1,000회/s
+  → CategoryService.getList() 1,000회/s
+  → SELECT * FROM categories 1,000회/s  (비즈니스 로직 없이 인증 오버헤드와 동급)
+```
+
+`getTree()`는 조립 과정에서 카테고리 수에 비례하는 O(n) 연산이 매 호출마다 반복된다. 카테고리가 수백 개 규모로 증가하면 CPU 부하로 이어진다.
+
+### 해결 방법
+
+`getList()`, `getTree()`에 `@Cacheable`, 모든 write 메서드에 `@CacheEvict(allEntries = true)` 적용.
+
+```java
+@Cacheable(cacheNames = "categories", key = "'list'")
+public List<CategoryResponse> getList() { ... }
+
+@Cacheable(cacheNames = "categories", key = "'tree'")
+public List<CategoryResponse> getTree() { ... }
+
+@CacheEvict(cacheNames = "categories", allEntries = true)
+@Transactional
+public CategoryResponse create(CategoryCreateRequest request) { ... }
+// update(), delete() 동일
+```
+
+`CacheConfig`에 `categories` 전용 TTL(30분) 추가:
+
+```java
+"categories", base.entryTtl(Duration.ofMinutes(30))
+```
+
+**구현 과정에서 Redis 직렬화 호환성 문제 3가지를 추가 해결했다.**
+
+| # | 증상 | 원인 | 해결 |
+|---|------|------|------|
+| 1 | `List<CategoryResponse>` 캐시 HIT 시 역직렬화 실패 | `As.PROPERTY` 방식은 JSON 배열에 `@class` 프로퍼티를 내장할 수 없어 `List` 타입 래퍼가 누락됨. 읽을 때 Jackson이 타입 정보를 찾지 못함 | `CacheConfig` 전역 직렬화 방식을 `As.WRAPPER_ARRAY`로 변경 → `["java.util.ArrayList", [...]]` 형식으로 타입 래퍼 보장 |
+| 2 | 캐시에 저장된 리스트 역직렬화 불가 | `Stream.toList()`의 반환 타입이 JDK 내부 패키지-프라이빗 클래스(`ImmutableCollections$ListN`)라 Jackson이 인스턴스화 불가 | `Collectors.toList()`로 교체 → 공개 타입 `ArrayList` 반환, 직렬화 포맷도 `java.util.ArrayList`로 확정 |
+| 3 | `CategoryResponse` 역직렬화 불가 | Lombok `@Builder`만 있으면 Jackson이 역직렬화 시 사용할 생성자(`no-args` 또는 `@JsonCreator`)를 찾지 못함 | `@Jacksonized` 추가 → Lombok이 `@JsonDeserialize(builder = ...)` + `@JsonPOJOBuilder(withPrefix = "")` 자동 생성. `children` 필드도 `List.of()` → `new ArrayList<>()`로 교체 |
+
+> **교훈**: 기존 캐시(`products`, `inventory`, `orders`)는 단일 객체를 캐싱해 `As.PROPERTY`에서 문제가 없었다. `List<T>`를 직접 캐싱하면 컬렉션 타입 래퍼 방식이 달라지므로 통합 테스트에서 반드시 캐시 HIT 경로까지 검증해야 한다.
+
+### Trade-off
+
+| 항목 | 내용 |
+|------|------|
+| 최대 30분 Stale | write API가 누락되면 TTL 만료까지 구버전 카테고리 노출. 현재는 `create / update / delete` 모두 `@CacheEvict` 적용 |
+| Write 경로 관리 부담 | 향후 카테고리 변경 로직 추가 시 `@CacheEvict` 누락이 silent bug가 됨 — 코드 리뷰에서 반드시 확인 필요 |
+| `As.WRAPPER_ARRAY` 전환 영향 | 기존 캐시 키(`products::*`, `inventory::*`, `orders::*`)의 직렬화 포맷이 변경됨. 운영 배포 시 기존 캐시 키 무효화 필요 (`FLUSHDB` 또는 자연 TTL 만료 대기) |
+| 직렬화 제약 추가 | 캐시 대상 DTO에 `@Jacksonized`와 가변 `List` 사용을 강제해야 함. 누락 시 캐시 HIT에서만 역직렬화 에러가 발생해 원인 파악이 어려움 |
+| Cold Start | 재배포 직후 또는 TTL 만료 직후 첫 요청은 DB 조회 + 트리 조립이 발생 |
+
+### 결과
+
+| 지표 | 변경 전 | 변경 후 |
+|------|---------|---------|
+| 상품 목록 API 1회당 `categories` SELECT | 1번 | **0번** (캐시 HIT) |
+| `getTree()` in-memory 트리 조립 | 매 호출 O(n) | **0** (캐시 HIT, TTL 내 재사용) |
+| `categories` DB 쿼리 (피크 TPS 1,000 기준) | 초당 **1,000번** | 캐시 갱신 시만 1번 (**99.9% 감소**) |
+
+---
+
 ## 테스트 커버리지 추이
 
 | 시점 | 테스트 수 |
@@ -563,4 +664,4 @@ JWT에 `userId`를 포함하면 토큰 크기가 소폭 증가한다. 또한 `us
 | 리뷰 / 위시리스트 / 포인트 / 환불 + 통합 테스트 | 465개 |
 | 전 컨트롤러 단위 테스트 완비 | 529개 |
 | 배치 / Elasticsearch / 쿠폰 / 카테고리 추가 | ~580개 |
-| 최종 | **601개** |
+| 성능 최적화 (#7/#8/#9) 이후 | **605개** |
