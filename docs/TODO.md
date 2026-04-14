@@ -522,3 +522,133 @@ Optional<Long> findUserIdById(@Param("orderId") Long orderId);
 refund.fail(reason);
 return RefundResponse.from(refund); // HTTP 200, status=FAILED
 ```
+
+---
+
+## 🔴 보안 취약점 진단 (0/10)
+
+> 전체 코드베이스 보안 분석. IDOR·인증 누락·설정 오류 중심.
+
+---
+
+### 56. `PaymentController.getByPaymentKey()` — 인증·소유권 검증 없음 (IDOR)
+
+**위치**: `domain/payment/controller/PaymentController.java` L87-91
+
+**문제**: `GET /api/payments/{paymentKey}` 엔드포인트에 `@AuthenticationPrincipal`이 없고 결제 소유권을 검증하지 않음. 인증된 사용자라면 누구나 paymentKey를 알거나 추측해 타인의 결제 정보(금액·주문 ID·카드 정보)를 조회할 수 있음.
+
+```java
+// 현재 — 소유권 검증 없음
+@GetMapping("/{paymentKey}")
+public ApiResponse<PaymentResponse> getByPaymentKey(@PathVariable String paymentKey) {
+    return ApiResponse.ok(paymentService.getByPaymentKey(paymentKey));
+}
+```
+
+**개선**: `@AuthenticationPrincipal String username`에서 userId를 추출해 결제 소유자와 일치하는지 검증하거나, ADMIN 권한일 경우에만 허용한다.
+
+---
+
+### 57. `TossWebhookVerifier` — `Mac` 인스턴스 `synchronized` 직렬화로 처리량 저하
+
+**위치**: `common/security/TossWebhookVerifier.java` L34-58
+
+**문제**: `Mac` 객체를 싱글턴으로 유지하고 `synchronized(mac)` 블록에서 사용. Webhook 트래픽이 몰릴 때 MAC 연산이 직렬화되어 병목 발생. 복잡한 동시성 관리보다 매 호출마다 새 인스턴스를 생성하는 것이 더 단순하고 안전하다.
+
+**개선**: `@PostConstruct`에서 Mac 초기화를 제거하고, `verify()` 호출 시 `Mac.getInstance(ALGORITHM)` + `mac.init(key)`를 수행한 뒤 사용 후 버린다.
+
+---
+
+### 58. Admin 기본 자격증명 (`admin/changeme`) — 운영 배포 시 변경 누락 위험
+
+**위치**: `common/config/AdminSecurityConfig.java`, `application.properties`
+
+**문제**: `ADMIN_USERNAME` / `ADMIN_PASSWORD` 환경변수 미설정 시 `admin/changeme`로 동작. Spring Boot Admin UI(`/admin-ui`)에 로그인 가능 → 모든 actuator 엔드포인트(힙 덤프·스레드 덤프·환경변수) 접근 허용.
+
+**개선**: #46(JWT Secret)과 동일한 패턴 — `@PostConstruct`에서 기본값 사용 감지 시 `IllegalStateException`으로 시작 실패 처리.
+
+---
+
+### 59. MySQL `useSSL=false` + `allowPublicKeyRetrieval=true` — 평문 DB 통신
+
+**위치**: `src/main/resources/application.properties` datasource URL
+
+**문제**: `useSSL=false`로 DB 연결이 평문 전송. 같은 네트워크에서 패킷 스니핑 시 쿼리·결과·자격증명 노출 가능. `allowPublicKeyRetrieval=true`는 MITM 공격자가 MySQL 서버로 위장해 공개키를 제공하고 비밀번호를 탈취할 수 있는 추가 벡터가 됨.
+
+**개선**: 운영 환경에서는 `useSSL=true&requireSSL=true`로 변경하고, 환경변수(`DB_SSL_ENABLED`)로 개발/운영을 분리한다.
+
+---
+
+### 60. Toss Webhook — 타임스탬프 검증 없음 (Replay Attack 가능)
+
+**위치**: `domain/payment/controller/PaymentController.java` `/webhook` 핸들러, `common/security/TossWebhookVerifier.java`
+
+**문제**: HMAC 서명 검증은 되어 있지만 요청 타임스탬프를 확인하지 않음. 공격자가 유효한 Webhook 요청을 캡처해 나중에 재전송하면 동일한 결제 확정 이벤트가 여러 번 처리될 수 있음. `PaymentIdempotencyManager`가 중복 처리를 일부 차단하지만 멱등성 키 만료 이후에는 방어되지 않음.
+
+**개선**: Toss 요청 헤더의 타임스탬프를 추출해 현재 시각과의 차이가 5분 초과 시 거부한다.
+
+---
+
+### 61. CSP `unsafe-inline` script-src — XSS 완화 효과 반감
+
+**위치**: `common/config/SecurityConfig.java` `contentSecurityPolicy()`
+
+**문제**: `script-src 'self' 'unsafe-inline'` 설정으로 인라인 `<script>` 태그가 실행됨. XSS 취약점이 발견되었을 때 CSP가 실질적인 방어선 역할을 하지 못함. `unsafe-eval`은 이미 제거됐으나 `unsafe-inline`이 더 큰 위험 벡터다.
+
+**개선**: `unsafe-inline` 제거 후 nonce 기반 CSP(`'nonce-{random}'`) 적용. 서버에서 매 요청마다 랜덤 nonce를 생성해 헤더와 `<script nonce="...">` 태그에 주입한다.
+
+---
+
+### 62. DB 자격증명 — 환경변수 미설정 시 하드코딩 평문 사용
+
+**위치**: `src/main/resources/application.properties` `spring.datasource.username/password`
+
+**문제**: `${DB_USERNAME:root}` / `${DB_PASSWORD:root}` 형식으로 환경변수 미설정 시 `root/root` 사용. 애플리케이션 JAR 또는 설정 파일이 유출되면 DB 자격증명이 노출됨. 프로덕션 설정 검토 누락 시 root 계정으로 DB 직접 접근 가능.
+
+**개선**: 기본값 제거(`${DB_USERNAME}` + `${DB_PASSWORD}`). 미설정 시 Spring Boot 시작 실패 → 운영 배포 전 누락 즉시 감지. Vault, AWS Secrets Manager, 또는 Kubernetes Secret 연동 권장.
+
+---
+
+### 63. Actuator — `/env`, `/beans`, `/loggers` 엔드포인트 외부 노출
+
+**위치**: `src/main/resources/application.properties` `management.endpoints.web.exposure.include`
+
+**문제**: `health,info,prometheus,metrics,loggers,env,beans,mappings,threaddump,heapdump` 전체 노출. `env` 엔드포인트는 환경변수(JWT Secret, DB 비밀번호 등)를 마스킹된 형태로 표시하지만 일부 값은 노출됨. `heapdump`는 힙 메모리 덤프를 통해 평문 비밀번호·토큰을 추출 가능.
+
+**개선**:
+```properties
+# 공개 허용
+management.endpoints.web.exposure.include=health,info,prometheus,metrics
+# ADMIN 전용 (AdminSecurityConfig에서 인증 처리)
+management.endpoint.env.enabled=false
+management.endpoint.heapdump.enabled=false
+```
+
+---
+
+### 64. `CouponValidateRequest.couponCode` — `@Size` 검증 누락
+
+**위치**: `domain/coupon/dto/CouponValidateRequest.java`
+
+**문제**: `@NotBlank`만 있고 `@Size(max=50)` 가 없음. 악의적 사용자가 수백 KB의 couponCode를 전송하면 `LOWER(code) = LOWER(:code)` 쿼리 파라미터로 그대로 전달됨. 쿼리 실행 오버헤드 외에도 파라미터 바인딩 시 DB 드라이버가 대형 문자열을 처리함.
+
+**개선**: `@Size(min=8, max=50)` 추가. `CouponCreateRequest.code`의 `@Pattern`과 동일한 길이 제약을 검증에도 적용한다.
+
+---
+
+### 65. `GlobalExceptionHandler` — 예외 메시지 클라이언트 노출
+
+**위치**: `common/exception/GlobalExceptionHandler.java`
+
+**문제**: `handleException(Exception e)` 폴백 핸들러가 `e.getMessage()`를 응답 본문에 포함할 경우 내부 스택 정보(클래스명, SQL 오류 등)가 외부에 노출될 수 있음. 특히 JPA `DataIntegrityViolationException`, `ConstraintViolationException` 등은 테이블명·컬럼명을 메시지에 포함함.
+
+**개선**: 폴백 핸들러는 `ErrorCode.INTERNAL_SERVER_ERROR`의 고정 메시지만 반환하고, 실제 예외 메시지는 서버 로그에만 기록한다.
+
+```java
+@ExceptionHandler(Exception.class)
+public ResponseEntity<ApiResponse<Void>> handleException(Exception e) {
+    log.error("예상치 못한 오류 발생", e);
+    return ResponseEntity.status(INTERNAL_SERVER_ERROR)
+        .body(ApiResponse.fail(ErrorCode.INTERNAL_SERVER_ERROR)); // e.getMessage() 제거
+}
+```
