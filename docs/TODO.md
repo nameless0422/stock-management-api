@@ -35,7 +35,7 @@ Client
 
 ---
 
-## 🔴 보안 취약점 진단 (5/10 완료)
+## 🔴 보안 취약점 진단 (5/10 완료, #60 조치 불필요)
 
 > 전체 코드베이스 보안 분석. IDOR·인증 누락·설정 오류 중심.
 
@@ -89,13 +89,18 @@ public ApiResponse<PaymentResponse> getByPaymentKey(@PathVariable String payment
 
 ---
 
-### 60. Toss Webhook — 타임스탬프 검증 없음 (Replay Attack 가능)
+### ~~60. Toss Webhook — 타임스탬프 검증 없음 (Replay Attack 가능)~~ → 조치 불필요
 
 **위치**: `domain/payment/controller/PaymentController.java` `/webhook` 핸들러, `common/security/TossWebhookVerifier.java`
 
-**문제**: HMAC 서명 검증은 되어 있지만 요청 타임스탬프를 확인하지 않음. 공격자가 유효한 Webhook 요청을 캡처해 나중에 재전송하면 동일한 결제 확정 이벤트가 여러 번 처리될 수 있음. `PaymentIdempotencyManager`가 중복 처리를 일부 차단하지만 멱등성 키 만료 이후에는 방어되지 않음.
+**조사 결과 (2026-04-15)**: Toss 공식 문서 확인 결과, `tosspayments-webhook-signature` / `tosspayments-webhook-transmission-time` 헤더는 **`payout.changed`·`seller.changed` 이벤트 전용**이다. 우리 코드에서 처리하는 `PAYMENT_COMPLETED`, `VIRTUAL_ACCOUNT_DEPOSIT` 등 **일반 결제 웹훅에는 타임스탬프 헤더가 포함되지 않는다**. 따라서 헤더 기반 타임스탬프 검증은 적용 불가.
 
-**개선**: Toss 요청 헤더의 타임스탬프를 추출해 현재 시각과의 차이가 5분 초과 시 거부한다.
+**현황으로 충분한 이유**:
+- `PaymentIdempotencyManager` (Redis SETNX) — 동일 paymentKey 중복 처리 차단
+- `Payment.status` 상태 전이 검증 — 이미 CONFIRMED 상태인 결제는 재처리 거부
+- 멱등성 키 만료 이후 재전송 시나리오는 결제 완료 후 장기간이 지난 상태이므로 실질적 위협 낮음
+
+**참고**: [토스페이먼츠 웹훅 이벤트 문서](https://docs.tosspayments.com/reference/using-api/webhook-events)
 
 ---
 
