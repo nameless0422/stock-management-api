@@ -35,13 +35,13 @@ Client
 
 ---
 
-## 🔴 보안 취약점 진단 (0/10)
+## 🔴 보안 취약점 진단 (5/10 완료)
 
 > 전체 코드베이스 보안 분석. IDOR·인증 누락·설정 오류 중심.
 
 ---
 
-### 56. `PaymentController.getByPaymentKey()` — 인증·소유권 검증 없음 (IDOR)
+### ✅ 56. `PaymentController.getByPaymentKey()` — 인증·소유권 검증 없음 (IDOR)
 
 **위치**: `domain/payment/controller/PaymentController.java` L87-91
 
@@ -59,7 +59,7 @@ public ApiResponse<PaymentResponse> getByPaymentKey(@PathVariable String payment
 
 ---
 
-### 57. `TossWebhookVerifier` — `Mac` 인스턴스 `synchronized` 직렬화로 처리량 저하
+### ✅ 57. `TossWebhookVerifier` — `Mac` 인스턴스 `synchronized` 직렬화로 처리량 저하
 
 **위치**: `common/security/TossWebhookVerifier.java` L34-58
 
@@ -69,7 +69,7 @@ public ApiResponse<PaymentResponse> getByPaymentKey(@PathVariable String payment
 
 ---
 
-### 58. Admin 기본 자격증명 (`admin/changeme`) — 운영 배포 시 변경 누락 위험
+### ✅ 58. Admin 기본 자격증명 (`admin/changeme`) — 운영 배포 시 변경 누락 위험
 
 **위치**: `common/config/AdminSecurityConfig.java`, `application.properties`
 
@@ -119,7 +119,7 @@ public ApiResponse<PaymentResponse> getByPaymentKey(@PathVariable String payment
 
 ---
 
-### 63. Actuator — `/env`, `/beans`, `/loggers` 엔드포인트 외부 노출
+### ✅ 63. Actuator — `/env`, `/beans`, `/loggers` 엔드포인트 외부 노출
 
 **위치**: `src/main/resources/application.properties` `management.endpoints.web.exposure.include`
 
@@ -136,7 +136,7 @@ management.endpoint.heapdump.enabled=false
 
 ---
 
-### 64. `CouponValidateRequest.couponCode` — `@Size` 검증 누락
+### ✅ 64. `CouponValidateRequest.couponCode` — `@Size` 검증 누락
 
 **위치**: `domain/coupon/dto/CouponValidateRequest.java`
 
@@ -165,13 +165,13 @@ public ResponseEntity<ApiResponse<Void>> handleException(Exception e) {
 
 ---
 
-## 🔴 코드리뷰 — 구조·성능·보안 (0/10)
+## 🔴 코드리뷰 — 구조·성능·보안 (6/10 완료)
 
 > 182개 Java 파일 전수 분석. 우선순위 순으로 정렬.
 
 ---
 
-### 46. JWT Secret 기본값 — 로그 경고만 출력, 시작 실패 없음
+### ✅ 46. JWT Secret 기본값 — 로그 경고만 출력, 시작 실패 없음
 
 **위치**: `common/security/JwtTokenProvider.java` `@PostConstruct`
 
@@ -205,7 +205,7 @@ return ips[idx].trim();
 
 ---
 
-### 48. `CartService.getCart()` — Product 지연로딩 N+1
+### ✅ 48. `CartService.getCart()` — Product 지연로딩 N+1
 
 **위치**: `domain/order/cart/service/CartService.java` `getCart()`
 
@@ -220,7 +220,7 @@ List<CartItem> findByUserIdWithProduct(@Param("userId") Long userId);
 
 ---
 
-### 49. `ShipmentService.getByOrderId()` — 소유권 검증에 Order 전체 엔티티 로드
+### ✅ 49. `ShipmentService.getByOrderId()` — 소유권 검증에 Order 전체 엔티티 로드
 
 **위치**: `domain/shipment/service/ShipmentService.java` `getByOrderId()`
 
@@ -236,7 +236,7 @@ Optional<Long> findUserIdById(@Param("orderId") Long orderId);
 
 ---
 
-### 50. `CouponService` — 동일 조건 중복 검증 (3곳)
+### ✅ 50. `CouponService` — 동일 조건 중복 검증 (3곳)
 
 **위치**: `domain/coupon/service/CouponService.java`
 
@@ -286,7 +286,7 @@ Optional<Long> findUserIdById(@Param("orderId") Long orderId);
 
 ---
 
-### 54. `DistributedLock` + Pessimistic Lock 이중 제어 — 단일 인스턴스에서 불필요한 오버헤드
+### ✅ 54. `DistributedLock` + Pessimistic Lock 이중 제어 — 단일 인스턴스에서 불필요한 오버헤드
 
 **위치**: `domain/inventory/service/InventoryService.java` `reserve()` / `releaseReservation()` 등
 
@@ -296,7 +296,7 @@ Optional<Long> findUserIdById(@Param("orderId") Long orderId);
 
 ---
 
-### 55. `RefundService.requestRefund()` — `noRollbackFor + throw` 패턴 불명확
+### ✅ 55. `RefundService.requestRefund()` — `noRollbackFor + throw` 패턴 불명확
 
 **위치**: `domain/refund/service/RefundService.java` `requestRefund()` L58-107
 
@@ -507,11 +507,21 @@ return RefundResponse.from(refund); // HTTP 200, status=FAILED
 
 | 항목 | 비고 |
 |------|------|
+| #46 JWT Secret 기본값 → 시작 실패 | `JwtTokenProvider @PostConstruct` `IllegalStateException` throw |
+| #48 CartService N+1 | `CartRepository.findByUserId()` 이미 `@EntityGraph(product)` 적용 |
+| #49 ShipmentService userId 프로젝션 | `orderRepository.findUserIdById()` — Order 전체 로드 불필요 |
+| #50 CouponService 검증 중복 제거 | `applyCoupon()` → `validateConditions()` 통합 호출 |
+| #54 InventoryService 이중 락 문서화 | `reserve()` Javadoc: Redis 장애 시 DB 비관적 락이 최후 방어선 |
+| #55 RefundService noRollbackFor 문서화 | 이미 주석 존재 (confirmed) |
+| #56 PaymentController IDOR 수정 | `getByPaymentKey()` 소유권 검증 + `orderRepository.findUserIdById()` |
+| #57 TossWebhookVerifier Mac per-call | 싱글턴 + `synchronized` → 호출마다 `Mac.getInstance()` |
+| #58 Admin 기본 자격증명 → 시작 실패 | `AdminSecurityConfig @PostConstruct` `IllegalStateException` throw |
+| #63 Actuator 엔드포인트 최소화 | `env/heapdump/threaddump/beans/mappings/loggers` 비활성화 |
+| #64 CouponValidateRequest @Size 추가 | `@Size(min=8, max=50)` 입력 크기 제한 |
 | PaymentService JWT userId 적용 | DB 라운드트립 제거, `resolveUserId()` 패턴 |
 | ES 상품 동기화 | `@TransactionalEventListener(AFTER_COMMIT)` + `ProductEventListener` |
 | CSP `unsafe-eval` 제거 | `SecurityConfig` script-src 정책 강화 |
 | 가상계좌 Webhook 처리 | `applyWebhookConfirmResult()` confirm 흐름 재사용 |
-| JWT 시크릿 기본값 경고 | `@PostConstruct` ERROR 로그 |
 | RefundService 영구 재시도 불가 버그 | FAILED 상태 환불 `reset()` 후 재사용 |
 | LoginRateLimiter Lua 원자화 | `RAtomicLong` → Lua INCR+EXPIRE 원자적 처리 |
 | ShipmentService / PointService `REQUIRES_NEW` | `UnexpectedRollbackException` 방지 |

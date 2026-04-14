@@ -165,6 +165,14 @@ public class InventoryService {
     /**
      * 주문 생성 시 재고를 예약한다.
      * 가용 재고가 부족하면 {@link com.stockmanagement.common.exception.InsufficientStockException}이 발생한다.
+     *
+     * <p>동시성 이중 방어:
+     * <ul>
+     *   <li>@DistributedLock(Redisson) — 멀티 인스턴스 간 상호 배제 (외부 락)
+     *   <li>findByProductIdWithLock(SELECT FOR UPDATE) — 단일 DB 트랜잭션 내 비관적 락 (내부 락)
+     * </ul>
+     * Redis 장애 시 Redisson 락이 누락되더라도 DB 비관적 락이 최후 방어선으로 동작한다.
+     * releaseReservation(), allocate(), releaseAllocation()도 동일한 이중 락 구조를 따른다.
      */
     @DistributedLock(key = "'inventory:' + #productId")
     @Transactional
