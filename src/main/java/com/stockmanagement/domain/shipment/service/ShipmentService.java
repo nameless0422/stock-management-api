@@ -77,9 +77,10 @@ public class ShipmentService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND));
 
         if (!isAdmin) {
-            Order order = orderRepository.findById(orderId)
+            // userId 스칼라 프로젝션 — Order 전체 엔티티 로드 불필요
+            Long orderUserId = orderRepository.findUserIdById(orderId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND));
-            if (!order.getUserId().equals(resolveUserId(username))) {
+            if (!orderUserId.equals(resolveUserId(username))) {
                 // 타인 배송 존재 여부 노출 방지 — ACCESS_DENIED 대신 NOT_FOUND 반환
                 throw new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND);
             }
