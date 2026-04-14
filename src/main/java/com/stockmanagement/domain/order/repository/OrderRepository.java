@@ -87,6 +87,15 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     List<Long> findExpiredPendingOrderIds(@Param("threshold") LocalDateTime threshold);
 
     /**
+     * 주문 소유자의 userId만 조회한다 (소유권 검증 전용 — Order 전체 로드 불필요).
+     *
+     * @param id 주문 ID
+     * @return 주문 소유자 userId (주문 없으면 Optional.empty())
+     */
+    @Query("SELECT o.userId FROM Order o WHERE o.id = :id")
+    Optional<Long> findUserIdById(@Param("id") Long id);
+
+    /**
      * 사용자가 특정 상품을 구매(CONFIRMED 주문 보유)했는지 확인한다 (리뷰 작성 자격 검증).
      */
     @Query("SELECT COUNT(o) > 0 FROM Order o JOIN o.items i " +

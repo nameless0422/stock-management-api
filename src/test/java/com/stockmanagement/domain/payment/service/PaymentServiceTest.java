@@ -433,14 +433,37 @@ class PaymentServiceTest {
     class GetByPaymentKey {
 
         @Test
-        @DisplayName("결제가 존재하면 PaymentResponse를 반환한다")
-        void returnsPaymentResponse() {
+        @DisplayName("ADMIN은 소유권 검증 없이 결제 조회 가능")
+        void returnsPaymentResponseForAdmin() {
             given(paymentRepository.findByPaymentKey("pk-001")).willReturn(Optional.of(pendingPayment));
 
-            PaymentResponse response = paymentService.getByPaymentKey("pk-001");
+            PaymentResponse response = paymentService.getByPaymentKey("pk-001", 99L, true);
 
             assertThat(response.getTossOrderId()).isEqualTo("toss-order-001");
             assertThat(response.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        }
+
+        @Test
+        @DisplayName("본인 결제 조회 → 성공")
+        void returnsPaymentResponseForOwner() {
+            given(paymentRepository.findByPaymentKey("pk-001")).willReturn(Optional.of(pendingPayment));
+            given(orderRepository.findUserIdById(1L)).willReturn(Optional.of(1L));
+
+            PaymentResponse response = paymentService.getByPaymentKey("pk-001", 1L, false);
+
+            assertThat(response.getTossOrderId()).isEqualTo("toss-order-001");
+        }
+
+        @Test
+        @DisplayName("타인 결제 조회 → ORDER_ACCESS_DENIED")
+        void throwsWhenNonOwnerAccesses() {
+            given(paymentRepository.findByPaymentKey("pk-001")).willReturn(Optional.of(pendingPayment));
+            given(orderRepository.findUserIdById(1L)).willReturn(Optional.of(1L));
+
+            assertThatThrownBy(() -> paymentService.getByPaymentKey("pk-001", 99L, false))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.ORDER_ACCESS_DENIED));
         }
 
         @Test
@@ -448,7 +471,7 @@ class PaymentServiceTest {
         void throwsWhenNotFound() {
             given(paymentRepository.findByPaymentKey("unknown")).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> paymentService.getByPaymentKey("unknown"))
+            assertThatThrownBy(() -> paymentService.getByPaymentKey("unknown", 1L, false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND));

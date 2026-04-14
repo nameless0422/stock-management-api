@@ -250,7 +250,8 @@ class PaymentControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 결제 내역 조회 → 200")
         void returnsPayment() throws Exception {
-            given(paymentService.getByPaymentKey("pk-test")).willReturn(mock(PaymentResponse.class));
+            given(paymentService.getByPaymentKey(eq("pk-test"), any(), anyBoolean()))
+                    .willReturn(mock(PaymentResponse.class));
 
             mockMvc.perform(get("/api/payments/pk-test"))
                     .andExpect(status().isOk())
@@ -268,11 +269,23 @@ class PaymentControllerTest {
         @WithMockUser
         @DisplayName("존재하지 않는 결제 → 404")
         void returnsNotFound() throws Exception {
-            given(paymentService.getByPaymentKey("unknown"))
+            given(paymentService.getByPaymentKey(eq("unknown"), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
             mockMvc.perform(get("/api/payments/unknown"))
                     .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.success").value(false));
+        }
+
+        @Test
+        @WithMockUser
+        @DisplayName("타인 결제 조회 시도 → 403")
+        void deniesAccessForNonOwner() throws Exception {
+            given(paymentService.getByPaymentKey(eq("pk-test"), any(), anyBoolean()))
+                    .willThrow(new BusinessException(ErrorCode.ORDER_ACCESS_DENIED));
+
+            mockMvc.perform(get("/api/payments/pk-test"))
+                    .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false));
         }
     }
