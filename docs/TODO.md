@@ -104,13 +104,20 @@ public ApiResponse<PaymentResponse> getByPaymentKey(@PathVariable String payment
 
 ---
 
-### 61. CSP `unsafe-inline` script-src — XSS 완화 효과 반감
+### ~~61. CSP `unsafe-inline` script-src — XSS 완화 효과 반감~~ → 실질 위험도 낮음, 조치 보류
 
 **위치**: `common/config/SecurityConfig.java` `contentSecurityPolicy()`
 
-**문제**: `script-src 'self' 'unsafe-inline'` 설정으로 인라인 `<script>` 태그가 실행됨. XSS 취약점이 발견되었을 때 CSP가 실질적인 방어선 역할을 하지 못함. `unsafe-eval`은 이미 제거됐으나 `unsafe-inline`이 더 큰 위험 벡터다.
+**현황**: `script-src 'self' 'unsafe-inline'` — Spring Boot Admin UI(`/admin-ui`)가 인라인 스크립트를 포함하고 있어 제거 시 어드민 UI가 깨짐.
 
-**개선**: `unsafe-inline` 제거 후 nonce 기반 CSP(`'nonce-{random}'`) 적용. 서버에서 매 요청마다 랜덤 nonce를 생성해 헤더와 `<script nonce="...">` 태그에 주입한다.
+**실질 위험도가 낮은 이유**:
+- 이 서버는 **순수 REST API** — 브라우저가 렌더링할 HTML을 직접 서빙하지 않음
+- XSS 공격은 "서버가 사용자 입력을 escape 없이 HTML로 출력"해야 성립하는데, JSON API 응답에는 해당 없음
+- CSP 헤더는 `/admin-ui` HTML 응답에 적용되는 것이 실질적 범위이며, 어드민은 인증된 사용자만 접근
+
+**근본 해결책**: nonce 기반 CSP — Spring MVC 인터셉터로 매 요청마다 랜덤 nonce를 생성하고 SBA 정적 HTML에 주입해야 하나, 외부 라이브러리(SBA) 내부 HTML 커스터마이징이 필요해 구현 복잡도가 높음.
+
+**결론**: 프론트엔드 SPA 서버(HTML 직접 렌더링)에서 중요한 항목. 이 API 서버 범위에서는 우선순위 낮음.
 
 ---
 
