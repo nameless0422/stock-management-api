@@ -4,6 +4,37 @@
 
 ---
 
+## 아키텍처 요약
+
+```
+Client
+  │
+  ├─ AuthController (JWT 발급)
+  ├─ ProductController / CategoryController / ProductImageController
+  ├─ InventoryController
+  ├─ OrderController → OrderService(God Object) → InventoryService · CouponService · PointService
+  ├─ PaymentController → PaymentService → PaymentTransactionHelper → OrderService (역방향 의존)
+  │                                                                 └─ OutboxEventStore
+  ├─ ShipmentController → ShipmentService
+  ├─ RefundController → RefundService → PaymentService
+  ├─ CartController → CartService → OrderService
+  ├─ WishlistController / ReviewController / PointController
+  └─ AdminController → AdminService
+
+공통 인프라:
+  Redis — JWT 블랙리스트 · Refresh Token · Cache · Rate Limit · 분산 락 · Outbox relay 락
+  Elasticsearch — 상품 전문 검색 (MySQL fallback)
+  MinIO(S3) — 상품 이미지 Presigned URL
+  OutboxEventStore — ORDER_CREATED/CANCELLED · PAYMENT_CONFIRMED · SHIPMENT_CREATE · POINT_EARN
+  Flyway V1~V34 — 스키마 버전 관리
+```
+
+**주요 데이터 흐름**: 주문 생성 → 재고 예약(분산 락) → PENDING → Toss 결제 승인 → Outbox 이벤트(배송·포인트) → CONFIRMED → 배송 상태 전이 → 완료
+
+**동시성 전략**: 재고 변경 `@DistributedLock(Redisson)` + `SELECT FOR UPDATE`(이중), 결제 확정 `PaymentIdempotencyManager(Redis SETNX)`, 쿠폰 발급 `findByCodeWithLock(비관적 락)`
+
+---
+
 ## ✅ 즉시 수정 완료 — 프로덕션 데이터 정합성 위험 (6/6)
 
 | # | 항목 | 파일 | 조치 |
@@ -343,3 +374,151 @@ ALTER TABLE outbox_events             CONVERT TO CHARACTER SET utf8mb4 COLLATE u
 | 배송지 관리 | 내 쿠폰 목록 / 공개 쿠폰 claim |
 | 프로필 수정 / 비밀번호 변경 | 상품 이미지 업로드 (MinIO Presigned URL) |
 | 주문 아이템 리뷰 작성 여부 | 주문 상세 통합 응답 |
+
+---
+
+## 🔴 시니어 엔지니어 코드리뷰 — 구조·성능·보안 (0/10)
+
+> 182개 Java 파일 전수 분석. 우선순위 순으로 정렬.
+
+---
+
+### 46. JWT Secret 기본값 — 로그 경고만 출력, 시작 실패 없음
+
+**위치**: `common/security/JwtTokenProvider.java` `@PostConstruct`
+
+**문제**: `JWT_SECRET` 환경변수 미설정 시 개발용 기본값으로 계속 실행됨. ERROR 로그를 출력하지만 아무도 로그를 보지 않으면 운영 배포에서 취약한 시크릿이 그대로 사용됨.
+
+**개선**: 기본값 감지 시 `IllegalStateException`으로 애플리케이션 시작 자체를 실패시킨다.
+
+```java
+if (DEV_DEFAULT_SECRET.equals(secretKeyStr)) {
+    throw new IllegalStateException(
+        "JWT_SECRET 환경변수가 설정되지 않았습니다. 운영 환경에서는 반드시 설정하세요.");
+}
+```
+
+---
+
+### 47. `X-Forwarded-For` 마지막 IP 추출 — Rate Limit 우회 가능
+
+**위치**: `common/ratelimit/RateLimitAspect.java` `extractClientIp()`
+
+**문제**: `X-Forwarded-For: client, proxy1, proxy2`에서 마지막 IP(`proxy2`)를 추출하는데, 공격자가 헤더를 `X-Forwarded-For: real_ip, attacker_ip`로 조작하면 `attacker_ip`로 Rate Limit 버킷이 생성되어 실질적인 IP 기반 제한이 무력화됨.
+
+**개선**: 프록시 수(`rate-limit.trusted-proxy-count`)를 설정하고, 헤더 끝에서 N번째 IP를 추출한다.
+
+```java
+// X-Forwarded-For에서 신뢰할 수 있는 클라이언트 IP 추출
+String[] ips = forwarded.split(",");
+int idx = Math.max(0, ips.length - 1 - trustedProxyCount);
+return ips[idx].trim();
+```
+
+---
+
+### 48. `CartService.getCart()` — Product 지연로딩 N+1
+
+**위치**: `domain/order/cart/service/CartService.java` `getCart()`
+
+**문제**: `cartRepository.findByUserId(userId)`로 CartItem을 조회한 뒤 루프에서 `item.getProduct().getId()`를 호출 → 각 CartItem마다 Product 지연로딩 쿼리 발생 (N+1). Inventory는 배치 조회되지만 Product 조회가 N번 실행됨.
+
+**개선**: CartItem 조회 시 Product를 fetch join으로 함께 로드한다.
+
+```java
+@Query("SELECT c FROM CartItem c JOIN FETCH c.product WHERE c.userId = :userId ORDER BY c.createdAt DESC")
+List<CartItem> findByUserIdWithProduct(@Param("userId") Long userId);
+```
+
+---
+
+### 49. `ShipmentService.getByOrderId()` — 소유권 검증에 Order 전체 엔티티 로드
+
+**위치**: `domain/shipment/service/ShipmentService.java` `getByOrderId()`
+
+**문제**: 배송 조회 시 소유권 검증을 위해 `orderRepository.findById(orderId)`로 Order 전체(+ 컬렉션 Lazy) 를 로드하지만 실제 필요한 건 `userId` 필드 하나뿐.
+
+**개선**: `userId`만 프로젝션으로 조회한다.
+
+```java
+// OrderRepository에 추가
+@Query("SELECT o.userId FROM Order o WHERE o.id = :orderId")
+Optional<Long> findUserIdById(@Param("orderId") Long orderId);
+```
+
+---
+
+### 50. `CouponService` — 동일 조건 중복 검증 (3곳)
+
+**위치**: `domain/coupon/service/CouponService.java`
+
+**문제**: 쿠폰 유효성 검증 로직(`active`, `validFrom`, `validUntil`, `maxUsageCount`, 사용자 중복 여부)이 `validate()`, `applyCoupon()`, `issueCoupon()` 세 곳에 분산·중복됨. 정책 변경 시 3곳을 모두 수정해야 해 누락 위험 있음.
+
+**개선**: `validateCouponConditions(Coupon, Long userId)` private 메서드로 추출하고 세 곳에서 호출한다.
+
+---
+
+### 51. `OrderService` God Object — 단일 서비스에 책임 과다
+
+**위치**: `domain/order/service/OrderService.java` (430줄)
+
+**문제**: 주문 생성·조회·취소·상태 이력·페이지네이션·쿠폰 적용·포인트 차감·재고 검증·배송지 검증을 단일 클래스가 담당. 테스트 시 Mock이 10개 이상 필요하며, 기능 추가마다 클래스가 비대해짐.
+
+**개선 방향**:
+- `OrderQueryService` — 조회 전용 (readOnly)
+- `OrderCommandService` — 생성·취소 (write)
+- `OrderValidationService` — 배송지·쿠폰·포인트 사전 검증 추출
+
+---
+
+### 52. Toss 승인 완료 후 주문 만료 경합 — 수동 환불 필요 시나리오 무처리
+
+**위치**: `domain/payment/service/PaymentTransactionHelper.java` `applyConfirmResult()` L175-187
+
+**문제**: Toss API 승인 요청 중(`callTossConfirmApi()` 대기) 만료 스케줄러가 Order를 CANCELLED로 변경 가능. Toss는 결제를 완료했으나 주문은 취소된 상태 → CRITICAL 로그만 출력하고 사용자는 청구됨.
+
+**현황**: `log.error("[Payment] CRITICAL: …수동 환불 필요…")` 에 그침.
+
+**개선 방향**:
+- CRITICAL 상황 감지 시 운영팀 알림 발송 (Slack Webhook, PagerDuty 등)
+- `dead_letter_payments` 테이블에 레코드 삽입해 대시보드에서 추적
+- 결제 승인 직전 Order 상태를 `PAYMENT_IN_PROGRESS`로 선점해 만료 스케줄러가 건드리지 못하게 차단
+
+---
+
+### 53. `ProductService` ES Fallback — MySQL LIKE 검색으로 결과 불일치
+
+**위치**: `domain/product/service/ProductService.java` `getList()` L98-116
+
+**문제**: ES 장애 시 MySQL `LIKE '%keyword%'` 검색으로 Fallback하는데, ES의 형태소 분석·관련성 점수 기반 정렬과 전혀 다른 결과를 반환함. 사용자 입장에서 검색 결과가 갑자기 바뀌는 UX 문제 발생.
+
+**개선 옵션**:
+- ES 장애 시 빈 결과 반환 + "검색 서비스 일시 장애" 메시지 표시 (결과 불일치 방지)
+- 또는 MySQL 전문 검색(`MATCH … AGAINST`)으로 대체해 품질 차이를 최소화
+
+---
+
+### 54. `DistributedLock` + Pessimistic Lock 이중 제어 — 단일 인스턴스에서 불필요한 오버헤드
+
+**위치**: `domain/inventory/service/InventoryService.java` `reserve()` / `releaseReservation()` 등
+
+**문제**: Redis 분산 락(`@DistributedLock`) + DB `SELECT FOR UPDATE`(비관적 락)을 동시에 사용. 단일 인스턴스 환경에서는 분산 락이 불필요하고, 멀티 인스턴스 환경에서는 DB 비관적 락만으로도 충분한 경우가 많음. 두 락을 모두 획득해야 하므로 레이턴시 증가.
+
+**현황**: 의도적 이중 방어선이라면 문서화 필요. 설계 판단이 필요한 항목.
+
+---
+
+### 55. `RefundService.requestRefund()` — `noRollbackFor + throw` 패턴 불명확
+
+**위치**: `domain/refund/service/RefundService.java` `requestRefund()` L58-107
+
+**문제**: `@Transactional(noRollbackFor = Exception.class)`와 `catch (Exception e) { refund.fail(); throw e; }`를 함께 사용. 예외를 던지면서도 트랜잭션을 커밋하려는 의도인데, 클라이언트는 HTTP 500을 받고 Refund 상태만 FAILED로 변경된 채로 유지됨. 의도가 불명확해 유지보수 시 오해 유발.
+
+**개선**: 예외를 던지지 않고 FAILED 상태를 반환하거나, 명시적인 주석으로 패턴 의도를 문서화한다.
+
+```java
+// 현재: throw e (클라이언트 500 수신, refund는 FAILED 커밋)
+// 개선: FAILED 상태를 정상 응답으로 반환 (클라이언트가 재시도 가능)
+refund.fail(reason);
+return RefundResponse.from(refund); // HTTP 200, status=FAILED
+```
