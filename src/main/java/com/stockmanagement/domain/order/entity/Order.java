@@ -112,7 +112,7 @@ public class Order {
      * 주문을 취소한다.
      *
      * <p>PENDING 상태인 경우에만 취소 가능하다.
-     * CONFIRMED·CANCELLED 상태에서 호출 시 {@link BusinessException}이 발생한다.
+     * PAYMENT_IN_PROGRESS 상태에서는 Toss API 호출이 진행 중이므로 취소 불가.
      *
      * @throws BusinessException 취소 불가 상태일 경우
      */
@@ -124,15 +124,42 @@ public class Order {
     }
 
     /**
-     * Confirms the order after successful payment.
-     * Called by the Payment domain upon payment approval.
+     * Toss API 호출 직전 결제 진행 중 상태로 전환한다.
      *
-     * <p>Only a PENDING order can be confirmed.
+     * <p>PENDING → PAYMENT_IN_PROGRESS. 만료 스케줄러({@code findExpiredPendingOrderIds})가
+     * PENDING만 조회하므로 이 상태로 전환된 주문은 자동 취소 대상에서 제외된다.
      *
-     * @throws BusinessException if the current status is not PENDING
+     * @throws BusinessException PENDING이 아닌 상태에서 호출 시
+     */
+    public void startPayment() {
+        if (this.status != OrderStatus.PENDING) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+        this.status = OrderStatus.PAYMENT_IN_PROGRESS;
+    }
+
+    /**
+     * 결제 실패·오류 시 PAYMENT_IN_PROGRESS → PENDING 으로 복원한다.
+     *
+     * <p>복원 후 만료 스케줄러가 다시 이 주문을 정리할 수 있다.
+     * Toss API 오류 또는 비-DONE 응답 수신 시 {@link com.stockmanagement.domain.payment.service.PaymentTransactionHelper}가 호출한다.
+     */
+    public void resetPaymentFailed() {
+        if (this.status != OrderStatus.PAYMENT_IN_PROGRESS) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+        this.status = OrderStatus.PENDING;
+    }
+
+    /**
+     * 결제 성공 후 주문을 확정한다 — Payment 도메인에서 호출.
+     *
+     * <p>PAYMENT_IN_PROGRESS(일반 결제) 또는 PENDING(가상계좌 Webhook) 상태에서 CONFIRMED로 전환.
+     *
+     * @throws BusinessException 전환 가능한 상태가 아닌 경우
      */
     public void confirm() {
-        if (this.status != OrderStatus.PENDING) {
+        if (this.status != OrderStatus.PAYMENT_IN_PROGRESS && this.status != OrderStatus.PENDING) {
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
         }
         this.status = OrderStatus.CONFIRMED;

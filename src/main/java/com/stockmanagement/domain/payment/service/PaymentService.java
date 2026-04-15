@@ -164,6 +164,8 @@ public class PaymentService {
             return response;
 
         } catch (Exception e) {
+            // PAYMENT_IN_PROGRESS → PENDING 복원: 재시도 시 스케줄러가 다시 접근 가능하도록 되돌린다
+            transactionHelper.resetOrderOnPaymentError(request.getTossOrderId());
             // 실패 시 Redis 키 삭제 → 클라이언트 재시도 허용
             idempotencyManager.release(idempotencyKey);
             throw e;
@@ -269,13 +271,26 @@ public class PaymentService {
     /**
      * Toss paymentKey로 결제 상세 정보를 조회한다.
      *
+     * <p>ADMIN은 전체 조회 가능. USER는 자신의 주문에 대한 결제만 조회 가능.
+     * Payment 엔티티에 userId 필드가 없으므로 orderId → Order.userId 경유로 소유권을 검증한다.
+     *
      * @param paymentKey Toss 결제 키
+     * @param userId     요청자 userId (JWT claim)
+     * @param isAdmin    ADMIN 여부
      * @return 결제 상세 정보
+     * @throws BusinessException 결제 없음(PAYMENT_NOT_FOUND) 또는 소유권 불일치(ORDER_ACCESS_DENIED)
      */
-    public PaymentResponse getByPaymentKey(String paymentKey) {
-        return paymentRepository.findByPaymentKey(paymentKey)
-                .map(PaymentResponse::from)
+    public PaymentResponse getByPaymentKey(String paymentKey, Long userId, boolean isAdmin) {
+        Payment payment = paymentRepository.findByPaymentKey(paymentKey)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        if (!isAdmin) {
+            Long orderUserId = orderRepository.findUserIdById(payment.getOrderId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+            if (!orderUserId.equals(userId)) {
+                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
+            }
+        }
+        return PaymentResponse.from(payment);
     }
 
     /**

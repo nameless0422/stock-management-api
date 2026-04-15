@@ -1,5 +1,6 @@
 package com.stockmanagement.common.config;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,6 +37,22 @@ public class AdminSecurityConfig {
 
     @Value("${admin.password:changeme}")
     private String adminPassword;
+
+    /**
+     * 운영 배포 시 기본 자격증명 사용 방지.
+     *
+     * <p>ADMIN_USERNAME / ADMIN_PASSWORD 환경변수가 모두 기본값인 경우 시작을 즉시 실패시킨다.
+     *
+     * @throws IllegalStateException 기본 자격증명이 그대로 사용되는 경우
+     */
+    @PostConstruct
+    public void validateCredentials() {
+        if ("admin".equals(adminUsername) && "changeme".equals(adminPassword)) {
+            throw new IllegalStateException(
+                    "[SECURITY] ADMIN_USERNAME / ADMIN_PASSWORD가 기본값(admin/changeme)입니다. " +
+                    "운영 환경에서는 환경변수를 반드시 설정하세요.");
+        }
+    }
 
     @Bean
     @Order(1)

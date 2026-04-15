@@ -193,10 +193,7 @@ public class CouponService {
 
         // 비관적 락 획득 후 재검증 (TOCTOU 방지)
         validateActive(coupon);
-        validatePeriod(coupon);
-        validateUsageCount(coupon);
-        validateMinimumOrderAmount(coupon, orderAmount);
-        validateUserUsage(coupon, userId);
+        validateConditions(coupon, userId, orderAmount);
 
         // 발급 전용 쿠폰은 user_coupons 등록 여부 확인
         if (!coupon.isPublic()

@@ -83,11 +83,14 @@ public class PaymentController {
         paymentService.handleWebhook(event);
     }
 
-    @Operation(summary = "결제 조회", description = "paymentKey로 결제 상세 조회.")
+    @Operation(summary = "결제 조회", description = "paymentKey로 결제 상세 조회. 본인 결제만 가능 (ADMIN은 전체 조회).")
     @GetMapping("/{paymentKey}")
     public ApiResponse<PaymentResponse> getByPaymentKey(
-            @PathVariable String paymentKey) {
-        return ApiResponse.ok(paymentService.getByPaymentKey(paymentKey));
+            @PathVariable String paymentKey,
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
+        return ApiResponse.ok(paymentService.getByPaymentKey(paymentKey, resolveUserId(authentication, username), isAdmin));
     }
 
     @Operation(summary = "주문별 결제 조회", description = "주문 ID로 결제 정보 조회. 결제 전이면 data: null 반환. 본인 주문만 가능.")

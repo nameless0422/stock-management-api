@@ -3,10 +3,12 @@ package com.stockmanagement.domain.product.wishlist.controller;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.product.wishlist.dto.WishlistResponse;
 import com.stockmanagement.domain.product.wishlist.service.WishlistService;
+import com.stockmanagement.domain.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,14 +21,16 @@ import java.util.List;
 public class WishlistController {
 
     private final WishlistService wishlistService;
+    private final UserService userService;
 
     @Operation(summary = "위시리스트에 상품 추가")
     @PostMapping("/{productId}")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<WishlistResponse> add(
             @PathVariable Long productId,
-            @AuthenticationPrincipal String username) {
-        return ApiResponse.ok(wishlistService.add(productId, username));
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        return ApiResponse.ok(wishlistService.add(productId, resolveUserId(authentication, username)));
     }
 
     @Operation(summary = "위시리스트에서 상품 제거")
@@ -34,8 +38,9 @@ public class WishlistController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void remove(
             @PathVariable Long productId,
-            @AuthenticationPrincipal String username) {
-        wishlistService.remove(productId, username);
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        wishlistService.remove(productId, resolveUserId(authentication, username));
     }
 
     @Operation(summary = "특정 상품의 위시리스트 추가 여부 조회",
@@ -43,15 +48,25 @@ public class WishlistController {
     @GetMapping("/{productId}")
     public ApiResponse<java.util.Map<String, Boolean>> isWishlisted(
             @PathVariable Long productId,
-            @AuthenticationPrincipal String username) {
-        boolean wishlisted = wishlistService.isWishlisted(productId, username);
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        boolean wishlisted = wishlistService.isWishlisted(productId, resolveUserId(authentication, username));
         return ApiResponse.ok(java.util.Map.of("wishlisted", wishlisted));
     }
 
     @Operation(summary = "내 위시리스트 목록 조회")
     @GetMapping
     public ApiResponse<List<WishlistResponse>> getList(
-            @AuthenticationPrincipal String username) {
-        return ApiResponse.ok(wishlistService.getList(username));
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        return ApiResponse.ok(wishlistService.getList(resolveUserId(authentication, username)));
+    }
+
+    /** JWT details에서 userId를 추출하고, 없으면 DB fallback. */
+    private Long resolveUserId(Authentication auth, String username) {
+        if (auth != null && auth.getDetails() instanceof Long userId) {
+            return userId;
+        }
+        return userService.resolveUserId(username);
     }
 }

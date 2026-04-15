@@ -297,7 +297,7 @@ class PaymentServiceTest {
         }
 
         @Test
-        @DisplayName("Toss API가 DONE이 아닌 상태 반환 시 applyConfirmResult가 TOSS_PAYMENTS_ERROR를 던진다")
+        @DisplayName("Toss API가 DONE이 아닌 상태 반환 시 주문 상태를 복원하고 TOSS_PAYMENTS_ERROR를 던진다")
         void failsWhenTossReturnsNonDoneStatus() {
             PaymentConfirmRequest request = mock(PaymentConfirmRequest.class);
             given(request.getTossOrderId()).willReturn("toss-order-001");
@@ -316,6 +316,29 @@ class PaymentServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.TOSS_PAYMENTS_ERROR));
+
+            // PAYMENT_IN_PROGRESS → PENDING 복원 호출 검증
+            verify(transactionHelper).resetOrderOnPaymentError("toss-order-001");
+        }
+
+        @Test
+        @DisplayName("Toss API 예외 발생 시 주문 상태를 PENDING으로 복원한다")
+        void resetsOrderStatusWhenTossApiThrows() {
+            PaymentConfirmRequest request = mock(PaymentConfirmRequest.class);
+            given(request.getTossOrderId()).willReturn("toss-order-001");
+            given(request.getAmount()).willReturn(new BigDecimal("10000"));
+            given(request.getPaymentKey()).willReturn("pk-001");
+
+            given(transactionHelper.loadAndValidateForConfirm(anyString(), any(), anyLong()))
+                    .willReturn(Optional.empty());
+            given(tossPaymentsClient.confirm(any()))
+                    .willThrow(new RuntimeException("Toss API 네트워크 오류"));
+
+            assertThatThrownBy(() -> paymentService.confirm(request, 1L))
+                    .isInstanceOf(RuntimeException.class);
+
+            verify(transactionHelper).resetOrderOnPaymentError("toss-order-001");
+            verify(idempotencyManager).release("confirm:toss-order-001");
         }
     }
 
@@ -433,14 +456,37 @@ class PaymentServiceTest {
     class GetByPaymentKey {
 
         @Test
-        @DisplayName("결제가 존재하면 PaymentResponse를 반환한다")
-        void returnsPaymentResponse() {
+        @DisplayName("ADMIN은 소유권 검증 없이 결제 조회 가능")
+        void returnsPaymentResponseForAdmin() {
             given(paymentRepository.findByPaymentKey("pk-001")).willReturn(Optional.of(pendingPayment));
 
-            PaymentResponse response = paymentService.getByPaymentKey("pk-001");
+            PaymentResponse response = paymentService.getByPaymentKey("pk-001", 99L, true);
 
             assertThat(response.getTossOrderId()).isEqualTo("toss-order-001");
             assertThat(response.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        }
+
+        @Test
+        @DisplayName("본인 결제 조회 → 성공")
+        void returnsPaymentResponseForOwner() {
+            given(paymentRepository.findByPaymentKey("pk-001")).willReturn(Optional.of(pendingPayment));
+            given(orderRepository.findUserIdById(1L)).willReturn(Optional.of(1L));
+
+            PaymentResponse response = paymentService.getByPaymentKey("pk-001", 1L, false);
+
+            assertThat(response.getTossOrderId()).isEqualTo("toss-order-001");
+        }
+
+        @Test
+        @DisplayName("타인 결제 조회 → ORDER_ACCESS_DENIED")
+        void throwsWhenNonOwnerAccesses() {
+            given(paymentRepository.findByPaymentKey("pk-001")).willReturn(Optional.of(pendingPayment));
+            given(orderRepository.findUserIdById(1L)).willReturn(Optional.of(1L));
+
+            assertThatThrownBy(() -> paymentService.getByPaymentKey("pk-001", 99L, false))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.ORDER_ACCESS_DENIED));
         }
 
         @Test
@@ -448,7 +494,7 @@ class PaymentServiceTest {
         void throwsWhenNotFound() {
             given(paymentRepository.findByPaymentKey("unknown")).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> paymentService.getByPaymentKey("unknown"))
+            assertThatThrownBy(() -> paymentService.getByPaymentKey("unknown", 1L, false))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND));

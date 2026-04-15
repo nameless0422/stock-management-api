@@ -44,7 +44,7 @@ class OutboxEventRelaySchedulerTest {
         @Test
         @DisplayName("미발행 이벤트 없음 → processor 미호출")
         void doesNothingWhenNoPending() {
-            given(repository.findPendingEvents(anyInt(), any()))
+            given(repository.findPendingEvents(anyInt(), any(), any()))
                     .willReturn(List.of());
 
             scheduler.relay();
@@ -60,7 +60,7 @@ class OutboxEventRelaySchedulerTest {
             ReflectionTestUtils.setField(e1, "id", 1L);
             ReflectionTestUtils.setField(e2, "id", 2L);
 
-            given(repository.findPendingEvents(anyInt(), any()))
+            given(repository.findPendingEvents(anyInt(), any(), any()))
                     .willReturn(List.of(e1, e2));
 
             scheduler.relay();

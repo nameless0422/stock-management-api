@@ -49,6 +49,16 @@ public class OutboxEvent {
     @Column
     private LocalDateTime failedAt;
 
+    /**
+     * 지수 백오프 다음 재시도 가능 시각.
+     * NULL이면 즉시 재시도 가능 (최초 시도 또는 기존 레코드 하위 호환).
+     */
+    @Column
+    private LocalDateTime nextRetryAt;
+
+    /** 지수 백오프 최대 대기 시간 (초). */
+    private static final long MAX_BACKOFF_SECONDS = 3600L;
+
     @Builder
     public OutboxEvent(OutboxEventType eventType, String payload) {
         this.eventType = eventType;
@@ -60,9 +70,16 @@ public class OutboxEvent {
         this.publishedAt = LocalDateTime.now();
     }
 
-    /** 발행 실패 기록 — retryCount 증가, failedAt 갱신. */
+    /**
+     * 발행 실패 기록 — retryCount 증가, failedAt 갱신, 지수 백오프 nextRetryAt 산출.
+     *
+     * <p>대기 시간: {@code min(30 × 2^retryCount, 3600)} 초.
+     * (retryCount=0→30s, 1→60s, 2→120s, 3→240s, 4→480s, ...)
+     */
     public void recordFailure() {
         this.retryCount++;
         this.failedAt = LocalDateTime.now();
+        long backoffSeconds = Math.min(30L * (1L << (retryCount - 1)), MAX_BACKOFF_SECONDS);
+        this.nextRetryAt = this.failedAt.plusSeconds(backoffSeconds);
     }
 }

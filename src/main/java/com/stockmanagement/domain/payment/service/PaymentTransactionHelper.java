@@ -18,6 +18,7 @@ import com.stockmanagement.domain.payment.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -85,7 +86,40 @@ class PaymentTransactionHelper {
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
         }
 
+        // PENDING → PAYMENT_IN_PROGRESS: Toss HTTP 대기(최대 30초) 중
+        // 만료 스케줄러가 이 주문을 취소하지 못하도록 상태를 선점한다.
+        // Dirty Checking: 트랜잭션 종료 시 자동 flush.
+        order.startPayment();
+
         return Optional.empty();
+    }
+
+    /**
+     * 결제 실패·오류 시 PAYMENT_IN_PROGRESS → PENDING 복원 트랜잭션.
+     *
+     * <p>Toss API 호출 실패(네트워크 오류, HTTP 5xx) 또는 비-DONE 응답 수신 시
+     * {@link PaymentService#confirm}의 catch 블록에서 호출된다.
+     *
+     * <p>{@code REQUIRES_NEW}를 사용하여 호출 컨텍스트가 롤백되더라도
+     * 이 트랜잭션은 독립적으로 커밋된다. 복원 후 만료 스케줄러가 다시 이 주문을 정리할 수 있다.
+     *
+     * @param tossOrderId Toss 주문 ID
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    void resetOrderOnPaymentError(String tossOrderId) {
+        paymentRepository.findByTossOrderId(tossOrderId).ifPresent(payment ->
+            orderRepository.findById(payment.getOrderId()).ifPresent(order -> {
+                try {
+                    order.resetPaymentFailed();
+                    log.info("[Payment] 결제 오류 — 주문 상태 복원: orderId={}, PAYMENT_IN_PROGRESS → PENDING",
+                            order.getId());
+                } catch (BusinessException e) {
+                    // PAYMENT_IN_PROGRESS가 아닌 상태 — Webhook 등 다른 경로로 이미 처리됨, 무시
+                    log.warn("[Payment] 주문 상태 복원 생략 — 이미 상태 변경됨: orderId={}, currentStatus={}",
+                            order.getId(), order.getStatus());
+                }
+            })
+        );
     }
 
     /**
