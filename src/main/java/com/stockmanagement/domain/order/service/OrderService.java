@@ -382,13 +382,15 @@ public class OrderService {
         Order order = orderRepository.findByIdWithItemsForUpdate(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
+        // 전환 전 상태를 캡처 — PAYMENT_IN_PROGRESS(일반 결제) 또는 PENDING(가상계좌 Webhook)
+        OrderStatus previousStatus = order.getStatus();
         order.confirm();
 
         for (OrderItem item : order.getItems()) {
             inventoryService.confirmAllocation(item.getProduct().getId(), item.getQuantity());
         }
 
-        recordHistory(order.getId(), OrderStatus.PENDING, OrderStatus.CONFIRMED, null);
+        recordHistory(order.getId(), previousStatus, OrderStatus.CONFIRMED, null);
         return order;
     }
 

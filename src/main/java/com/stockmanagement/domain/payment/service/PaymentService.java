@@ -164,6 +164,8 @@ public class PaymentService {
             return response;
 
         } catch (Exception e) {
+            // PAYMENT_IN_PROGRESS → PENDING 복원: 재시도 시 스케줄러가 다시 접근 가능하도록 되돌린다
+            transactionHelper.resetOrderOnPaymentError(request.getTossOrderId());
             // 실패 시 Redis 키 삭제 → 클라이언트 재시도 허용
             idempotencyManager.release(idempotencyKey);
             throw e;

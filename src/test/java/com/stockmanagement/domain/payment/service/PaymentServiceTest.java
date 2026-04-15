@@ -297,7 +297,7 @@ class PaymentServiceTest {
         }
 
         @Test
-        @DisplayName("Toss API가 DONE이 아닌 상태 반환 시 applyConfirmResult가 TOSS_PAYMENTS_ERROR를 던진다")
+        @DisplayName("Toss API가 DONE이 아닌 상태 반환 시 주문 상태를 복원하고 TOSS_PAYMENTS_ERROR를 던진다")
         void failsWhenTossReturnsNonDoneStatus() {
             PaymentConfirmRequest request = mock(PaymentConfirmRequest.class);
             given(request.getTossOrderId()).willReturn("toss-order-001");
@@ -316,6 +316,29 @@ class PaymentServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.TOSS_PAYMENTS_ERROR));
+
+            // PAYMENT_IN_PROGRESS → PENDING 복원 호출 검증
+            verify(transactionHelper).resetOrderOnPaymentError("toss-order-001");
+        }
+
+        @Test
+        @DisplayName("Toss API 예외 발생 시 주문 상태를 PENDING으로 복원한다")
+        void resetsOrderStatusWhenTossApiThrows() {
+            PaymentConfirmRequest request = mock(PaymentConfirmRequest.class);
+            given(request.getTossOrderId()).willReturn("toss-order-001");
+            given(request.getAmount()).willReturn(new BigDecimal("10000"));
+            given(request.getPaymentKey()).willReturn("pk-001");
+
+            given(transactionHelper.loadAndValidateForConfirm(anyString(), any(), anyLong()))
+                    .willReturn(Optional.empty());
+            given(tossPaymentsClient.confirm(any()))
+                    .willThrow(new RuntimeException("Toss API 네트워크 오류"));
+
+            assertThatThrownBy(() -> paymentService.confirm(request, 1L))
+                    .isInstanceOf(RuntimeException.class);
+
+            verify(transactionHelper).resetOrderOnPaymentError("toss-order-001");
+            verify(idempotencyManager).release("confirm:toss-order-001");
         }
     }
 

@@ -374,6 +374,18 @@ class OrderServiceTest {
         }
 
         @Test
+        @DisplayName("PAYMENT_IN_PROGRESS 주문 확정 — 일반 Toss 결제 경로 (CONFIRMED 전환)")
+        void confirmsPaymentInProgressOrder() {
+            order.startPayment(); // PENDING → PAYMENT_IN_PROGRESS
+            given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
+
+            orderService.confirm(1L);
+
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+            verify(inventoryService).confirmAllocation(any(), eq(1));
+        }
+
+        @Test
         @DisplayName("주문이 존재하지 않으면 ORDER_NOT_FOUND 예외를 발생시킨다")
         void throwsWhenNotFound() {
             given(orderRepository.findByIdWithItemsForUpdate(99L)).willReturn(Optional.empty());

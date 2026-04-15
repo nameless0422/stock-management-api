@@ -37,21 +37,22 @@ Client
 
 ## 🔴 긴급 — 프로덕션 버그 (데이터 손실·사용자 피해)
 
-> 운영 중 발생 시 사용자 과금 또는 데이터 손실로 직결되는 항목.
+> ✅ **현재 미해결 항목 없음.** 아래 #52는 완료 처리됨.
 
 ---
 
-### 52. Toss 승인 완료 후 주문 만료 경합 — 결제됐는데 주문 취소
+### ✅ 52. Toss 승인 완료 후 주문 만료 경합 — `PAYMENT_IN_PROGRESS` 상태로 해결
 
-**위치**: `domain/payment/service/PaymentTransactionHelper.java` `applyConfirmResult()`
+**위치**: `domain/payment/service/PaymentTransactionHelper.java`, `domain/order/entity/Order.java`, `domain/order/entity/OrderStatus.java`
 
-**문제**: Toss API 승인 요청 중(`callTossConfirmApi()` 대기, 최대 30초) 만료 스케줄러가 Order를 CANCELLED로 변경 가능. Toss는 결제를 완료했으나 주문은 취소된 상태 → 사용자는 청구됨, 서버는 `log.error("[Payment] CRITICAL: …수동 환불 필요…")` 로그만 출력하고 끝.
+**문제(해결됨)**: Toss API 승인 요청 중(`callTossConfirmApi()` 대기, 최대 30초) 만료 스케줄러가 Order를 CANCELLED로 변경 가능. Toss는 결제를 완료했으나 주문은 취소된 상태 → 사용자는 청구됨, 서버는 `CRITICAL` 로그만 출력.
 
-**현황**: 실제 발생 시 운영자가 로그를 확인하고 수동 환불해야 함. 자동 감지·알림 없음.
-
-**개선 방향**:
-- 결제 승인 직전 Order 상태를 `PAYMENT_IN_PROGRESS`로 선점 → 만료 스케줄러가 건드리지 못하게 차단 (근본 해결)
-- 단기: `dead_letter_payments` 테이블에 레코드 삽입 → 대시보드에서 미처리 건 추적
+**적용된 해결책** (Stripe `processing` / Magento `payment_review` 동일 패턴):
+- `OrderStatus.PAYMENT_IN_PROGRESS` 추가 — Toss HTTP 대기 중 전용 상태
+- `loadAndValidateForConfirm()`: 검증 완료 후 `order.startPayment()` 호출 → PENDING → PAYMENT_IN_PROGRESS 커밋
+- `findExpiredPendingOrderIds()`: `status = 'PENDING'`만 조회 → PAYMENT_IN_PROGRESS 주문은 자동 스킵
+- Toss API 실패 시 catch 블록에서 `resetOrderOnPaymentError()` (`REQUIRES_NEW`) 호출 → PENDING 복원
+- `Order.confirm()`: PENDING(가상계좌 Webhook 경로) + PAYMENT_IN_PROGRESS(일반 결제 경로) 양쪽 허용
 
 ---
 
