@@ -54,8 +54,10 @@ public class OrderDetailService {
                 .orElse(null);
         Set<Long> reviewedIds = reviewedProductIds(order.getUserId(), order.getItems());
 
+        com.stockmanagement.domain.shipment.entity.ShipmentStatus shipmentStatus =
+                shipment != null ? shipment.getStatus() : null;
         return OrderDetailResponse.builder()
-                .order(OrderResponse.from(order, reviewedIds))
+                .order(OrderResponse.from(order, reviewedIds, shipmentStatus))
                 .payment(payment)
                 .shipment(shipment)
                 .build();

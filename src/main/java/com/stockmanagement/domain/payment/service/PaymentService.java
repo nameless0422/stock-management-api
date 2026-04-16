@@ -7,6 +7,8 @@ import com.stockmanagement.domain.order.entity.OrderItem;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.payment.dto.*;
+import com.stockmanagement.domain.user.entity.User;
+import com.stockmanagement.domain.user.repository.UserRepository;
 import com.stockmanagement.domain.payment.entity.Payment;
 import com.stockmanagement.domain.payment.entity.PaymentStatus;
 import com.stockmanagement.domain.payment.infrastructure.PaymentIdempotencyManager;
@@ -25,6 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 /**
  * 결제 도메인 핵심 비즈니스 로직 서비스.
@@ -52,6 +57,7 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
+    private final UserRepository userRepository;
     private final TossPaymentsClient tossPaymentsClient;
     private final PaymentIdempotencyManager idempotencyManager;
     private final PaymentTransactionHelper transactionHelper;
@@ -302,6 +308,11 @@ public class PaymentService {
      * @param isAdmin  ADMIN 여부
      * @return 결제 정보 (없으면 Optional.empty())
      */
+    /** 현재 인증 사용자의 결제 목록을 최신순으로 페이징 조회한다. */
+    public Page<PaymentResponse> getMyPayments(Long userId, Pageable pageable) {
+        return paymentRepository.findByUserId(userId, pageable).map(PaymentResponse::from);
+    }
+
     public Optional<PaymentResponse> getByOrderId(Long orderId, Long userId, boolean isAdmin) {
         if (!isAdmin) {
             // JWT claim에서 추출한 userId로 소유권 검증 — DB 조회 불필요
@@ -331,10 +342,13 @@ public class PaymentService {
      * 예시: "MacBook Pro 외 2건"
      */
     private PaymentPrepareResponse buildPrepareResponse(Payment payment, Order order) {
+        User user = userRepository.findById(order.getUserId()).orElse(null);
         return new PaymentPrepareResponse(
                 payment.getTossOrderId(),
                 payment.getAmount(),
-                buildOrderName(order)
+                buildOrderName(order),
+                user != null ? user.getUsername() : null,
+                user != null ? user.getEmail() : null
         );
     }
 

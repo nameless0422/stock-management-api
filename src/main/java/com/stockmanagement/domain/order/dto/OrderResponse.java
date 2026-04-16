@@ -2,6 +2,7 @@ package com.stockmanagement.domain.order.dto;
 
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderStatus;
+import com.stockmanagement.domain.shipment.entity.ShipmentStatus;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.jackson.Jacksonized;
@@ -43,20 +44,25 @@ public class OrderResponse {
     /** 주문 항목 목록 */
     private final List<OrderItemResponse> items;
 
+    /** 배송 상태 — null이면 배송 미생성 (결제 완료 전 또는 취소된 주문) */
+    private final ShipmentStatus shipmentStatus;
+
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
 
     /** Order 엔티티를 응답 DTO로 변환하는 정적 팩토리 메서드 */
     public static OrderResponse from(Order order) {
-        return from(order, null);
+        return from(order, null, null);
     }
 
     /**
-     * Order 엔티티를 hasReview 포함 응답 DTO로 변환한다.
+     * Order 엔티티를 hasReview + shipmentStatus 포함 응답 DTO로 변환한다.
      *
      * @param reviewedProductIds 현재 사용자가 리뷰를 작성한 상품 ID 집합 (null이면 hasReview=null)
+     * @param shipmentStatus     배송 상태 (null이면 배송 미생성)
      */
-    public static OrderResponse from(Order order, java.util.Set<Long> reviewedProductIds) {
+    public static OrderResponse from(Order order, java.util.Set<Long> reviewedProductIds,
+                                     ShipmentStatus shipmentStatus) {
         return OrderResponse.builder()
                 .id(order.getId())
                 .userId(order.getUserId())
@@ -73,6 +79,7 @@ public class OrderResponse {
                                         ? reviewedProductIds.contains(i.getProduct().getId())
                                         : null))
                         .toList())
+                .shipmentStatus(shipmentStatus)
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .build();

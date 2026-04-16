@@ -49,21 +49,36 @@ public class ProductResponse {
     /** 상품 이미지 목록 — null이면 이미지 정보 미포함 (상세 조회 시만 포함) */
     private final List<ProductImageResponse> images;
 
+    /**
+     * 현재 사용자의 리뷰 작성 가능 여부.
+     * null: 비로그인 또는 정보 미포함
+     * true: 구매 완료 + 아직 리뷰 미작성
+     * false: 미구매 또는 이미 리뷰 작성
+     */
+    private final Boolean canReview;
+
     /** Product 엔티티만으로 변환 (재고·리뷰 통계 미포함). */
     public static ProductResponse from(Product product) {
-        return from(product, null, null, null, null);
+        return from(product, null, null, null, null, null);
     }
 
     /** Product 엔티티 + 재고·리뷰 통계를 포함한 전체 응답으로 변환 (이미지 미포함). */
     public static ProductResponse from(Product product, Integer availableQuantity,
                                        Double avgRating, Long reviewCount) {
-        return from(product, availableQuantity, avgRating, reviewCount, null);
+        return from(product, availableQuantity, avgRating, reviewCount, null, null);
     }
 
     /** Product 엔티티 + 재고·리뷰 통계 + 이미지 목록을 포함한 전체 응답으로 변환. */
     public static ProductResponse from(Product product, Integer availableQuantity,
                                        Double avgRating, Long reviewCount,
                                        List<ProductImageResponse> images) {
+        return from(product, availableQuantity, avgRating, reviewCount, images, null);
+    }
+
+    /** Product 엔티티 + 재고·리뷰 통계 + 이미지 + canReview를 포함한 전체 응답으로 변환. */
+    public static ProductResponse from(Product product, Integer availableQuantity,
+                                       Double avgRating, Long reviewCount,
+                                       List<ProductImageResponse> images, Boolean canReview) {
         return ProductResponse.builder()
                 .id(product.getId())
                 .name(product.getName())
@@ -80,6 +95,7 @@ public class ProductResponse {
                 .avgRating(avgRating != null ? Math.round(avgRating * 10.0) / 10.0 : null)
                 .reviewCount(reviewCount)
                 .images(images)
+                .canReview(canReview)
                 .build();
     }
 }

@@ -6,9 +6,13 @@ import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.coupon.service.CouponService;
 import com.stockmanagement.domain.inventory.service.InventoryService;
 import com.stockmanagement.domain.point.service.PointService;
+import com.stockmanagement.domain.shipment.entity.ShipmentStatus;
+import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.domain.user.address.service.DeliveryAddressService;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
+import com.stockmanagement.domain.order.dto.OrderPreviewRequest;
+import com.stockmanagement.domain.order.dto.OrderPreviewResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
@@ -73,6 +77,7 @@ public class OrderService {
     private final PointService pointService;
     private final OutboxEventStore outboxEventStore;
     private final DeliveryAddressService deliveryAddressService;
+    private final ShipmentRepository shipmentRepository;
 
     /**
      * 주문을 생성한다.
@@ -233,7 +238,9 @@ public class OrderService {
         Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         validateOrderOwnership(order, userId, isAdmin);
-        return OrderResponse.from(order);
+        ShipmentStatus shipmentStatus = shipmentRepository.findByOrderId(id)
+                .map(s -> s.getStatus()).orElse(null);
+        return OrderResponse.from(order, null, shipmentStatus);
     }
 
     /**
@@ -254,8 +261,13 @@ public class OrderService {
                                        OrderSearchRequest request, Pageable pageable) {
         // USER: 본인 주문만 조회 — DTO를 직접 변경하지 않고 forceUserId로 Specification에 주입
         Long forceUserId = isAdmin ? null : userId;
-        return orderRepository.findAll(OrderSpecification.of(request, forceUserId), pageable)
-                .map(OrderResponse::from);
+        Page<Order> page = orderRepository.findAll(OrderSpecification.of(request, forceUserId), pageable);
+
+        // 배송 상태 배치 조회 (N+1 방지)
+        List<Long> orderIds = page.map(Order::getId).toList();
+        Map<Long, ShipmentStatus> statusMap = shipmentRepository.findStatusMapByOrderIds(orderIds);
+
+        return page.map(o -> OrderResponse.from(o, null, statusMap.get(o.getId())));
     }
 
     /**
@@ -276,8 +288,12 @@ public class OrderService {
         List<Order> items = lastId == null
                 ? orderRepository.findCursorByUserId(userId, status, limit)
                 : orderRepository.findCursorByUserIdAfter(userId, status, lastId, limit);
+        // 배송 상태 배치 조회 (N+1 방지)
+        List<Long> orderIds = items.stream().map(Order::getId).toList();
+        Map<Long, ShipmentStatus> statusMap = shipmentRepository.findStatusMapByOrderIds(orderIds);
+
         return CursorPage.of(
-                items.stream().map(OrderResponse::from).toList(),
+                items.stream().map(o -> OrderResponse.from(o, null, statusMap.get(o.getId()))).toList(),
                 size,
                 OrderResponse::getId);
     }
@@ -425,6 +441,63 @@ public class OrderService {
 
         recordHistory(order.getId(), OrderStatus.CONFIRMED, OrderStatus.CANCELLED, null);
         outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "PAYMENT_REFUNDED"));
+    }
+
+    /**
+     * 주문 금액을 미리보기 계산한다 (DB 쓰기 없음).
+     *
+     * <p>쿠폰·포인트를 적용한 최종 결제 금액과 적립 예정 포인트를 반환한다.
+     * 실제 주문 생성·재고 예약 없이 순수 계산만 수행한다.
+     */
+    public OrderPreviewResponse preview(OrderPreviewRequest request, Long userId) {
+        List<Long> productIds = request.getItems().stream()
+                .map(OrderItemRequest::getProductId)
+                .toList();
+        Map<Long, Product> productMap = productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, p -> p));
+
+        BigDecimal originalAmount = BigDecimal.ZERO;
+        for (OrderItemRequest item : request.getItems()) {
+            Product product = Optional.ofNullable(productMap.get(item.getProductId()))
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+            if (product.getStatus() != ProductStatus.ACTIVE) {
+                throw new BusinessException(ErrorCode.PRODUCT_NOT_AVAILABLE);
+            }
+            originalAmount = originalAmount.add(product.getPrice()
+                    .multiply(BigDecimal.valueOf(item.getQuantity())));
+        }
+
+        // 쿠폰 할인 계산 (검증만 — 사용 이력 미기록)
+        BigDecimal couponDiscount = BigDecimal.ZERO;
+        if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
+            var validateReq = new com.stockmanagement.domain.coupon.dto.CouponValidateRequest(
+                    request.getCouponCode(), originalAmount);
+            couponDiscount = couponService.validate(userId, validateReq).getDiscountAmount();
+        }
+
+        // 포인트 잔액 검증 (차감은 하지 않음)
+        long usePoints = request.getUsePoints();
+        if (usePoints > 0) {
+            pointService.validateBalance(userId, usePoints);
+        }
+        BigDecimal pointDiscount = BigDecimal.valueOf(usePoints);
+
+        BigDecimal shippingFee = BigDecimal.ZERO; // 현재 무료배송 정책
+        BigDecimal finalAmount = originalAmount.subtract(couponDiscount).subtract(pointDiscount).add(shippingFee);
+        if (finalAmount.compareTo(BigDecimal.ZERO) < 0) finalAmount = BigDecimal.ZERO;
+
+        long earnablePoints = finalAmount.compareTo(BigDecimal.ZERO) > 0
+                ? Math.max(1L, Math.round(finalAmount.doubleValue() * 0.01))
+                : 0L;
+
+        return OrderPreviewResponse.builder()
+                .originalAmount(originalAmount)
+                .couponDiscount(couponDiscount)
+                .pointDiscount(pointDiscount)
+                .shippingFee(shippingFee)
+                .finalAmount(finalAmount)
+                .earnablePoints(earnablePoints)
+                .build();
     }
 
     // ===== 내부 헬퍼 =====

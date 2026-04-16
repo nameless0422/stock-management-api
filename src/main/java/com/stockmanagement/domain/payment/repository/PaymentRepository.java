@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.payment.repository;
 
+import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.payment.entity.Payment;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
@@ -8,6 +9,9 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.Optional;
 
@@ -46,4 +50,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     /** Finds a payment by our internal order ID. Used to check for existing PENDING payment. */
     Optional<Payment> findByOrderId(Long orderId);
+
+    /** 특정 사용자의 결제 목록을 최신순으로 페이징 조회한다 (주문 서브쿼리). */
+    @Query("SELECT p FROM Payment p WHERE p.orderId IN (SELECT o.id FROM Order o WHERE o.userId = :userId) ORDER BY p.createdAt DESC")
+    Page<Payment> findByUserId(@Param("userId") Long userId, Pageable pageable);
 }
