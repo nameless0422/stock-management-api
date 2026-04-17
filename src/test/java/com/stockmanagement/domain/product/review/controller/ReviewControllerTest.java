@@ -124,7 +124,7 @@ class ReviewControllerTest {
         @Test
         @DisplayName("비로그인 사용자 — 리뷰 목록 조회 → 200")
         void publicGetsList() throws Exception {
-            given(reviewService.getList(anyLong(), any(Pageable.class)))
+            given(reviewService.getList(anyLong(), any(Pageable.class), any()))
                     .willReturn(new PageImpl<>(List.of(mock(ReviewResponse.class))));
 
             mockMvc.perform(get("/api/products/1/reviews"))

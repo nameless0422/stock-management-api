@@ -43,6 +43,14 @@ public class ProductImageController {
         return ApiResponse.ok(productImageService.getImages(productId));
     }
 
+    @Operation(summary = "이미지 순서 변경", description = "이미지 displayOrder를 일괄 변경합니다. (ADMIN 전용)")
+    @PatchMapping("/order")
+    public ApiResponse<List<ProductImageResponse>> updateImageOrder(
+            @PathVariable Long productId,
+            @Valid @RequestBody ImageOrderUpdateRequest request) {
+        return ApiResponse.ok(productImageService.updateImageOrder(productId, request));
+    }
+
     @Operation(summary = "이미지 삭제", description = "이미지를 스토리지와 DB에서 모두 삭제합니다. (ADMIN 전용)")
     @DeleteMapping("/{imageId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)

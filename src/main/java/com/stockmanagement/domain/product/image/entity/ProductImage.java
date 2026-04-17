@@ -50,4 +50,8 @@ public class ProductImage {
         this.imageType = imageType;
         this.displayOrder = displayOrder;
     }
+
+    public void updateDisplayOrder(int displayOrder) {
+        this.displayOrder = displayOrder;
+    }
 }

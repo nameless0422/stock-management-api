@@ -63,12 +63,20 @@ public class ReviewService {
         return ReviewResponse.from(reviewRepository.save(review));
     }
 
-    /** 상품의 리뷰 목록을 최신순 페이징 조회한다. 작성자 username을 마스킹하여 포함한다. */
-    public Page<ReviewResponse> getList(Long productId, Pageable pageable) {
+    /**
+     * 상품의 리뷰 목록을 페이징 조회한다.
+     *
+     * <p>rating이 있으면 별점 필터를 적용한다.
+     * Pageable의 sort로 정렬을 지원한다 (기본: createdAt desc).
+     * 작성자 username을 마스킹하여 포함한다.
+     */
+    public Page<ReviewResponse> getList(Long productId, Pageable pageable, Integer rating) {
         if (!productRepository.existsById(productId)) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
-        Page<Review> reviews = reviewRepository.findByProductIdOrderByCreatedAtDesc(productId, pageable);
+        Page<Review> reviews = (rating != null)
+                ? reviewRepository.findByProductIdAndRating(productId, rating, pageable)
+                : reviewRepository.findByProductId(productId, pageable);
         Map<Long, String> usernameMap = buildUsernameMap(reviews.map(Review::getUserId).toList());
         return reviews.map(r -> ReviewResponse.from(r, usernameMap.get(r.getUserId())));
     }

@@ -117,10 +117,10 @@ class ReviewServiceTest {
             given(productRepository.existsById(1L)).willReturn(true);
             Review r = Review.builder().productId(1L).userId(2L).rating(4).title("보통").content("그냥 그래요").build();
             ReflectionTestUtils.setField(r, "id", 5L);
-            given(reviewRepository.findByProductIdOrderByCreatedAtDesc(any(), any(Pageable.class)))
+            given(reviewRepository.findByProductId(any(), any(Pageable.class)))
                     .willReturn(new PageImpl<>(List.of(r)));
 
-            Page<ReviewResponse> page = reviewService.getList(1L, Pageable.unpaged());
+            Page<ReviewResponse> page = reviewService.getList(1L, Pageable.unpaged(), null);
 
             assertThat(page.getContent()).hasSize(1);
             assertThat(page.getContent().get(0).getRating()).isEqualTo(4);

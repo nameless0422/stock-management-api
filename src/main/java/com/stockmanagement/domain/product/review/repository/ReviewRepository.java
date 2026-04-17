@@ -17,6 +17,12 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     /** 상품의 리뷰 목록을 최신순으로 페이징 조회한다. */
     Page<Review> findByProductIdOrderByCreatedAtDesc(Long productId, Pageable pageable);
 
+    /** 상품의 리뷰 목록을 Pageable sort로 조회한다 (정렬/필터 가변). */
+    Page<Review> findByProductId(Long productId, Pageable pageable);
+
+    /** 상품의 특정 별점 리뷰 목록을 Pageable sort로 조회한다. */
+    Page<Review> findByProductIdAndRating(Long productId, int rating, Pageable pageable);
+
     /** 특정 상품에 대한 사용자의 리뷰가 이미 존재하는지 확인한다 (1인 1리뷰 검증). */
     boolean existsByProductIdAndUserId(Long productId, Long userId);
 

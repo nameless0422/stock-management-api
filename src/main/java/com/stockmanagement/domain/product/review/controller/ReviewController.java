@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -38,12 +39,15 @@ public class ReviewController {
         return ApiResponse.ok(reviewService.create(productId, resolveUserId(authentication, username), request));
     }
 
-    @Operation(summary = "상품 리뷰 목록 조회 (최신순)")
+    @Operation(summary = "상품 리뷰 목록 조회",
+               description = "sort: createdAt,desc(기본) | rating,desc | rating,asc\n\n" +
+                       "rating: 1~5 별점 필터 (null이면 전체)")
     @GetMapping
     public ApiResponse<Page<ReviewResponse>> getList(
             @PathVariable Long productId,
-            @PageableDefault(size = 20) Pageable pageable) {
-        return ApiResponse.ok(reviewService.getList(productId, pageable));
+            @RequestParam(required = false) Integer rating,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ApiResponse.ok(reviewService.getList(productId, pageable, rating));
     }
 
     @Operation(summary = "리뷰 수정 (작성자 본인)")

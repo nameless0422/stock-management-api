@@ -6,6 +6,8 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /** 장바구니 → 주문 전환 요청 DTO. */
 @Getter
 @NoArgsConstructor
@@ -29,4 +31,7 @@ public class CartCheckoutRequest {
 
     /** 배송지 ID — 선택 항목. null이면 배송지 미지정 */
     private Long deliveryAddressId;
+
+    /** 선택 결제할 상품 ID 목록 — null이면 장바구니 전체 결제 */
+    private List<Long> selectedProductIds;
 }
