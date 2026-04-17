@@ -111,3 +111,356 @@
 | 리뷰 정렬/필터 | 3차 |
 | 장바구니 선택 결제 | 3차 |
 | 이미지 순서 변경 API | 3차 |
+
+---
+
+## 2차 검토 — 시니어 프론트엔드 관점 추가 항목
+
+---
+
+### 🔴 필수 — 없으면 서비스 운영 불가
+
+**17. 비밀번호 찾기/재설정 API 없음**
+
+현재 `PATCH /api/users/me/password`(기존 비밀번호 필요)만 있다.
+비밀번호를 잊은 사용자는 계정 복구 수단이 전혀 없다 — 실서비스에선 CS 문의 폭발.
+
+```
+필요: POST /api/auth/forgot-password   { email }
+      POST /api/auth/reset-password    { token, newPassword }
+흐름: 이메일로 재설정 링크 발송 → 토큰 검증 → 비밀번호 교체
+```
+
+**18. 배송지 수령인 정보 없음**
+
+`DeliveryAddressResponse`에 `address`, `postalCode`는 있지만 `recipientName`, `recipientPhone`이 없다.
+한국 택배는 수령인 이름·연락처가 운송장 필수 항목이다. 주문자 != 수령인(선물) 케이스도 흔하다.
+
+```
+현재: { id, address, detailAddress, postalCode, isDefault }
+필요: { id, recipientName, recipientPhone, address, detailAddress, postalCode, isDefault }
+```
+
+---
+
+### 🟠 중요 — N+1 또는 UX 치명적 결함
+
+**19. 위시리스트 목록에 상품 상세 미포함 (N+1)**
+
+`GET /api/wishlist` 응답: `{ id, productId, userId, createdAt }` — 상품명·가격·이미지·재고 없음.
+위시리스트 페이지를 렌더링하려면 `productId` 개수만큼 `GET /api/products/{id}`를 반복 호출해야 한다.
+
+```
+개선: GET /api/wishlist 응답에 product 필드 포함
+     { id, productId, createdAt, product: { name, price, thumbnailUrl, availableQuantity, status } }
+```
+
+**20. 위시리스트 페이지네이션 없음**
+
+`GET /api/wishlist`는 `List<>` 반환 — 위시리스트가 100건 이상이면 전체를 한번에 불러온다.
+
+```
+개선: GET /api/wishlist?page=&size= → Page<WishlistResponse>
+```
+
+**21. 리뷰 별점 분포 통계 없음**
+
+상품 상세 페이지의 별점 히스토그램(★5: 42건, ★4: 18건 ...) 구현 불가.
+현재 `avgRating`·`reviewCount`만 있고 분포가 없다. 클라이언트에서 계산하려면 전체 리뷰를 다 가져와야 한다.
+
+```
+필요: GET /api/products/{id}/reviews/stats
+     → { avgRating, reviewCount, distribution: { 1:n, 2:n, 3:n, 4:n, 5:n } }
+```
+
+**22. 주문 상세에 환불 정보 미포함**
+
+`GET /api/orders/{id}/detail` 응답: `{ order, payment, shipment }` — `refund` 없음.
+마이페이지 주문 상세에서 환불 진행 상황을 보려면 `paymentKey`로 `/api/refunds/payments/{paymentId}`를 추가 호출해야 한다.
+
+```
+개선: GET /api/orders/{id}/detail 응답에 refund 필드 추가
+     { order, payment, shipment, refund }
+```
+
+**23. `OrderPreviewResponse` 필드 미흡**
+
+현재 응답: `{ totalAmount, discountAmount, usedPoints, finalAmount }`.
+결제 화면에서 필요한 항목이 누락되어 클라이언트가 직접 계산해야 한다.
+
+```
+현재: { totalAmount, discountAmount, usedPoints, finalAmount }
+필요: { originalAmount, couponDiscount, pointDiscount,
+        shippingFee, finalAmount, earnablePoints }
+```
+→ `couponDiscount`(쿠폰 할인액), `shippingFee`(배송비), `earnablePoints`(결제 시 적립 예정 포인트) 누락.
+
+**24. 주문 취소 사유 없음**
+
+`POST /api/orders/{id}/cancel` 요청 바디 없음 — 취소 사유를 받지 않는다.
+운영 분석, CS 처리, 취소 이력 표시에 필요하다.
+
+```
+개선: POST /api/orders/{id}/cancel  Body: { reason: string (optional) }
+```
+
+---
+
+### 🟡 중장기 — UX 완성도·신규 기능
+
+**25. 검색 자동완성 API 없음**
+
+검색창 입력 시 실시간 추천어(상품명 prefix 매칭)가 없다.
+현재 `GET /api/products?q=` 전체 검색만 있어 키 입력마다 호출하기 부적합하다.
+
+```
+필요: GET /api/products/search/suggestions?q=티셔
+     → { suggestions: ["티셔츠", "티셔츠 반팔", ...] }  (Elasticsearch prefix query)
+```
+
+**26. 소셜 로그인 없음**
+
+한국 쇼핑몰에서 카카오·네이버 로그인은 사실상 필수다.
+현재 username/password 방식만 있어 전환율에 직접적인 영향을 준다.
+
+```
+필요: GET  /api/auth/oauth2/{provider}          (provider: kakao | naver | google)
+      GET  /api/auth/oauth2/{provider}/callback  (Redirect URI)
+```
+
+**27. 이메일 인증 없음**
+
+회원가입 후 이메일 인증 단계가 없다.
+스팸 계정 방지, 비밀번호 재설정(#17) 연동에 모두 필요하다.
+
+```
+필요: POST /api/auth/email/verify-send    { email }   (인증 메일 발송)
+      POST /api/auth/email/verify-confirm { token }   (토큰 확인)
+```
+
+**28. `UserResponse`에 전화번호 없음**
+
+마이페이지 프로필, 배송지 자동 채우기, 본인 인증에 필요하다.
+현재 `{ id, username, email, role, createdAt, pointBalance }` — `phoneNumber` 없음.
+
+```
+개선: UserResponse에 phoneNumber: String 추가
+     PATCH /api/users/me Body에 phoneNumber 수정 지원
+```
+
+**29. 포인트 적립 예정 내역 없음**
+
+결제 완료 후 "이 주문에서 N포인트 적립 예정" 표시가 불가하다.
+현재 `GET /api/points/history`는 이미 확정된 이력만 반환한다.
+
+```
+개선: PointTransactionResponse에 status (PENDING | CONFIRMED | EXPIRED) 추가
+     또는: GET /api/points/pending → 적립 예정 포인트 목록
+```
+
+**30. 상품 재입고 알림 신청 없음**
+
+품절 상품(`availableQuantity=0`) 페이지에서 "재입고 알림 신청" 버튼을 구현할 수 없다.
+
+```
+필요: POST   /api/products/{id}/restock-notify    (알림 신청)
+      DELETE /api/products/{id}/restock-notify    (신청 취소)
+      GET    /api/users/me/restock-notifications  (신청 목록)
+```
+
+**31. 최근 본 상품 없음**
+
+"최근 본 상품" 위젯은 쇼핑몰 체류 시간을 높이는 핵심 기능이다.
+현재 상품 조회 이력을 서버에서 관리하지 않아 클라이언트 localStorage에만 의존해야 한다 (기기 간 공유 불가).
+
+```
+필요: POST /api/users/me/recently-viewed       { productId }  (조회 시 자동 기록)
+      GET  /api/users/me/recently-viewed?size=10
+```
+
+---
+
+### 2차 요약
+
+| 우선순위 | 항목 | 이유 |
+|---|---|---|
+| 🔴 필수 | 비밀번호 찾기/재설정 | 사용자 계정 복구 수단 전무 |
+| 🔴 필수 | 배송지 수령인 정보 | 운송장 필수 항목 누락 |
+| 🟠 중요 | 위시리스트 상품 상세 포함 | N+1 요청 방지 |
+| 🟠 중요 | 위시리스트 페이지네이션 | 대량 데이터 처리 |
+| 🟠 중요 | 리뷰 별점 분포 통계 | 상품 상세 핵심 UI |
+| 🟠 중요 | 주문 상세에 환불 정보 포함 | 마이페이지 round-trip 제거 |
+| 🟠 중요 | `OrderPreviewResponse` 필드 보완 | 결제 화면 정확한 정보 표시 |
+| 🟠 중요 | 주문 취소 사유 | CS/운영 분석 |
+| 🟡 중장기 | 검색 자동완성 | 검색 UX |
+| 🟡 중장기 | 소셜 로그인 | 전환율 |
+| 🟡 중장기 | 이메일 인증 | 보안·스팸 방지 |
+| 🟡 중장기 | `UserResponse` 전화번호 | 프로필 완성도 |
+| 🟡 중장기 | 포인트 적립 예정 내역 | 결제 UX |
+| 🟡 중장기 | 재입고 알림 신청 | 구매 전환율 |
+| 🟡 중장기 | 최근 본 상품 | 체류 시간·재방문 유도 |
+
+---
+
+## 2차 정오표
+
+> 2차 작성 시 탐색 오류로 잘못 파악한 항목을 정정합니다.
+
+**#18 배송지 수령인 정보 없음** → ✅ 이미 구현됨
+`DeliveryAddressResponse`에 `recipient`, `phone`, `alias`, `zipCode`, `address1`, `address2` 이미 포함. 해당 항목 무효.
+
+**#23 `OrderPreviewResponse` 필드 미흡** → ✅ 이미 구현됨
+`OrderPreviewResponse`에 `originalAmount`, `couponDiscount`, `pointDiscount`, `shippingFee`, `finalAmount`, `earnablePoints` 모두 포함. 해당 항목 무효.
+
+**#19 위시리스트 N+1** → 🔶 부분 구현됨
+`WishlistResponse`에 `productName`, `productPrice`, `thumbnailUrl`은 포함되어 있으나 `availableQuantity`(재고), `status`(판매 상태)는 없음. 품절/단종 배지 표시 불가.
+
+---
+
+## 3차 검토 — 구조적 결함 및 UX 완성도
+
+---
+
+### 🔴 구조적 한계 — 카테고리 전체에 영향
+
+**32. 상품 옵션/변형(variants) 없음**
+
+`Product` 1개 = SKU 1개. 색상·사이즈 선택 개념이 없다.
+의류·신발·가방 카테고리를 다루는 순간 구현 불가. "블랙 M", "화이트 L"을 각각 다른 상품으로 등록해야 하는데, 단일 상품 상세 페이지에서 옵션 선택 → 재고 확인 → 장바구니 추가 플로우가 원천 불가능하다.
+
+```
+필요: Product ─┬─ ProductOption (color, size ...)
+               └─ ProductVariant (optionValues 조합, 자체 price/sku/inventory)
+
+GET /api/products/{id} 응답에 variants 배열 포함
+POST /api/orders → OrderItemRequest.variantId
+```
+
+---
+
+### 🟠 중요 — 결제·주문 흐름 결함
+
+**33. 결제 실패 후 재결제 불가**
+
+`V8 migration`에서 `payments.order_id UNIQUE` 제약이 추가되었다. 결제가 FAILED 상태가 되면 동일 주문으로 `POST /api/payments/prepare`를 재호출해도 UNIQUE 충돌이 발생한다. 프론트에서 "다시 결제하기" 버튼을 구현할 방법이 없다.
+
+```
+현재: payments.order_id UNIQUE → FAILED 상태에서 재결제 시 DB 제약 위반
+필요: 아래 중 하나 선택
+  A) FAILED 결제를 PENDING으로 reset 후 재시도 허용
+  B) payments.order_id UNIQUE 제거 + (order_id, status) 복합 제약으로 교체
+  C) POST /api/payments/{orderId}/retry 엔드포인트 추가
+```
+
+**34. `OrderResponse`에 배송지 스냅샷 없음**
+
+`OrderResponse.deliveryAddressId`만 있다. 사용자가 이후 배송지를 삭제하면 `delivery_addresses.ON DELETE SET NULL`로 인해 `deliveryAddressId`가 null이 된다. 주문 이력에서 실제 배송된 주소를 볼 수 없는 상황이 발생한다.
+
+```
+필요: OrderResponse에 snapshotAddress 필드 추가
+     { recipientName, phone, address1, address2, zipCode }
+     → 주문 생성 시점 주소를 order_delivery_snapshots 테이블에 별도 저장
+```
+
+**35. 주문 아이템별 부분 취소 없음**
+
+`POST /api/orders/{id}/cancel`은 전체 주문 취소만 가능하다. "10종류 상품 중 품절된 3개만 취소" 같은 부분 취소 플로우를 구현할 수 없다. 쇼핑몰 운영 중 흔히 발생하는 시나리오다.
+
+```
+필요: POST /api/orders/{id}/items/cancel
+     Body: { itemIds: [1, 3, 5], reason: "..." }
+```
+
+**36. `WishlistResponse`에 재고·판매 상태 미포함**
+
+`productName`, `productPrice`, `thumbnailUrl`은 있지만 `availableQuantity`, `status`가 없다.
+위시리스트에 담긴 상품이 품절/단종되었을 때 "품절" 오버레이 배지를 표시할 수 없다.
+
+```
+개선: WishlistResponse에 추가
+     availableQuantity: int
+     productStatus: ProductStatus (ACTIVE | DISCONTINUED)
+```
+
+**37. 내 결제 목록에 주문 상품 정보 없음**
+
+`GET /api/payments/my` 응답인 `PaymentResponse`는 `orderId`만 있다. 결제 내역 페이지("무엇을 결제했나")를 표시하려면 각 `orderId`로 `GET /api/orders/{id}`를 추가 호출해야 한다.
+
+```
+개선: PaymentResponse에 orderSummary 필드 추가
+     { orderName, itemCount, thumbnailUrl }
+     → Payment 생성 시 snapshots 저장 또는 JOIN 쿼리로 포함
+```
+
+---
+
+### 🟡 중장기 — UX 완성도
+
+**38. 공개 쿠폰 다운로드 목록 없음**
+
+`GET /api/coupons`는 ADMIN 전용이다. 일반 사용자에게 "다운로드 가능한 쿠폰 목록" 페이지를 보여줄 수 없다. 현재 사용자는 코드를 이미 알고 있어야만 `POST /api/coupons/claim`으로 등록 가능하다.
+
+```
+필요: GET /api/coupons/public?page=&size=
+     → 공개 쿠폰만 반환 (isPublic=true, active=true, 기간 유효, 수량 여유)
+     → "쿠폰 다운로드" 버튼: POST /api/coupons/claim { couponCode }
+```
+
+**39. 상품 정렬 옵션 부족**
+
+현재 ES 정렬: `price_asc`, `price_desc`, `newest`, `relevance` 4가지뿐이다.
+"판매량 순", "리뷰 많은 순" 없음 — 쇼핑몰에서 가장 많이 쓰이는 정렬 2가지가 빠져 있다.
+
+```
+개선: sort 파라미터에 추가
+     popular  → 누적 판매량 기준 (daily_order_stats 활용)
+     review   → reviewCount 내림차순
+```
+
+**40. 배송 예상 도착일 없음**
+
+`ShipmentResponse`에 `shippedAt`, `deliveredAt`(실제 배송 완료)은 있지만 `estimatedDeliveryAt`(예상 도착일)이 없다. "예상 배송일: 4월 20일(월)" 표시 불가.
+
+```
+개선: ShipmentResponse에 estimatedDeliveryAt: LocalDate 추가
+     PATCH /api/shipments/orders/{orderId}/ship Body에 estimatedDeliveryAt 포함
+```
+
+**41. 홈 화면 전용 집계 API 없음**
+
+홈 화면 구성에 필요한 데이터(신상품, 인기상품, 진행 중인 이벤트/배너, 추천 카테고리)를 모으려면 최소 3~4번의 개별 API를 병렬 호출해야 한다. SSR/SSG 환경에서는 직접적인 성능 문제가 된다.
+
+```
+필요: GET /api/home
+     → { banners, newArrivals, popularProducts, featuredCategories }
+     → 서버에서 Redis 캐시 기반으로 단일 응답 반환 (TTL: 5~10분)
+```
+
+**42. 결제 수단 상세 정보 없음**
+
+`PaymentResponse.method`는 단순 String이다. 카드 결제인 경우 카드사, 카드 번호 뒷 4자리가 없어 "KB국민카드 ****1234" 표시 불가. 가상계좌인 경우 은행명·계좌번호 없음.
+
+```
+개선: PaymentResponse에 methodDetail 필드 추가 (nullable)
+     카드:     { cardCompany, cardNumber(마스킹), installmentPlanMonths }
+     가상계좌: { bank, accountNumber, dueDate }
+     계좌이체: { bank }
+```
+
+---
+
+### 3차 요약
+
+| 우선순위 | 항목 | 이유 |
+|---|---|---|
+| 🔴 구조적 | 상품 옵션/variants 없음 | 의류·신발 등 카테고리 구현 불가 |
+| 🟠 중요 | 결제 실패 후 재결제 불가 | order_id UNIQUE 제약 — 사용자 이탈 |
+| 🟠 중요 | OrderResponse 배송지 스냅샷 누락 | 주문 이력 데이터 유실 |
+| 🟠 중요 | 주문 아이템별 부분 취소 없음 | 일상적 운영 시나리오 미지원 |
+| 🟠 중요 | WishlistResponse 재고/상태 미포함 | 품절 배지 표시 불가 |
+| 🟠 중요 | 내 결제 목록 주문 상품 정보 없음 | 결제 내역 N+1 |
+| 🟡 중장기 | 공개 쿠폰 다운로드 목록 | 마케팅 쿠폰 배포 불가 |
+| 🟡 중장기 | 상품 정렬 옵션 부족 | popular/review 정렬 없음 |
+| 🟡 중장기 | 배송 예상 도착일 없음 | 배송 UX |
+| 🟡 중장기 | 홈 화면 집계 API 없음 | SSR 성능 |
+| 🟡 중장기 | 결제 수단 상세 정보 없음 | 결제 내역 표시 |
