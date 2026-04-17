@@ -633,3 +633,144 @@ Spring Security 필터 레이어의 401(미인증)/403(권한 없음) 에러는 
 | 🟡 중장기 | 재고 수량 직접 노출 정책 | 비즈니스 정책 결정 필요 |
 | 🟡 중장기 | 부분 환불 지원 여부 불명확 | 다품목 환불 UX |
 | 🟡 중장기 | 인앱 알림 시스템 없음 | 실시간 상태 알림 |
+
+---
+
+## 5차 검토 — 인증·포인트·배송·폼 UX 결함
+
+---
+
+### 🔴 필수
+
+**54. `@Valid` 에러 응답에 필드별 구조 없음**
+
+`GlobalExceptionHandler.handleValidationException()`이 모든 필드 오류를 `Collectors.joining(", ")`으로 단일 문자열로 합쳐 반환한다:
+```
+{ success: false, message: "이름은 필수입니다., 이메일 형식이 올바르지 않습니다." }
+```
+회원가입·배송지 입력 폼에서 각 필드 아래 인라인 에러 메시지를 표시할 수 없다.
+어떤 필드에 어떤 오류가 있는지 파싱 불가.
+
+```
+필요: { success: false, code: "VALIDATION_FAILED", errors: [
+         { field: "email",    message: "이메일 형식이 올바르지 않습니다." },
+         { field: "password", message: "8자 이상 입력해주세요." }
+       ]}
+```
+
+---
+
+### 🟠 중요
+
+**55. 내 배송 목록 API 없음**
+
+`ShipmentController`에는 `GET /api/shipments/orders/{orderId}` 단건 조회만 있다.
+마이페이지 "배송 현황" 탭에서 진행 중인 전체 배송을 한 번에 보여주려면
+주문 목록 → 각 orderId로 배송 조회를 반복해야 한다.
+
+```
+필요: GET /api/shipments/my?status=SHIPPED&page=&size=
+     → 현재 배송 중인 주문들만 필터로 빠르게 조회
+```
+
+**56. 사용자 반품 신청 플로우 없음**
+
+`PATCH /api/shipments/orders/{orderId}/return`은 ADMIN 전용이다.
+사용자가 반품을 신청하면 관리자가 처리하는 일반적인 쇼핑몰 흐름을 구현할 수 없다.
+현재 사용자가 할 수 있는 건 `POST /api/refunds` 환불 요청뿐이지만, 실물 반품과 환불은 별개 프로세스다.
+
+```
+필요: POST /api/shipments/orders/{orderId}/return-request
+     Body: { reason, bankName, accountNumber, accountHolder }  (환불 계좌 정보)
+     → 관리자가 /api/shipments/orders/{orderId}/return으로 최종 처리
+```
+
+**57. 포인트 적립분 만료 예정일 없음**
+
+`PointTransactionType.EXPIRE`가 정의되어 있어 포인트 소멸은 처리되지만,
+EARN 시 해당 포인트가 언제 만료되는지 `PointTransaction`·`PointTransactionResponse` 어디에도 기록되지 않는다.
+"이번 달 말 2,500P 소멸 예정" 알림 및 포인트 이력 표시 불가.
+
+```
+개선: PointTransaction 엔티티에 expiredAt: LocalDateTime 추가 (EARN 시 1년 후 등 정책 적용)
+     PointTransactionResponse에 expiredAt 포함
+     필요: GET /api/points/expiring-soon?withinDays=30
+          → 30일 내 소멸 예정 포인트 목록
+```
+
+**58. Refresh Token 만료 시간 미노출**
+
+`LoginResponse`: `{ accessToken, tokenType, expiresIn, refreshToken }`.
+`expiresIn`은 access token 만료 초(예: 3600)이고 refresh token 만료 시간은 없다.
+Refresh Token은 30일 TTL(Redis)인데, 사용자에게 "30일 후 재로그인 필요" 사전 안내가 불가하고,
+프론트에서 refresh 요청 시점 판단을 위한 expiry 계산도 불가.
+
+```
+개선: LoginResponse에 refreshTokenExpiresAt: LocalDateTime 추가
+     또는 refreshExpiresIn: long (초 단위)
+```
+
+**59. 사용자 친화적 주문 번호 없음**
+
+`OrderResponse.id`는 DB auto-increment Long이 그대로 노출된다 (예: `142`).
+CS 문의 시 "주문번호를 알려주세요" → "142번" 같은 상황이 발생하고,
+경쟁사가 주문 생성 빈도를 역산할 수 있는 정보 노출 문제도 있다.
+
+```
+개선: OrderResponse에 orderNumber: String 추가
+     형식 예시: "20240418-0000142" (날짜 + zero-padded id)
+     → V? migration: orders.order_number GENERATED ALWAYS 또는 애플리케이션 레벨 생성
+```
+
+---
+
+### 🟡 중장기
+
+**60. 가상계좌 입금 정보 없음**
+
+Toss 가상계좌 결제 시 사용자에게 안내할 은행명·계좌번호·입금 기한이 `PaymentResponse`에 없다.
+가상계좌 방식 결제를 지원하려면 별도 Toss API 조회가 필요하거나 Webhook 수신 후 저장해야 한다.
+
+```
+개선: PaymentResponse에 virtualAccount 필드 추가 (nullable, 가상계좌 결제 시만)
+     { bank, accountNumber, dueDate: LocalDateTime }
+```
+
+**61. 배송비 정책 API 없음**
+
+`OrderPreviewResponse.shippingFee`는 항상 0 (무료배송 하드코딩, 주석 확인).
+배송비 정책이 바뀌어도 프론트 코드를 수정해야 하고, 상품 상세·장바구니에서
+"XX원 이상 무료배송" 문구를 동적으로 표시할 수 없다.
+
+```
+필요: GET /api/shipping/policy
+     → { freeShippingThreshold, defaultFee, conditions: [...] }
+     (Admin에서 수정 가능하도록 DB 테이블 또는 설정 관리)
+```
+
+**62. 상품 Q&A 없음**
+
+상품 상세 페이지의 Q&A 탭은 한국 쇼핑몰에서 필수 UI다. 문의 등록·답변 플로우 전체가 없다.
+
+```
+필요: GET    /api/products/{productId}/qna?page=
+      POST   /api/products/{productId}/qna           (구매자·비구매자 모두 가능)
+      POST   /api/products/{productId}/qna/{id}/answer  (ADMIN 또는 판매자)
+      DELETE /api/products/{productId}/qna/{id}      (작성자 또는 ADMIN)
+```
+
+---
+
+### 5차 요약
+
+| 우선순위 | 항목 | 근거 |
+|---|---|---|
+| 🔴 필수 | `@Valid` 에러 필드별 구조 없음 | `GlobalExceptionHandler` join() 확인 — 폼 인라인 에러 불가 |
+| 🟠 중요 | 내 배송 목록 API 없음 | `ShipmentController` 단건 조회만 존재 |
+| 🟠 중요 | 사용자 반품 신청 없음 | `return` 엔드포인트가 ADMIN 전용 |
+| 🟠 중요 | 포인트 만료 예정일 없음 | `PointTransaction`에 `expiredAt` 미존재, EXPIRE 타입은 있음 |
+| 🟠 중요 | Refresh Token 만료 시간 없음 | `LoginResponse` 필드 확인 — access token expiry만 있음 |
+| 🟠 중요 | 사용자 친화적 주문 번호 없음 | DB id 그대로 노출 |
+| 🟡 중장기 | 가상계좌 입금 정보 없음 | `PaymentResponse`에 가상계좌 상세 없음 |
+| 🟡 중장기 | 배송비 정책 API 없음 | `shippingFee=0` 하드코딩 |
+| 🟡 중장기 | 상품 Q&A 없음 | 한국 쇼핑몰 필수 기능 |
