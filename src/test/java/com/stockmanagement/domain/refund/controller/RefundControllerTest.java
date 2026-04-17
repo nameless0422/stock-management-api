@@ -6,6 +6,7 @@ import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.refund.dto.RefundResponse;
 import com.stockmanagement.domain.refund.service.RefundService;
+import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -40,6 +41,7 @@ class RefundControllerTest {
     private MockMvc mockMvc;
 
     @MockBean private RefundService refundService;
+    @MockBean private UserService userService;
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtBlacklist jwtBlacklist;
 

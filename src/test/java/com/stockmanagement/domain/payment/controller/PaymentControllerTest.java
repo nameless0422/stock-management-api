@@ -65,7 +65,7 @@ class PaymentControllerTest {
         @DisplayName("인증된 사용자 — 결제 준비 성공 → 200")
         void preparesPayment() throws Exception {
             PaymentPrepareResponse response =
-                    new PaymentPrepareResponse("toss-order-001", BigDecimal.valueOf(10000), "상품명");
+                    new PaymentPrepareResponse("toss-order-001", BigDecimal.valueOf(10000), "상품명", null, null);
             given(paymentService.prepare(any(), any())).willReturn(response);
 
             mockMvc.perform(post("/api/payments/prepare")

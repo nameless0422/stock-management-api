@@ -48,6 +48,12 @@ public class ProductSearchRequest {
      */
     private String sort;
 
+    /** 카테고리 ID 필터 — null이면 무시. includeChildren=true 시 하위 카테고리 포함 */
+    private Long categoryId;
+
+    /** categoryId 지정 시 하위 카테고리까지 포함 여부 (기본: false) */
+    private boolean includeChildren;
+
     /**
      * Elasticsearch 검색 조건 존재 여부.
      * sort만 지정한 경우도 ES로 처리한다.

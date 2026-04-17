@@ -2,6 +2,8 @@ package com.stockmanagement.domain.user.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
+import com.stockmanagement.domain.product.review.dto.ReviewResponse;
+import com.stockmanagement.domain.product.review.service.ReviewService;
 import com.stockmanagement.domain.user.dto.ChangePasswordRequest;
 import com.stockmanagement.domain.user.dto.UpdateProfileRequest;
 import com.stockmanagement.domain.user.dto.UserResponse;
@@ -15,6 +17,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,21 +25,21 @@ import org.springframework.web.bind.annotation.*;
  * 사용자 REST API 컨트롤러.
  *
  * <pre>
- * GET /api/users/me          내 정보 조회 → 200 OK
- * GET /api/users/me/orders   내 주문 목록 (페이징) → 200 OK
+ * GET  /api/users/me              내 정보 조회 (포인트 잔액 포함) → 200 OK
+ * GET  /api/users/me/orders       내 주문 목록 (페이징) → 200 OK
+ * GET  /api/users/me/reviews      내 리뷰 목록 (별점 필터 + 페이징) → 200 OK
  * </pre>
- *
- * JWT 인증이 필요하다. {@link AuthenticationPrincipal}로 username을 주입받아 서비스에 전달한다.
  */
-@Tag(name = "사용자", description = "내 정보 조회 · 내 주문 목록 — JWT 인증 필요")
+@Tag(name = "사용자", description = "내 정보 조회 · 내 주문·리뷰 목록 — JWT 인증 필요")
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
 public class UserController {
 
     private final UserService userService;
+    private final ReviewService reviewService;
 
-    @Operation(summary = "내 정보 조회")
+    @Operation(summary = "내 정보 조회", description = "포인트 잔액(pointBalance) 포함.")
     @GetMapping("/me")
     public ApiResponse<UserResponse> getMe(@AuthenticationPrincipal String username) {
         return ApiResponse.ok(userService.getMe(username));
@@ -73,5 +76,26 @@ public class UserController {
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
         return ApiResponse.ok(userService.getMyOrders(username, pageable));
+    }
+
+    @Operation(summary = "내 리뷰 목록 (페이징)",
+               description = "별점 필터 지원 (?rating=1~5). sort 파라미터로 정렬 지정 (createdAt DESC 기본).")
+    @GetMapping("/me/reviews")
+    public ApiResponse<Page<ReviewResponse>> getMyReviews(
+            @AuthenticationPrincipal String username,
+            Authentication authentication,
+            @RequestParam(required = false) Integer rating,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable) {
+        Long userId = resolveUserId(authentication, username);
+        return ApiResponse.ok(reviewService.getMyReviews(userId, pageable, rating));
+    }
+
+    /** JWT claim details에서 userId 추출. 구 토큰이면 DB fallback. */
+    private Long resolveUserId(Authentication auth, String username) {
+        if (auth != null && auth.getDetails() instanceof Long userId) {
+            return userId;
+        }
+        return userService.resolveUserId(username);
     }
 }

@@ -19,6 +19,8 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.shipment.entity.ShipmentStatus;
+import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.common.outbox.OutboxEventStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +39,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -72,6 +75,9 @@ class OrderServiceTest {
     @Mock
     private DeliveryAddressService deliveryAddressService;
 
+    @Mock
+    private ShipmentRepository shipmentRepository;
+
     @InjectMocks
     private OrderService orderService;
 
@@ -100,6 +106,8 @@ class OrderServiceTest {
                 .unitPrice(new BigDecimal("10000"))
                 .build();
         order.addItem(orderItem);
+
+        lenient().when(shipmentRepository.findStatusMapByOrderIds(any())).thenReturn(new java.util.HashMap<>());
     }
 
     // ===== create() =====

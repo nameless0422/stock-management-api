@@ -9,12 +9,19 @@ import com.stockmanagement.domain.product.review.dto.ReviewResponse;
 import com.stockmanagement.domain.product.review.dto.ReviewUpdateRequest;
 import com.stockmanagement.domain.product.review.entity.Review;
 import com.stockmanagement.domain.product.review.repository.ReviewRepository;
+import com.stockmanagement.domain.user.entity.User;
+import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 @Service
 @Transactional(readOnly = true)
@@ -24,6 +31,7 @@ public class ReviewService {
     private final ReviewRepository reviewRepository;
     private final ProductRepository productRepository;
     private final OrderRepository orderRepository;
+    private final UserRepository userRepository;
 
     /**
      * 리뷰를 작성한다.
@@ -55,13 +63,22 @@ public class ReviewService {
         return ReviewResponse.from(reviewRepository.save(review));
     }
 
-    /** 상품의 리뷰 목록을 최신순 페이징 조회한다. */
+    /** 상품의 리뷰 목록을 최신순 페이징 조회한다. 작성자 username을 마스킹하여 포함한다. */
     public Page<ReviewResponse> getList(Long productId, Pageable pageable) {
         if (!productRepository.existsById(productId)) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
-        return reviewRepository.findByProductIdOrderByCreatedAtDesc(productId, pageable)
-                .map(ReviewResponse::from);
+        Page<Review> reviews = reviewRepository.findByProductIdOrderByCreatedAtDesc(productId, pageable);
+        Map<Long, String> usernameMap = buildUsernameMap(reviews.map(Review::getUserId).toList());
+        return reviews.map(r -> ReviewResponse.from(r, usernameMap.get(r.getUserId())));
+    }
+
+    /** 특정 사용자의 리뷰 목록을 페이징 조회한다. 별점 필터 지원. */
+    public Page<ReviewResponse> getMyReviews(Long userId, Pageable pageable, Integer rating) {
+        Page<Review> reviews = (rating != null)
+                ? reviewRepository.findByUserIdAndRating(userId, rating, pageable)
+                : reviewRepository.findByUserId(userId, pageable);
+        return reviews.map(ReviewResponse::from);
     }
 
     /**
@@ -105,5 +122,14 @@ public class ReviewService {
         }
 
         reviewRepository.delete(review);
+    }
+
+    // ===== 내부 헬퍼 =====
+
+    /** userId 목록으로 username Map을 배치 조회한다 (N+1 방지). */
+    private Map<Long, String> buildUsernameMap(List<Long> userIds) {
+        if (userIds.isEmpty()) return Map.of();
+        return StreamSupport.stream(userRepository.findAllById(userIds).spliterator(), false)
+                .collect(Collectors.toMap(User::getId, User::getUsername));
     }
 }

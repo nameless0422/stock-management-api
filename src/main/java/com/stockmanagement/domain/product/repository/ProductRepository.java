@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+
 /**
  * 상품 레포지토리.
  *
@@ -56,4 +58,11 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
            countQuery = "SELECT COUNT(p) FROM Product p WHERE " +
                         "LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')) OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :q, '%'))")
     Page<Product> searchAll(@Param("q") String query, Pageable pageable);
+
+    /** 카테고리 ID 목록 필터 — ACTIVE 상품 중 해당 카테고리에 속하는 상품만 조회 (하위 카테고리 포함 가능). */
+    @Query(value = "SELECT p FROM Product p LEFT JOIN FETCH p.category WHERE p.status = :status AND p.category.id IN :categoryIds",
+           countQuery = "SELECT COUNT(p) FROM Product p WHERE p.status = :status AND p.category.id IN :categoryIds")
+    Page<Product> findByStatusAndCategoryIdIn(@Param("status") ProductStatus status,
+                                              @Param("categoryIds") Collection<Long> categoryIds,
+                                              Pageable pageable);
 }

@@ -118,11 +118,13 @@ public class UserService {
                 .getId();
     }
 
-    /** 현재 인증된 사용자 정보 조회. */
+    /** 현재 인증된 사용자 정보 조회 (포인트 잔액 포함). */
     public UserResponse getMe(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        return UserResponse.from(user);
+        Long pointBalance = userPointRepository.findByUserId(user.getId())
+                .map(up -> up.getBalance()).orElse(null);
+        return UserResponse.from(user, pointBalance);
     }
 
     /** 회원 탈퇴 — 논리 삭제 처리. username/email을 익명화하여 동일 정보로 재가입 가능. */

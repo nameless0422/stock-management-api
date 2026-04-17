@@ -49,4 +49,10 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     @Query("SELECT r.productId FROM Review r WHERE r.userId = :userId AND r.productId IN :productIds")
     List<Long> findReviewedProductIdsByUserId(@Param("userId") Long userId,
                                               @Param("productIds") Collection<Long> productIds);
+
+    /** 특정 사용자의 리뷰 목록을 페이징 조회한다 (내 리뷰 목록). Pageable sort로 정렬 지원. */
+    Page<Review> findByUserId(Long userId, Pageable pageable);
+
+    /** 특정 사용자의 특정 별점 리뷰 목록을 페이징 조회한다. */
+    Page<Review> findByUserIdAndRating(Long userId, int rating, Pageable pageable);
 }

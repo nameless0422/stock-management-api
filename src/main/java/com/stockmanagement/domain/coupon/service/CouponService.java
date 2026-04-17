@@ -108,6 +108,15 @@ public class CouponService {
      * </ul>
      */
     public List<MyCouponResponse> getMyCoupons(Long userId) {
+        return getMyCoupons(userId, null);
+    }
+
+    /**
+     * 사용자 쿠폰 목록을 조회한다. usable 파라미터로 사용 가능 여부 필터링 지원.
+     *
+     * @param usable null=전체, true=사용 가능만, false=사용 불가만
+     */
+    public List<MyCouponResponse> getMyCoupons(Long userId, Boolean usable) {
         List<UserCoupon> userCoupons = userCouponRepository.findByUserId(userId);
         if (userCoupons.isEmpty()) {
             return List.of();
@@ -131,6 +140,7 @@ public class CouponService {
                     int usedCount = usedCountMap.getOrDefault(uc.getCoupon().getId(), 0);
                     return MyCouponResponse.from(uc, isUsable(uc.getCoupon(), usedCount, now));
                 })
+                .filter(r -> usable == null || r.isUsable() == usable)
                 .toList();
     }
 

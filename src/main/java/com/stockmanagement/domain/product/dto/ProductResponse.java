@@ -57,28 +57,39 @@ public class ProductResponse {
      */
     private final Boolean canReview;
 
+    /** 현재 사용자의 위시리스트 등록 여부 — null이면 비로그인 또는 정보 미포함 */
+    private final Boolean wishlisted;
+
     /** Product 엔티티만으로 변환 (재고·리뷰 통계 미포함). */
     public static ProductResponse from(Product product) {
-        return from(product, null, null, null, null, null);
+        return from(product, null, null, null, null, null, null);
     }
 
     /** Product 엔티티 + 재고·리뷰 통계를 포함한 전체 응답으로 변환 (이미지 미포함). */
     public static ProductResponse from(Product product, Integer availableQuantity,
                                        Double avgRating, Long reviewCount) {
-        return from(product, availableQuantity, avgRating, reviewCount, null, null);
+        return from(product, availableQuantity, avgRating, reviewCount, null, null, null);
     }
 
     /** Product 엔티티 + 재고·리뷰 통계 + 이미지 목록을 포함한 전체 응답으로 변환. */
     public static ProductResponse from(Product product, Integer availableQuantity,
                                        Double avgRating, Long reviewCount,
                                        List<ProductImageResponse> images) {
-        return from(product, availableQuantity, avgRating, reviewCount, images, null);
+        return from(product, availableQuantity, avgRating, reviewCount, images, null, null);
     }
 
     /** Product 엔티티 + 재고·리뷰 통계 + 이미지 + canReview를 포함한 전체 응답으로 변환. */
     public static ProductResponse from(Product product, Integer availableQuantity,
                                        Double avgRating, Long reviewCount,
                                        List<ProductImageResponse> images, Boolean canReview) {
+        return from(product, availableQuantity, avgRating, reviewCount, images, canReview, null);
+    }
+
+    /** Product 엔티티 + 전체 필드(재고·리뷰·이미지·canReview·wishlisted)를 포함한 응답으로 변환. */
+    public static ProductResponse from(Product product, Integer availableQuantity,
+                                       Double avgRating, Long reviewCount,
+                                       List<ProductImageResponse> images, Boolean canReview,
+                                       Boolean wishlisted) {
         return ProductResponse.builder()
                 .id(product.getId())
                 .name(product.getName())
@@ -96,6 +107,7 @@ public class ProductResponse {
                 .reviewCount(reviewCount)
                 .images(images)
                 .canReview(canReview)
+                .wishlisted(wishlisted)
                 .build();
     }
 }

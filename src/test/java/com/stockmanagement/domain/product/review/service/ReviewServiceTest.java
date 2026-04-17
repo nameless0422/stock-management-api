@@ -3,6 +3,7 @@ package com.stockmanagement.domain.product.review.service;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.user.repository.UserRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.product.review.dto.ReviewCreateRequest;
@@ -28,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,8 +39,14 @@ class ReviewServiceTest {
     @Mock private ReviewRepository reviewRepository;
     @Mock private ProductRepository productRepository;
     @Mock private OrderRepository orderRepository;
+    @Mock private UserRepository userRepository;
 
     @InjectMocks private ReviewService reviewService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        lenient().when(userRepository.findAllById(any())).thenReturn(List.of());
+    }
 
     private Product mockProduct(Long id) {
         Product p = Product.builder().name("테스트상품").price(java.math.BigDecimal.valueOf(10000)).sku("SKU-001").build();

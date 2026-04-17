@@ -13,6 +13,9 @@ import com.stockmanagement.domain.payment.infrastructure.TossPaymentsClient;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossConfirmResponse;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
+import com.stockmanagement.domain.user.entity.User;
+import com.stockmanagement.domain.user.entity.UserRole;
+import com.stockmanagement.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -53,6 +56,9 @@ class PaymentServiceTest {
     @Mock
     private PaymentTransactionHelper transactionHelper;
 
+    @Mock
+    private UserRepository userRepository;
+
     @InjectMocks
     private PaymentService paymentService;
 
@@ -79,6 +85,10 @@ class PaymentServiceTest {
         // 기본: Redis에 캐시 없음, 선점 항상 성공
         lenient().when(idempotencyManager.getIfCompleted(anyString())).thenReturn(Optional.empty());
         lenient().when(idempotencyManager.tryAcquire(anyString())).thenReturn(true);
+
+        User user = User.builder().username("testuser").email("test@example.com")
+                .password("pw").role(UserRole.USER).build();
+        lenient().when(userRepository.findById(anyLong())).thenReturn(Optional.of(user));
     }
 
     // ===== prepare() =====
