@@ -464,3 +464,172 @@ POST /api/orders → OrderItemRequest.variantId
 | 🟡 중장기 | 배송 예상 도착일 없음 | 배송 UX |
 | 🟡 중장기 | 홈 화면 집계 API 없음 | SSR 성능 |
 | 🟡 중장기 | 결제 수단 상세 정보 없음 | 결제 내역 표시 |
+
+---
+
+## 4차 검토 — API 인터페이스 결함 및 데이터 누락
+
+---
+
+### 🔴 필수 — 개발 시작 전 합의 필요
+
+**43. 에러 응답에 머신-리더블 코드 없음**
+
+`ApiResponse` 에러 응답 구조: `{ success: false, message: "재고가 부족합니다." }`.
+`message`는 사람이 읽는 한국어 문자열이고 기계가 읽는 에러 코드가 없다.
+프론트에서 에러 종류별로 다른 UX(토스트/모달/인라인 메시지)를 적용하려면 `message` 텍스트를 직접 비교해야 한다 — i18n 불가, 문자열 변경 시 프론트 코드 깨짐.
+
+```
+현재: { success: false, message: "재고가 부족합니다." }
+필요: { success: false, code: "INSUFFICIENT_STOCK", message: "재고가 부족합니다." }
+     → code는 ErrorCode enum name() 그대로 사용
+```
+
+**44. Spring Security 에러와 일반 에러 응답 형식 불일치**
+
+`GlobalExceptionHandler`는 `BusinessException` 등을 `ApiResponse` 형식으로 처리하지만,
+Spring Security 필터 레이어의 401(미인증)/403(권한 없음) 에러는 `AuthenticationEntryPoint`/`AccessDeniedHandler`가 별도 설정되지 않아 Spring Boot 기본 형식(`{ timestamp, status, error, path }`)으로 반환된다.
+프론트 에러 인터셉터가 두 가지 형식을 모두 처리해야 하는 문제가 생긴다.
+
+```
+현재: 
+  401/403 → { timestamp: ..., status: 403, error: "Forbidden", path: "/api/orders" }
+  비즈니스 에러 → { success: false, message: "..." }
+
+필요: 모든 에러 → { success: false, code: "...", message: "..." }
+  → SecurityConfig에 authenticationEntryPoint/accessDeniedHandler 추가
+```
+
+---
+
+### 🟠 중요 — 이미지 및 데이터 누락
+
+**45. `OrderItemResponse`에 썸네일 없음**
+
+`OrderItemResponse` 필드: `id`, `productId`, `productName`, `quantity`, `unitPrice`, `subtotal`, `hasReview`.
+`thumbnailUrl`이 없다. 주문 목록·상세 페이지에서 상품 이미지를 표시하려면 `productId`마다 `GET /api/products/{id}`를 반복 호출해야 한다.
+주문 당시 이미지가 이후 변경될 수도 있으므로 스냅샷 저장이 올바른 방향이다.
+
+```
+개선: OrderItemResponse에 추가
+     thumbnailUrl: String  (주문 당시 thumbnailUrl 스냅샷)
+```
+
+**46. `CartItemResponse`에 썸네일 없음**
+
+`CartItemResponse` 필드: `productId`, `productName`, `unitPrice`, `quantity`, `subtotal`, `availableQuantity`, `isAvailable`.
+장바구니 화면에서 상품 이미지를 표시할 방법이 없다. `productId`로 별도 조회 필요.
+
+```
+개선: CartItemResponse에 추가
+     thumbnailUrl: String
+```
+
+**47. 장바구니 가격 변동 감지 없음**
+
+`CartItemResponse.unitPrice`는 `Product.price`를 실시간으로 참조한다 (스냅샷 아님).
+장바구니에 담은 이후 가격이 인하/인상되어도 프론트에서 이를 감지할 수 없다.
+"이 상품의 가격이 변경되었습니다 (10,000원 → 8,000원)" 알림 구현 불가.
+
+```
+개선: CartItemResponse에 추가
+     originalPrice: BigDecimal   (장바구니에 담을 당시 가격)
+     currentPrice: BigDecimal    (현재 가격)
+     priceChanged: Boolean       (originalPrice != currentPrice)
+```
+
+**48. `CategoryResponse`에 상품 수 없음**
+
+네비게이션 메뉴나 카테고리 탐색 페이지에서 "상의 (234)", "하의 (189)" 같은 상품 수 표시가 일반적이다.
+현재 `CategoryResponse`에는 `id`, `name`, `description`, `parentId`, `children` 만 있다.
+
+```
+개선: CategoryResponse에 productCount: long 추가
+     (하위 포함 여부를 boolean includeChildren 파라미터로 선택)
+```
+
+**49. `MyCouponResponse`에 사용 주문 정보 없음**
+
+사용된 쿠폰이 "어떤 주문에서 얼마나 할인되었는지" 알 수 없다.
+쿠폰 이력 페이지("2024-04-01 주문 #12345에서 3,000원 할인")를 구현하려면 별도 데이터가 필요하다.
+
+```
+개선: MyCouponResponse에 추가 (사용된 쿠폰인 경우)
+     usedAt: LocalDateTime
+     usedOrderId: Long
+     actualDiscountAmount: BigDecimal
+```
+
+---
+
+### 🟡 중장기 — API 설계 일관성
+
+**50. 페이지네이션 전략 혼재 (Page vs CursorPage)**
+
+주문 목록 조회가 두 가지 방식으로 중복 존재한다:
+- `GET /api/orders` → `Page<OrderResponse>` (offset 기반)
+- `GET /api/orders/scroll` → `CursorPage<OrderResponse>` (커서 기반)
+
+재고 이력은 `CursorPage`, 상품/카테고리/쿠폰은 `Page`. 어떤 API가 어떤 방식인지 패턴이 없다.
+프론트에서 API마다 다른 페이지네이션 로직을 작성해야 하고, 무한 스크롤과 페이지 번호 UI를 각각 구현해야 한다.
+
+```
+개선 방향 합의 필요:
+  - 목록 기본: Page (어드민 테이블, 정렬 가능한 목록)
+  - 무한 스크롤: CursorPage (피드형 목록)
+  - GET /api/orders/scroll 제거 또는 GET /api/orders에 통합
+```
+
+**51. 재고 수량 직접 노출 정책 미비**
+
+`ProductResponse.availableQuantity`, `CartItemResponse.availableQuantity` 등에서 정확한 재고 숫자를 그대로 노출한다.
+경쟁사가 API를 통해 재고 현황을 파악하거나, 사용자가 "재고 9개" 보다 "품절 임박" 뱃지가 더 구매 전환에 효과적이다.
+
+```
+개선 방향 합의 필요:
+  A) 임계값 이하만 숫자 표시: 10개 이상 → null, 10개 미만 → 실제 숫자
+  B) 단계별 표시: IN_STOCK | LOW_STOCK | OUT_OF_STOCK enum 반환
+  C) 현행 유지 (정확한 숫자 노출)
+```
+
+**52. 부분 환불 지원 여부 불명확**
+
+`POST /api/payments/{paymentKey}/cancel` API가 전액 취소만 지원하는지, 금액 지정 부분 취소도 가능한지 문서·응답만으로 판단 불가.
+다품목 주문에서 특정 상품만 환불하는 UX를 구현하려면 부분 취소 지원이 필수다.
+
+```
+명확화 필요: POST /api/payments/{paymentKey}/cancel Body에
+     amount: BigDecimal (지정 안 하면 전액, 지정 시 부분 취소)
+     → Toss Payments API 부분 취소 지원 여부와 연동 필요
+```
+
+**53. 인앱 알림 시스템 없음**
+
+주문 상태 변경(결제 완료, 배송 출고 등)을 실시간으로 사용자에게 전달할 방법이 없다.
+이메일 발송(`EmailService`)은 있지만 앱/웹 내 알림 UI(헤더 벨 아이콘, 읽지 않은 알림 수)를 구현할 수 없다.
+
+```
+필요: 
+  GET  /api/notifications?read=false&page=
+  POST /api/notifications/{id}/read
+  GET  /api/notifications/unread-count
+  → SSE(Server-Sent Events) 또는 주기적 polling 방식 선택 필요
+```
+
+---
+
+### 4차 요약
+
+| 우선순위 | 항목 | 핵심 이유 |
+|---|---|---|
+| 🔴 필수 | 에러 응답에 `errorCode` 없음 | 에러 종류 구분 불가 — i18n·조건부 UX 불가 |
+| 🔴 필수 | Security 에러 형식 불일치 | 인터셉터 구현 복잡 |
+| 🟠 중요 | `OrderItemResponse` 썸네일 없음 | 주문 목록 이미지 N+1 |
+| 🟠 중요 | `CartItemResponse` 썸네일 없음 | 장바구니 이미지 N+1 |
+| 🟠 중요 | 장바구니 가격 변동 감지 없음 | 스냅샷 구조 부재 |
+| 🟠 중요 | `CategoryResponse` 상품 수 없음 | 네비게이션 UX |
+| 🟠 중요 | `MyCouponResponse` 사용 주문 없음 | 쿠폰 이력 UX |
+| 🟡 중장기 | 페이지네이션 전략 혼재 | 프론트 구현 복잡성 |
+| 🟡 중장기 | 재고 수량 직접 노출 정책 | 비즈니스 정책 결정 필요 |
+| 🟡 중장기 | 부분 환불 지원 여부 불명확 | 다품목 환불 UX |
+| 🟡 중장기 | 인앱 알림 시스템 없음 | 실시간 상태 알림 |
