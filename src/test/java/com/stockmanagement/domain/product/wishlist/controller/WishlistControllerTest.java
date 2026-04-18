@@ -69,10 +69,10 @@ class WishlistControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(post("/api/wishlist/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -101,10 +101,10 @@ class WishlistControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(delete("/api/wishlist/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 
@@ -126,10 +126,10 @@ class WishlistControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(get("/api/wishlist"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

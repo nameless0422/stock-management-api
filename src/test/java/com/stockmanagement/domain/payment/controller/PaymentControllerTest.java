@@ -76,12 +76,12 @@ class PaymentControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(post("/api/payments/prepare")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -118,12 +118,12 @@ class PaymentControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(post("/api/payments/confirm")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -163,12 +163,12 @@ class PaymentControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(post("/api/payments/pk-test/cancel")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -233,10 +233,10 @@ class PaymentControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(get("/api/payments/order/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 
@@ -259,10 +259,10 @@ class PaymentControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(get("/api/payments/pk-test"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test

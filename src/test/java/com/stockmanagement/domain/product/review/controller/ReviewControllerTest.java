@@ -78,12 +78,12 @@ class ReviewControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(post("/api/products/1/reviews")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(REVIEW_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -147,10 +147,10 @@ class ReviewControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(delete("/api/products/1/reviews/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

@@ -100,10 +100,10 @@ class InventoryControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(get("/api/inventory"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 
@@ -125,10 +125,10 @@ class InventoryControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(get("/api/inventory/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -164,10 +164,10 @@ class InventoryControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(get("/api/inventory/1/transactions"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -215,12 +215,12 @@ class InventoryControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(post("/api/inventory/1/receive")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test

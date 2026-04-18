@@ -88,12 +88,12 @@ class ProductControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(post("/api/products")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test

@@ -1,5 +1,8 @@
 package com.stockmanagement.common.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.JwtAuthenticationFilter;
 import com.stockmanagement.common.security.JwtTokenProvider;
@@ -9,6 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -23,6 +27,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
@@ -33,6 +38,7 @@ public class SecurityConfig {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtBlacklist jwtBlacklist;
+    private final ObjectMapper objectMapper;
 
     @Value("${cors.allowed-origins:http://localhost:3000}")
     private String allowedOrigins;
@@ -142,6 +148,24 @@ public class SecurityConfig {
                                         "connect-src 'self'; " +
                                         "frame-ancestors 'none'"));
                 })
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, e) -> {
+                            response.setStatus(401);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+                            response.getWriter().write(
+                                    objectMapper.writeValueAsString(
+                                            ApiResponse.error(ErrorCode.UNAUTHORIZED, "인증이 필요합니다.")));
+                        })
+                        .accessDeniedHandler((request, response, e) -> {
+                            response.setStatus(403);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+                            response.getWriter().write(
+                                    objectMapper.writeValueAsString(
+                                            ApiResponse.error(ErrorCode.FORBIDDEN, "접근 권한이 없습니다.")));
+                        })
+                )
                 .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider, jwtBlacklist),
                         UsernamePasswordAuthenticationFilter.class);
 

@@ -71,12 +71,12 @@ class RefundControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(post("/api/refunds")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(REFUND_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -111,10 +111,10 @@ class RefundControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(get("/api/refunds/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -157,10 +157,10 @@ class RefundControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(get("/api/refunds/payments/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 }
