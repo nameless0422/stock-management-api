@@ -31,13 +31,16 @@ public class CategoryResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    /** flat 목록용 — children 빈 리스트 */
+    /** DISCONTINUED 제외 상품 수 */
+    private long productCount;
+
+    /** flat 목록용 — children 빈 리스트, productCount 0 */
     public static CategoryResponse from(Category category) {
-        return from(category, new ArrayList<>());
+        return from(category, new ArrayList<>(), 0L);
     }
 
-    /** 명시적 children 목록으로 생성 (트리 빌드 시 사용) */
-    public static CategoryResponse from(Category category, List<CategoryResponse> children) {
+    /** 명시적 children + productCount로 생성 (트리·단건 조회 시 사용) */
+    public static CategoryResponse from(Category category, List<CategoryResponse> children, long productCount) {
         return CategoryResponse.builder()
                 .id(category.getId())
                 .name(category.getName())
@@ -47,6 +50,7 @@ public class CategoryResponse {
                 .children(children)
                 .createdAt(category.getCreatedAt())
                 .updatedAt(category.getUpdatedAt())
+                .productCount(productCount)
                 .build();
     }
 }

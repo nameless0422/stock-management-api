@@ -2,6 +2,7 @@ package com.stockmanagement.domain.product.wishlist.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.product.wishlist.dto.WishlistResponse;
@@ -32,6 +33,7 @@ class WishlistServiceTest {
 
     @Mock private WishlistRepository wishlistRepository;
     @Mock private ProductRepository productRepository;
+    @Mock private InventoryRepository inventoryRepository;
 
     @InjectMocks private WishlistService wishlistService;
 
@@ -56,6 +58,7 @@ class WishlistServiceTest {
         void success() {
             given(productRepository.findById(10L)).willReturn(Optional.of(mockProduct(10L)));
             given(wishlistRepository.existsByUserIdAndProductId(1L, 10L)).willReturn(false);
+            given(inventoryRepository.findByProductId(10L)).willReturn(Optional.empty());
             WishlistItem saved = mockItem(5L, 1L, 10L);
             given(wishlistRepository.save(any())).willReturn(saved);
 
@@ -114,6 +117,7 @@ class WishlistServiceTest {
             Product product = mockProduct(10L);
             given(wishlistRepository.findByUserIdOrderByCreatedAtDesc(1L)).willReturn(List.of(item));
             given(productRepository.findAllById(List.of(10L))).willReturn(List.of(product));
+            given(inventoryRepository.findAllByProductIdIn(List.of(10L))).willReturn(List.of());
 
             List<WishlistResponse> list = wishlistService.getList(1L);
 

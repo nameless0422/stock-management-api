@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.order.dto;
 
 import com.stockmanagement.domain.payment.dto.PaymentResponse;
+import com.stockmanagement.domain.refund.dto.RefundResponse;
 import com.stockmanagement.domain.shipment.dto.ShipmentResponse;
 import lombok.Builder;
 import lombok.Getter;
@@ -22,4 +23,7 @@ public class OrderDetailResponse {
 
     /** 배송 정보 — 결제 완료 전이면 null */
     private final ShipmentResponse shipment;
+
+    /** 환불 정보 — 환불 요청 전이면 null */
+    private final RefundResponse refund;
 }

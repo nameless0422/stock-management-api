@@ -17,7 +17,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -174,6 +176,7 @@ class CategoryServiceTest {
         void returnsTreeWithChildren() {
             parent.getChildren().add(child);
             given(categoryRepository.findAll()).willReturn(List.of(parent, child));
+            given(productRepository.countMapByCategoryIds(any())).willReturn(new HashMap<>());
 
             List<CategoryResponse> tree = categoryService.getTree();
 

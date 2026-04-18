@@ -14,6 +14,8 @@ import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -87,6 +89,17 @@ public class ShipmentService {
         }
 
         return ShipmentResponse.from(shipment);
+    }
+
+    /**
+     * 로그인한 사용자의 배송 목록을 최신순 페이징 조회한다.
+     *
+     * @param userId   요청자 ID (JWT claim 기반)
+     * @param pageable 페이지 요청
+     */
+    public Page<ShipmentResponse> getMyShipments(Long userId, Pageable pageable) {
+        return shipmentRepository.findByUserId(userId, pageable)
+                .map(ShipmentResponse::from);
     }
 
     /**

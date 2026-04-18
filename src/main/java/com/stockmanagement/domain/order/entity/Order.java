@@ -108,19 +108,25 @@ public class Order {
 
     // ===== 비즈니스 메서드 =====
 
+    /** 취소 사유 — null이면 사유 미입력 */
+    @Column(name = "cancel_reason", length = 255)
+    private String cancelReason;
+
     /**
      * 주문을 취소한다.
      *
      * <p>PENDING 상태인 경우에만 취소 가능하다.
      * PAYMENT_IN_PROGRESS 상태에서는 Toss API 호출이 진행 중이므로 취소 불가.
      *
+     * @param reason 취소 사유 (null 허용)
      * @throws BusinessException 취소 불가 상태일 경우
      */
-    public void cancel() {
+    public void cancel(String reason) {
         if (this.status != OrderStatus.PENDING) {
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
         }
         this.status = OrderStatus.CANCELLED;
+        this.cancelReason = reason;
     }
 
     /**

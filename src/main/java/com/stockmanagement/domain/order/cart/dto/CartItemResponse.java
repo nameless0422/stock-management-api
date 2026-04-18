@@ -17,6 +17,8 @@ public class CartItemResponse {
     private int quantity;
     private BigDecimal subtotal;
 
+    /** 상품 대표 이미지 URL — null이면 이미지 없음 */
+    private String thumbnailUrl;
     /** 현재 가용 재고 수량 — null이면 재고 정보 미포함 */
     private Integer availableQuantity;
     /** 담은 수량만큼 구매 가능한지 여부 — null이면 재고 정보 미포함 */
@@ -31,6 +33,7 @@ public class CartItemResponse {
         return CartItemResponse.builder()
                 .productId(item.getProduct().getId())
                 .productName(item.getProduct().getName())
+                .thumbnailUrl(item.getProduct().getThumbnailUrl())
                 .unitPrice(unitPrice)
                 .quantity(item.getQuantity())
                 .subtotal(unitPrice.multiply(BigDecimal.valueOf(item.getQuantity())))

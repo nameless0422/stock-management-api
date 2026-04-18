@@ -331,7 +331,7 @@ class OrderServiceTest {
         void cancelsPendingOrder() {
             given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
-            OrderResponse response = orderService.cancel(1L, 1L, false); // userId=1L, order.userId=1L
+            OrderResponse response = orderService.cancel(1L, 1L, false, null); // userId=1L, order.userId=1L
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
             verify(inventoryService).releaseReservation(any(), eq(1));
@@ -344,7 +344,7 @@ class OrderServiceTest {
             order.confirm(); // PENDING → CONFIRMED
             given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
-            assertThatThrownBy(() -> orderService.cancel(1L, 1L, false))
+            assertThatThrownBy(() -> orderService.cancel(1L, 1L, false, null))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_ORDER_STATUS));
@@ -357,7 +357,7 @@ class OrderServiceTest {
         void throwsWhenNotFound() {
             given(orderRepository.findByIdWithItemsForUpdate(99L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> orderService.cancel(99L, 1L, false))
+            assertThatThrownBy(() -> orderService.cancel(99L, 1L, false, null))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.ORDER_NOT_FOUND));

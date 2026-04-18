@@ -196,7 +196,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 주문 취소 성공 → 200")
         void cancelsOrder() throws Exception {
-            given(orderService.cancel(anyLong(), any(), anyBoolean())).willReturn(mock(OrderResponse.class));
+            given(orderService.cancel(anyLong(), any(), anyBoolean(), any())).willReturn(mock(OrderResponse.class));
 
             mockMvc.perform(post("/api/orders/1/cancel"))
                     .andExpect(status().isOk())
@@ -214,7 +214,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("취소 불가 상태의 주문 → 409")
         void invalidStatus() throws Exception {
-            given(orderService.cancel(anyLong(), any(), anyBoolean()))
+            given(orderService.cancel(anyLong(), any(), anyBoolean(), any()))
                     .willThrow(new BusinessException(ErrorCode.INVALID_ORDER_STATUS));
 
             mockMvc.perform(post("/api/orders/1/cancel"))

@@ -2,6 +2,8 @@ package com.stockmanagement.domain.shipment.repository;
 
 import com.stockmanagement.domain.shipment.entity.Shipment;
 import com.stockmanagement.domain.shipment.entity.ShipmentStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,4 +30,8 @@ public interface ShipmentRepository extends JpaRepository<Shipment, Long> {
         return findAllByOrderIdIn(orderIds).stream()
                 .collect(Collectors.toMap(Shipment::getOrderId, Shipment::getStatus));
     }
+
+    /** 특정 사용자의 배송 목록을 최신순 페이징 조회한다. */
+    @Query("SELECT s FROM Shipment s WHERE s.orderId IN (SELECT o.id FROM Order o WHERE o.userId = :userId) ORDER BY s.createdAt DESC")
+    Page<Shipment> findByUserId(@Param("userId") Long userId, Pageable pageable);
 }

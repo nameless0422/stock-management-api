@@ -327,7 +327,7 @@ public class OrderService {
      */
     @Transactional
     @CacheEvict(cacheNames = "orders", key = "#id")
-    public OrderResponse cancel(Long id, Long userId, boolean isAdmin) {
+    public OrderResponse cancel(Long id, Long userId, boolean isAdmin, String reason) {
         // 비관적 락: 만료 스케줄러(cancel)와 결제 확정(confirm)의 동시 실행으로 인한
         // 재고 상태 불일치(allocated 누수)를 방지한다.
         Order order = orderRepository.findByIdWithItemsForUpdate(id)
@@ -337,7 +337,7 @@ public class OrderService {
         validateOrderOwnership(order, userId, isAdmin);
 
         // 상태 검증 + CANCELLED 전환 (PENDING이 아니면 INVALID_ORDER_STATUS 예외)
-        order.cancel();
+        order.cancel(reason);
 
         // 재고 예약 해제
         for (OrderItem item : order.getItems()) {
@@ -370,7 +370,7 @@ public class OrderService {
         Order order = orderRepository.findByIdWithItemsForUpdate(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
-        order.cancel();
+        order.cancel(null);
 
         for (OrderItem item : order.getItems()) {
             inventoryService.releaseReservation(item.getProduct().getId(), item.getQuantity());

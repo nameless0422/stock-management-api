@@ -2,6 +2,8 @@ package com.stockmanagement.domain.product.wishlist.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.inventory.entity.Inventory;
+import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.product.wishlist.dto.WishlistResponse;
@@ -23,6 +25,7 @@ public class WishlistService {
 
     private final WishlistRepository wishlistRepository;
     private final ProductRepository productRepository;
+    private final InventoryRepository inventoryRepository;
 
     /**
      * 위시리스트에 상품을 추가한다.
@@ -43,7 +46,10 @@ public class WishlistService {
                 .productId(productId)
                 .build();
 
-        return toResponse(wishlistRepository.save(item), product);
+        Integer available = inventoryRepository.findByProductId(productId)
+                .map(Inventory::getAvailable)
+                .orElse(null);
+        return WishlistResponse.of(wishlistRepository.save(item), product, available);
     }
 
     /**
@@ -78,19 +84,20 @@ public class WishlistService {
             return List.of();
         }
 
-        // N+1 방지: 상품 ID 목록을 한 번에 조회
+        // N+1 방지: 상품 + 재고를 한 번에 배치 조회
         List<Long> productIds = items.stream().map(WishlistItem::getProductId).toList();
         Map<Long, Product> productMap = productRepository.findAllById(productIds).stream()
                 .collect(Collectors.toMap(Product::getId, Function.identity()));
+        Map<Long, Integer> availableMap = inventoryRepository.findAllByProductIdIn(productIds).stream()
+                .collect(Collectors.toMap(i -> i.getProduct().getId(), Inventory::getAvailable));
 
         // 상품이 삭제(soft delete)된 경우 위시리스트 항목을 건너뛴다 — 전체 조회 실패 방지
         return items.stream()
                 .filter(item -> productMap.containsKey(item.getProductId()))
-                .map(item -> toResponse(item, productMap.get(item.getProductId())))
+                .map(item -> WishlistResponse.of(
+                        item,
+                        productMap.get(item.getProductId()),
+                        availableMap.get(item.getProductId())))
                 .toList();
-    }
-
-    private WishlistResponse toResponse(WishlistItem item, Product product) {
-        return WishlistResponse.of(item, product.getName(), product.getPrice(), product.getThumbnailUrl());
     }
 }

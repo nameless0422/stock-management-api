@@ -47,6 +47,9 @@ public class OrderResponse {
     /** 배송 상태 — null이면 배송 미생성 (결제 완료 전 또는 취소된 주문) */
     private final ShipmentStatus shipmentStatus;
 
+    /** 취소 사유 — CANCELLED 상태가 아니거나 사유 미입력 시 null */
+    private final String cancelReason;
+
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
 
@@ -80,6 +83,7 @@ public class OrderResponse {
                                         : null))
                         .toList())
                 .shipmentStatus(shipmentStatus)
+                .cancelReason(order.getCancelReason())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .build();

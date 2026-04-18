@@ -4,6 +4,7 @@ import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.common.security.SecurityUtils;
+import com.stockmanagement.domain.order.dto.OrderCancelRequest;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderDetailResponse;
 import com.stockmanagement.domain.order.dto.OrderPreviewRequest;
@@ -139,10 +140,12 @@ public class OrderController {
     @PostMapping("/{id}/cancel")
     public ApiResponse<OrderResponse> cancel(
             @PathVariable Long id,
+            @RequestBody(required = false) @Valid OrderCancelRequest request,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderService.cancel(id, resolveUserId(authentication, username), isAdmin));
+        String reason = request != null ? request.reason() : null;
+        return ApiResponse.ok(orderService.cancel(id, resolveUserId(authentication, username), isAdmin, reason));
     }
 
     @Operation(summary = "주문 상태 변경 이력 조회", description = "생성·취소·확정·환불 등 모든 상태 전이를 시간순으로 반환. ADMIN은 모든 주문, USER는 본인 주문만 가능.")
