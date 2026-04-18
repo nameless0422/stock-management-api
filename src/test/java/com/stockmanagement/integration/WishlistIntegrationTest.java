@@ -68,9 +68,9 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/wishlist")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data").isArray())
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].productId").value(productId));
+                .andExpect(jsonPath("$.data.content").isArray())
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].productId").value(productId));
     }
 
     @Test
@@ -92,7 +92,8 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/wishlist")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data").isEmpty());
+                .andExpect(jsonPath("$.data.content").isArray())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
     }
 
     @Test

@@ -10,6 +10,8 @@ import com.stockmanagement.domain.product.wishlist.dto.WishlistResponse;
 import com.stockmanagement.domain.product.wishlist.entity.WishlistItem;
 import com.stockmanagement.domain.product.wishlist.repository.WishlistRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,30 +76,32 @@ public class WishlistService {
     }
 
     /**
-     * 사용자의 위시리스트 목록을 조회한다.
+     * 사용자의 위시리스트 목록을 페이징 조회한다.
      *
      * <p>userId는 JWT claim에서 추출한 값을 컨트롤러에서 전달받아 DB users 조회를 생략한다.
      */
-    public List<WishlistResponse> getList(Long userId) {
-        List<WishlistItem> items = wishlistRepository.findByUserIdOrderByCreatedAtDesc(userId);
-        if (items.isEmpty()) {
-            return List.of();
+    public Page<WishlistResponse> getList(Long userId, Pageable pageable) {
+        Page<WishlistItem> page = wishlistRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
+        if (page.isEmpty()) {
+            return page.map(item -> null); // 빈 페이지 반환
         }
 
         // N+1 방지: 상품 + 재고를 한 번에 배치 조회
-        List<Long> productIds = items.stream().map(WishlistItem::getProductId).toList();
+        List<Long> productIds = page.map(WishlistItem::getProductId).toList();
         Map<Long, Product> productMap = productRepository.findAllById(productIds).stream()
                 .collect(Collectors.toMap(Product::getId, Function.identity()));
         Map<Long, Integer> availableMap = inventoryRepository.findAllByProductIdIn(productIds).stream()
                 .collect(Collectors.toMap(i -> i.getProduct().getId(), Inventory::getAvailable));
 
-        // 상품이 삭제(soft delete)된 경우 위시리스트 항목을 건너뛴다 — 전체 조회 실패 방지
-        return items.stream()
+        // 상품이 삭제(soft delete)된 경우 null로 매핑 후 필터링 — Spring Data Page는 filter 미지원
+        // → toList()로 materialized 후 PageImpl로 래핑
+        List<WishlistResponse> content = page.stream()
                 .filter(item -> productMap.containsKey(item.getProductId()))
                 .map(item -> WishlistResponse.of(
                         item,
                         productMap.get(item.getProductId()),
                         availableMap.get(item.getProductId())))
                 .toList();
+        return new org.springframework.data.domain.PageImpl<>(content, pageable, page.getTotalElements());
     }
 }

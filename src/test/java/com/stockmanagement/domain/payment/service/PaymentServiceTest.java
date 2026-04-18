@@ -176,6 +176,31 @@ class PaymentServiceTest {
             verify(paymentRepository, never()).save(any());
             assertThat(response.getTossOrderId()).isEqualTo("toss-order-001");
         }
+
+        @Test
+        @DisplayName("FAILED 결제가 존재하면 resetForRetry 후 기존 레코드 반환 (재결제)")
+        void resetsFailedPaymentForRetry() {
+            PaymentPrepareRequest request = mock(PaymentPrepareRequest.class);
+            given(request.getOrderId()).willReturn(1L);
+            given(request.getAmount()).willReturn(new BigDecimal("10000"));
+
+            // FAILED 결제 픽스처 생성
+            Payment failedPayment = Payment.builder()
+                    .orderId(1L)
+                    .tossOrderId("toss-order-old")
+                    .amount(new BigDecimal("10000"))
+                    .build();
+            failedPayment.fail("PAY_PROCESS_ABORTED", "사용자 취소");
+
+            given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(pendingOrder));
+            given(paymentRepository.findByOrderId(pendingOrder.getId())).willReturn(Optional.of(failedPayment));
+
+            PaymentPrepareResponse response = paymentService.prepare(request, 1L);
+
+            // 새 Payment 저장 없이 기존 FAILED 레코드를 PENDING으로 초기화
+            verify(paymentRepository, never()).save(any());
+            assertThat(response.getAmount()).isEqualByComparingTo("10000");
+        }
     }
 
     // ===== confirm() =====

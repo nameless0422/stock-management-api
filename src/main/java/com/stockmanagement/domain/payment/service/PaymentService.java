@@ -96,14 +96,23 @@ public class PaymentService {
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
         }
 
-        // 멱등성: 이미 PENDING 결제가 존재하면 기존 결제 반환
-        Optional<Payment> existing = paymentRepository.findByOrderId(order.getId());
-        if (existing.isPresent() && existing.get().getStatus() == PaymentStatus.PENDING) {
-            return buildPrepareResponse(existing.get(), order);
-        }
-
         // 이번 결제 시도용 고유 tossOrderId 생성
         String tossOrderId = buildTossOrderId(order.getId());
+
+        // 기존 결제 레코드 처리: PENDING → 멱등성 반환, FAILED → 재시도 허용, 기타 → 예외
+        Optional<Payment> existing = paymentRepository.findByOrderId(order.getId());
+        if (existing.isPresent()) {
+            Payment p = existing.get();
+            if (p.getStatus() == PaymentStatus.PENDING) {
+                return buildPrepareResponse(p, order);
+            }
+            if (p.getStatus() == PaymentStatus.FAILED) {
+                // FAILED 결제를 새 tossOrderId로 초기화하여 재사용
+                p.resetForRetry(tossOrderId);
+                return buildPrepareResponse(p, order);
+            }
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+        }
 
         Payment payment = Payment.builder()
                 .orderId(order.getId())

@@ -17,6 +17,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -107,7 +111,7 @@ class WishlistServiceTest {
     }
 
     @Nested
-    @DisplayName("getList() — 위시리스트 조회")
+    @DisplayName("getList() — 위시리스트 페이징 조회")
     class GetList {
 
         @Test
@@ -115,14 +119,16 @@ class WishlistServiceTest {
         void success() {
             WishlistItem item = mockItem(5L, 1L, 10L);
             Product product = mockProduct(10L);
-            given(wishlistRepository.findByUserIdOrderByCreatedAtDesc(1L)).willReturn(List.of(item));
+            Pageable pageable = PageRequest.of(0, 20);
+            given(wishlistRepository.findByUserIdOrderByCreatedAtDesc(1L, pageable))
+                    .willReturn(new PageImpl<>(List.of(item)));
             given(productRepository.findAllById(List.of(10L))).willReturn(List.of(product));
             given(inventoryRepository.findAllByProductIdIn(List.of(10L))).willReturn(List.of());
 
-            List<WishlistResponse> list = wishlistService.getList(1L);
+            var page = wishlistService.getList(1L, pageable);
 
-            assertThat(list).hasSize(1);
-            assertThat(list.get(0).getProductName()).isEqualTo("상품A");
+            assertThat(page.getContent()).hasSize(1);
+            assertThat(page.getContent().get(0).getProductName()).isEqualTo("상품A");
         }
     }
 }

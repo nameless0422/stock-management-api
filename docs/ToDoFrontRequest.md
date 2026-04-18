@@ -155,23 +155,13 @@
      { id, productId, createdAt, product: { name, price, thumbnailUrl, availableQuantity, status } }
 ```
 
-**20. 위시리스트 페이지네이션 없음**
+**~~20. 위시리스트 페이지네이션 없음~~ ✅ 완료 (Wave 3)**
 
-`GET /api/wishlist`는 `List<>` 반환 — 위시리스트가 100건 이상이면 전체를 한번에 불러온다.
+`GET /api/wishlist?page=&size=` → `Page<WishlistResponse>` 반환.
 
-```
-개선: GET /api/wishlist?page=&size= → Page<WishlistResponse>
-```
+**~~21. 리뷰 별점 분포 통계 없음~~ ✅ 완료 (Wave 3)**
 
-**21. 리뷰 별점 분포 통계 없음**
-
-상품 상세 페이지의 별점 히스토그램(★5: 42건, ★4: 18건 ...) 구현 불가.
-현재 `avgRating`·`reviewCount`만 있고 분포가 없다. 클라이언트에서 계산하려면 전체 리뷰를 다 가져와야 한다.
-
-```
-필요: GET /api/products/{id}/reviews/stats
-     → { avgRating, reviewCount, distribution: { 1:n, 2:n, 3:n, 4:n, 5:n } }
-```
+`GET /api/products/{id}/reviews/stats` → `{ avgRating, reviewCount, distribution: { 1:n, ..., 5:n } }`.
 
 **22. 주문 상세에 환불 정보 미포함**
 
@@ -340,17 +330,9 @@ POST /api/orders → OrderItemRequest.variantId
 
 ### 🟠 중요 — 결제·주문 흐름 결함
 
-**33. 결제 실패 후 재결제 불가**
+**~~33. 결제 실패 후 재결제 불가~~ ✅ 완료 (Wave 3)**
 
-`V8 migration`에서 `payments.order_id UNIQUE` 제약이 추가되었다. 결제가 FAILED 상태가 되면 동일 주문으로 `POST /api/payments/prepare`를 재호출해도 UNIQUE 충돌이 발생한다. 프론트에서 "다시 결제하기" 버튼을 구현할 방법이 없다.
-
-```
-현재: payments.order_id UNIQUE → FAILED 상태에서 재결제 시 DB 제약 위반
-필요: 아래 중 하나 선택
-  A) FAILED 결제를 PENDING으로 reset 후 재시도 허용
-  B) payments.order_id UNIQUE 제거 + (order_id, status) 복합 제약으로 교체
-  C) POST /api/payments/{orderId}/retry 엔드포인트 추가
-```
+FAILED 결제를 `Payment.resetForRetry(newTossOrderId)`로 PENDING으로 재설정. `POST /api/payments/prepare` 재호출 허용.
 
 **34. `OrderResponse`에 배송지 스냅샷 없음**
 
@@ -417,14 +399,9 @@ POST /api/orders → OrderItemRequest.variantId
      review   → reviewCount 내림차순
 ```
 
-**40. 배송 예상 도착일 없음**
+**~~40. 배송 예상 도착일 없음~~ ✅ 완료 (Wave 3)**
 
-`ShipmentResponse`에 `shippedAt`, `deliveredAt`(실제 배송 완료)은 있지만 `estimatedDeliveryAt`(예상 도착일)이 없다. "예상 배송일: 4월 20일(월)" 표시 불가.
-
-```
-개선: ShipmentResponse에 estimatedDeliveryAt: LocalDate 추가
-     PATCH /api/shipments/orders/{orderId}/ship Body에 estimatedDeliveryAt 포함
-```
+V36 migration. `ShipmentResponse.estimatedDeliveryAt: LocalDate` 추가. `ShipmentUpdateRequest`에 `@FutureOrPresent estimatedDeliveryAt` 포함.
 
 **41. 홈 화면 전용 집계 API 없음**
 
@@ -525,18 +502,9 @@ Spring Security 필터 레이어의 401(미인증)/403(권한 없음) 에러는 
      thumbnailUrl: String
 ```
 
-**47. 장바구니 가격 변동 감지 없음**
+**~~47. 장바구니 가격 변동 감지 없음~~ ✅ 완료 (Wave 3)**
 
-`CartItemResponse.unitPrice`는 `Product.price`를 실시간으로 참조한다 (스냅샷 아님).
-장바구니에 담은 이후 가격이 인하/인상되어도 프론트에서 이를 감지할 수 없다.
-"이 상품의 가격이 변경되었습니다 (10,000원 → 8,000원)" 알림 구현 불가.
-
-```
-개선: CartItemResponse에 추가
-     originalPrice: BigDecimal   (장바구니에 담을 당시 가격)
-     currentPrice: BigDecimal    (현재 가격)
-     priceChanged: Boolean       (originalPrice != currentPrice)
-```
+V37 migration. `CartItem.savedPrice` 추가 (담을 당시 가격 스냅샷). `CartItemResponse`에 `savedPrice`, `priceChanged` 추가.
 
 **48. `CategoryResponse`에 상품 수 없음**
 
@@ -698,29 +666,13 @@ EARN 시 해당 포인트가 언제 만료되는지 `PointTransaction`·`PointTr
           → 30일 내 소멸 예정 포인트 목록
 ```
 
-**58. Refresh Token 만료 시간 미노출**
+**~~58. Refresh Token 만료 시간 미노출~~ ✅ 완료 (Wave 3)**
 
-`LoginResponse`: `{ accessToken, tokenType, expiresIn, refreshToken }`.
-`expiresIn`은 access token 만료 초(예: 3600)이고 refresh token 만료 시간은 없다.
-Refresh Token은 30일 TTL(Redis)인데, 사용자에게 "30일 후 재로그인 필요" 사전 안내가 불가하고,
-프론트에서 refresh 요청 시점 판단을 위한 expiry 계산도 불가.
+`LoginResponse`에 `refreshTokenExpiresAt: LocalDateTime` 추가 (발급 시점 + 30일).
 
-```
-개선: LoginResponse에 refreshTokenExpiresAt: LocalDateTime 추가
-     또는 refreshExpiresIn: long (초 단위)
-```
+**~~59. 사용자 친화적 주문 번호 없음~~ ✅ 완료 (Wave 3)**
 
-**59. 사용자 친화적 주문 번호 없음**
-
-`OrderResponse.id`는 DB auto-increment Long이 그대로 노출된다 (예: `142`).
-CS 문의 시 "주문번호를 알려주세요" → "142번" 같은 상황이 발생하고,
-경쟁사가 주문 생성 빈도를 역산할 수 있는 정보 노출 문제도 있다.
-
-```
-개선: OrderResponse에 orderNumber: String 추가
-     형식 예시: "20240418-0000142" (날짜 + zero-padded id)
-     → V? migration: orders.order_number GENERATED ALWAYS 또는 애플리케이션 레벨 생성
-```
+`OrderResponse.orderNumber: String` 추가. 형식: `"yyyyMMdd-0000142"` (앱 레벨 생성, migration 불필요).
 
 ---
 

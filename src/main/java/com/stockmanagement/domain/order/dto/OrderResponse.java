@@ -9,6 +9,7 @@ import lombok.extern.jackson.Jacksonized;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -24,6 +25,8 @@ import java.util.List;
 public class OrderResponse {
 
     private final Long id;
+    /** 사용자 친화적 주문 번호 (예: 20240301-0000042) */
+    private final String orderNumber;
     private final Long userId;
     private final OrderStatus status;
     private final BigDecimal totalAmount;
@@ -66,8 +69,13 @@ public class OrderResponse {
      */
     public static OrderResponse from(Order order, java.util.Set<Long> reviewedProductIds,
                                      ShipmentStatus shipmentStatus) {
+        String orderNumber = order.getCreatedAt() != null
+                ? order.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
+                        + "-" + String.format("%07d", order.getId())
+                : null;
         return OrderResponse.builder()
                 .id(order.getId())
+                .orderNumber(orderNumber)
                 .userId(order.getUserId())
                 .status(order.getStatus())
                 .totalAmount(order.getTotalAmount())

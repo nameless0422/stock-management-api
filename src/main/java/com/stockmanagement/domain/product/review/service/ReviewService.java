@@ -4,6 +4,7 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.product.review.dto.RatingStatsResponse;
 import com.stockmanagement.domain.product.review.dto.ReviewCreateRequest;
 import com.stockmanagement.domain.product.review.dto.ReviewResponse;
 import com.stockmanagement.domain.product.review.dto.ReviewUpdateRequest;
@@ -18,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -130,6 +132,38 @@ public class ReviewService {
         }
 
         reviewRepository.delete(review);
+    }
+
+    /**
+     * 상품의 리뷰 별점 분포 통계를 조회한다.
+     *
+     * <p>distribution: 별점 1~5 각각의 리뷰 수. 해당 별점 리뷰가 없으면 0으로 채운다.
+     *
+     * @throws BusinessException 상품이 없는 경우
+     */
+    public RatingStatsResponse getRatingStats(Long productId) {
+        if (!productRepository.existsById(productId)) {
+            throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+
+        List<Object[]> rows = reviewRepository.findRatingDistributionByProductId(productId);
+        Map<Integer, Long> distribution = new HashMap<>();
+        for (int i = 1; i <= 5; i++) distribution.put(i, 0L);
+        for (Object[] row : rows) {
+            distribution.put(((Number) row[0]).intValue(), ((Number) row[1]).longValue());
+        }
+
+        long total = distribution.values().stream().mapToLong(Long::longValue).sum();
+        double avg = total == 0 ? 0.0
+                : distribution.entrySet().stream()
+                        .mapToDouble(e -> e.getKey() * e.getValue())
+                        .sum() / total;
+
+        return RatingStatsResponse.builder()
+                .avgRating(Math.round(avg * 10) / 10.0)
+                .reviewCount(total)
+                .distribution(distribution)
+                .build();
     }
 
     // ===== 내부 헬퍼 =====

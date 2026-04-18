@@ -111,7 +111,7 @@ public class ShipmentService {
     @Transactional
     public ShipmentResponse startShipping(Long orderId, ShipmentUpdateRequest request) {
         Shipment shipment = findByOrderIdOrThrow(orderId);
-        shipment.ship(request.getCarrier(), request.getTrackingNumber());
+        shipment.ship(request.getCarrier(), request.getTrackingNumber(), request.getEstimatedDeliveryAt());
         outboxEventStore.save(new ShipmentShippedEvent(orderId, request.getCarrier(), request.getTrackingNumber()));
         return ShipmentResponse.from(shipment);
     }

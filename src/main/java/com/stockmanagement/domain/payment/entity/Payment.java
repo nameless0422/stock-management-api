@@ -146,4 +146,23 @@ public class Payment {
         this.failureMessage = failureMessage;
         this.status = PaymentStatus.FAILED;
     }
+
+    /**
+     * Resets a FAILED payment to PENDING for retry.
+     *
+     * <p>FAILED 결제가 존재할 때 사용자가 "다시 결제하기"를 선택하면 기존 레코드를 재사용한다.
+     * {@code tossOrderId}는 TossPayments 측 UNIQUE 값이므로 새 UUID 기반 값으로 교체한다.
+     *
+     * @param newTossOrderId 새 결제 시도용 tossOrderId
+     * @throws BusinessException if the current status is not FAILED
+     */
+    public void resetForRetry(String newTossOrderId) {
+        if (this.status != PaymentStatus.FAILED) {
+            throw new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS);
+        }
+        this.tossOrderId = newTossOrderId;
+        this.failureCode = null;
+        this.failureMessage = null;
+        this.status = PaymentStatus.PENDING;
+    }
 }

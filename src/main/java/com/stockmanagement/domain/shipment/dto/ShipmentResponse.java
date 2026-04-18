@@ -5,6 +5,7 @@ import com.stockmanagement.domain.shipment.entity.ShipmentStatus;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /** 배송 응답 DTO. */
@@ -19,6 +20,7 @@ public class ShipmentResponse {
     private String trackingNumber;
     /** 배송사 트래킹 URL — carrier + trackingNumber 조합으로 자동 생성. null이면 미지원 배송사 */
     private String trackingUrl;
+    private LocalDate estimatedDeliveryAt;
     private LocalDateTime shippedAt;
     private LocalDateTime deliveredAt;
     private LocalDateTime createdAt;
@@ -31,6 +33,7 @@ public class ShipmentResponse {
                 .carrier(shipment.getCarrier())
                 .trackingNumber(shipment.getTrackingNumber())
                 .trackingUrl(buildTrackingUrl(shipment.getCarrier(), shipment.getTrackingNumber()))
+                .estimatedDeliveryAt(shipment.getEstimatedDeliveryAt())
                 .shippedAt(shipment.getShippedAt())
                 .deliveredAt(shipment.getDeliveredAt())
                 .createdAt(shipment.getCreatedAt())

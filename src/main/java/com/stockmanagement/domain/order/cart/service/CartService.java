@@ -86,6 +86,7 @@ public class CartService {
                     .userId(userId)
                     .product(product)
                     .quantity(request.getQuantity())
+                    .savedPrice(product.getPrice())
                     .build();
             cartRepository.save(item);
         }
