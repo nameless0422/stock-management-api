@@ -75,12 +75,12 @@ class DeliveryAddressControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(post("/api/delivery-addresses")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -112,10 +112,10 @@ class DeliveryAddressControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(get("/api/delivery-addresses"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 
@@ -133,10 +133,10 @@ class DeliveryAddressControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(delete("/api/delivery-addresses/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 

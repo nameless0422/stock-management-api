@@ -18,6 +18,8 @@ import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -117,6 +119,12 @@ public class RefundService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.REFUND_NOT_FOUND));
         validateOwnership(refund, user, isAdmin);
         return RefundResponse.from(refund);
+    }
+
+    /** 현재 인증 사용자의 환불 목록을 최신순으로 페이징 조회한다. */
+    public Page<RefundResponse> getMyRefunds(Long userId, Pageable pageable) {
+        return refundRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
+                .map(RefundResponse::from);
     }
 
     /** 결제 ID로 환불 정보를 조회한다. 본인 또는 ADMIN만 가능. */

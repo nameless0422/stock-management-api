@@ -36,6 +36,9 @@ public class OrderItemResponse {
     /** 리뷰 작성 여부 — null이면 정보 미포함, true/false면 작성 여부 */
     private final Boolean hasReview;
 
+    /** 상품 대표 이미지 URL — null이면 이미지 없음 */
+    private final String thumbnailUrl;
+
     /** OrderItem 엔티티를 응답 DTO로 변환 (hasReview 미포함). */
     public static OrderItemResponse from(OrderItem item) {
         return from(item, null);
@@ -51,6 +54,7 @@ public class OrderItemResponse {
                 .unitPrice(item.getUnitPrice())
                 .subtotal(item.getSubtotal())
                 .hasReview(hasReview)
+                .thumbnailUrl(item.getProduct().getThumbnailUrl())
                 .build();
     }
 }

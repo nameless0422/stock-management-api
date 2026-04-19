@@ -205,10 +205,10 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("미인증 이력 조회 → 403")
+    @DisplayName("미인증 이력 조회 → 401")
     void getTransactions_unauthenticated_403() throws Exception {
         mockMvc.perform(get("/api/inventory/1/transactions"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     // ===== 재고 목록 검색 =====
@@ -408,10 +408,10 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
         }
 
         @Test
-        @DisplayName("미인증 요청 → 403")
+        @DisplayName("미인증 요청 → 401")
         void unauthenticated_403() throws Exception {
             mockMvc.perform(get("/api/inventory"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

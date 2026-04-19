@@ -10,15 +10,22 @@ public record UserResponse(
         String username,
         String email,
         UserRole role,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        /** 포인트 잔액 — null이면 포인트 레코드 미생성 (첫 적립 전) */
+        Long pointBalance
 ) {
     public static UserResponse from(User user) {
+        return from(user, null);
+    }
+
+    public static UserResponse from(User user, Long pointBalance) {
         return new UserResponse(
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
                 user.getRole(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                pointBalance
         );
     }
 }

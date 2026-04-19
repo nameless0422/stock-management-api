@@ -17,6 +17,12 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     /** 상품의 리뷰 목록을 최신순으로 페이징 조회한다. */
     Page<Review> findByProductIdOrderByCreatedAtDesc(Long productId, Pageable pageable);
 
+    /** 상품의 리뷰 목록을 Pageable sort로 조회한다 (정렬/필터 가변). */
+    Page<Review> findByProductId(Long productId, Pageable pageable);
+
+    /** 상품의 특정 별점 리뷰 목록을 Pageable sort로 조회한다. */
+    Page<Review> findByProductIdAndRating(Long productId, int rating, Pageable pageable);
+
     /** 특정 상품에 대한 사용자의 리뷰가 이미 존재하는지 확인한다 (1인 1리뷰 검증). */
     boolean existsByProductIdAndUserId(Long productId, Long userId);
 
@@ -49,4 +55,14 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     @Query("SELECT r.productId FROM Review r WHERE r.userId = :userId AND r.productId IN :productIds")
     List<Long> findReviewedProductIdsByUserId(@Param("userId") Long userId,
                                               @Param("productIds") Collection<Long> productIds);
+
+    /** 특정 사용자의 리뷰 목록을 페이징 조회한다 (내 리뷰 목록). Pageable sort로 정렬 지원. */
+    Page<Review> findByUserId(Long userId, Pageable pageable);
+
+    /** 특정 사용자의 특정 별점 리뷰 목록을 페이징 조회한다. */
+    Page<Review> findByUserIdAndRating(Long userId, int rating, Pageable pageable);
+
+    /** 상품의 별점별 리뷰 수 분포를 조회한다. Object[0]=rating(Integer), Object[1]=count(Long). */
+    @Query("SELECT r.rating, COUNT(r) FROM Review r WHERE r.productId = :productId GROUP BY r.rating")
+    List<Object[]> findRatingDistributionByProductId(@Param("productId") Long productId);
 }

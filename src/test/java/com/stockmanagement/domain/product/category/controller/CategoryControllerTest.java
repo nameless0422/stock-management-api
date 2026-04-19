@@ -81,12 +81,12 @@ class CategoryControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void forbiddenWithoutAuth() throws Exception {
             mockMvc.perform(post("/api/categories")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_CREATE_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 

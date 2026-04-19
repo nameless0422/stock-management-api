@@ -4,8 +4,10 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.inventory.entity.Inventory;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
+import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.product.category.entity.Category;
 import com.stockmanagement.domain.product.category.repository.CategoryRepository;
+import com.stockmanagement.domain.product.wishlist.repository.WishlistRepository;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
 import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.dto.ProductSearchRequest;
@@ -32,8 +34,10 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -58,6 +62,8 @@ public class ProductService {
     private final ReviewRepository reviewRepository;
     private final ProductImageRepository productImageRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final OrderRepository orderRepository;
+    private final WishlistRepository wishlistRepository;
 
     /**
      * 상품을 등록한다.
@@ -89,13 +95,35 @@ public class ProductService {
     }
 
     /**
+     * 인증 사용자용 단건 조회 — canReview 포함. 캐시 우회.
+     *
+     * <p>canReview = CONFIRMED 주문 보유 &amp;&amp; 해당 상품 리뷰 미작성.
+     * 비로그인 경우 {@link #getById(Long)}을 사용한다.
+     */
+    public ProductResponse getByIdForUser(Long id, Long userId) {
+        Product product = findById(id);
+        Integer available = inventoryRepository.findByProductId(id)
+                .map(Inventory::getAvailable).orElse(0);
+        ReviewStatsProjection stats = reviewRepository.findReviewStatsByProductId(id).orElse(null);
+        List<ProductImageResponse> images = productImageRepository
+                .findByProductIdOrderByDisplayOrderAsc(id).stream()
+                .map(ProductImageResponse::from).toList();
+        boolean purchased = orderRepository.existsPurchaseByUserIdAndProductId(userId, id);
+        boolean reviewed = reviewRepository.existsByProductIdAndUserId(id, userId);
+        return ProductResponse.from(product, available,
+                stats != null ? stats.getAvgRating() : null,
+                stats != null ? stats.getReviewCount() : 0L,
+                images, purchased && !reviewed);
+    }
+
+    /**
      * 상품 목록을 조회한다.
      *
      * <p>검색 조건({@code q}, {@code minPrice}, {@code maxPrice}, {@code category}, {@code sort})이
      * 하나라도 있으면 Elasticsearch로 검색하고, 없으면 MySQL 페이징 조회를 사용한다.
      * ES 장애 시 MySQL로 fallback하여 서비스 가용성을 유지한다.
      */
-    public Page<ProductResponse> getList(Pageable pageable, ProductSearchRequest request) {
+    public Page<ProductResponse> getList(Pageable pageable, ProductSearchRequest request, Long userId) {
         if (request != null && request.hasSearchCondition()) {
             try {
                 return productSearchService.search(request, pageable);
@@ -106,13 +134,21 @@ public class ProductService {
         // ES 미사용 또는 fallback: sort/keyword를 MySQL에서 처리
         Pageable effectivePageable = toSortedPageable(pageable, request);
         String keyword = request != null ? request.getQ() : null;
+        Long categoryId = request != null ? request.getCategoryId() : null;
         Page<Product> products;
-        if (keyword != null && !keyword.isBlank()) {
+        if (categoryId != null) {
+            Set<Long> categoryIds = new HashSet<>();
+            categoryIds.add(categoryId);
+            if (request.isIncludeChildren()) {
+                categoryIds.addAll(categoryRepository.findChildIdsByParentId(categoryId));
+            }
+            products = productRepository.findByStatusAndCategoryIdIn(ProductStatus.ACTIVE, categoryIds, effectivePageable);
+        } else if (keyword != null && !keyword.isBlank()) {
             products = productRepository.searchByStatus(ProductStatus.ACTIVE, keyword, effectivePageable);
         } else {
             products = productRepository.findByStatus(ProductStatus.ACTIVE, effectivePageable);
         }
-        return enrichPage(products);
+        return enrichPage(products, userId);
     }
 
     /** sort 파라미터를 Pageable의 Sort로 변환 (MySQL fallback용) */
@@ -134,7 +170,7 @@ public class ProductService {
         Page<Product> products = (search != null && !search.isBlank())
                 ? productRepository.searchAll(search, pageable)
                 : productRepository.findAll(pageable);
-        return enrichPage(products);
+        return enrichPage(products, null);
     }
 
     /**
@@ -221,7 +257,7 @@ public class ProductService {
      * 상품 페이지에 재고·리뷰 통계를 배치로 보강한다 (N+1 방지).
      * 재고/리뷰 없는 상품은 0으로 처리한다.
      */
-    private Page<ProductResponse> enrichPage(Page<Product> products) {
+    private Page<ProductResponse> enrichPage(Page<Product> products, Long userId) {
         if (products.isEmpty()) return products.map(ProductResponse::from);
 
         List<Long> ids = products.stream().map(Product::getId).toList();
@@ -233,13 +269,20 @@ public class ProductService {
                 .findReviewStatsByProductIdIn(ids).stream()
                 .collect(Collectors.toMap(ReviewStatsProjection::getProductId, s -> s));
 
+        Set<Long> wishlistedIds = (userId != null)
+                ? wishlistRepository.findWishlistedProductIds(userId, ids)
+                : Set.of();
+
         return products.map(p -> {
             ReviewStatsProjection stats = statsMap.get(p.getId());
             return ProductResponse.from(
                     p,
                     availableMap.getOrDefault(p.getId(), 0),
                     stats != null ? stats.getAvgRating() : null,
-                    stats != null ? stats.getReviewCount() : 0L);
+                    stats != null ? stats.getReviewCount() : 0L,
+                    null,
+                    null,
+                    userId != null ? wishlistedIds.contains(p.getId()) : null);
         });
     }
 

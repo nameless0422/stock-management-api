@@ -9,6 +9,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 /**
  * 상품 레포지토리.
  *
@@ -56,4 +61,27 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
            countQuery = "SELECT COUNT(p) FROM Product p WHERE " +
                         "LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')) OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :q, '%'))")
     Page<Product> searchAll(@Param("q") String query, Pageable pageable);
+
+    /** 카테고리 ID 목록 필터 — ACTIVE 상품 중 해당 카테고리에 속하는 상품만 조회 (하위 카테고리 포함 가능). */
+    @Query(value = "SELECT p FROM Product p LEFT JOIN FETCH p.category WHERE p.status = :status AND p.category.id IN :categoryIds",
+           countQuery = "SELECT COUNT(p) FROM Product p WHERE p.status = :status AND p.category.id IN :categoryIds")
+    Page<Product> findByStatusAndCategoryIdIn(@Param("status") ProductStatus status,
+                                              @Param("categoryIds") Collection<Long> categoryIds,
+                                              Pageable pageable);
+
+    /**
+     * 카테고리별 ACTIVE 상품 수를 배치 조회한다.
+     *
+     * @return [categoryId, count] 쌍의 Object[] 목록
+     */
+    @Query("SELECT p.category.id, COUNT(p) FROM Product p WHERE p.category.id IN :ids AND p.status <> 'DISCONTINUED' GROUP BY p.category.id")
+    List<Object[]> countActiveProductsByCategoryIds(@Param("ids") Collection<Long> ids);
+
+    /** countActiveProductsByCategoryIds() 결과를 Map으로 변환한다. */
+    default Map<Long, Long> countMapByCategoryIds(Collection<Long> ids) {
+        return countActiveProductsByCategoryIds(ids).stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> (Long) row[1]));
+    }
 }

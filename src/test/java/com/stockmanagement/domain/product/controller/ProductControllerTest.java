@@ -6,6 +6,7 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.service.ProductService;
+import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
@@ -49,6 +50,9 @@ class ProductControllerTest {
     private JwtTokenProvider jwtTokenProvider;
 
     @MockBean
+    private UserService userService;
+
+    @MockBean
     private JwtBlacklist jwtBlacklist;
 
     // ===== POST /api/products =====
@@ -84,12 +88,12 @@ class ProductControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(post("/api/products")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -111,9 +115,9 @@ class ProductControllerTest {
 
         @Test
         @WithMockUser
-        @DisplayName("인증된 사용자 — 상품 단건 조회 → 200")
+        @DisplayName("인증된 사용자 — 상품 단건 조회 → 200 (canReview 포함)")
         void returnsProduct() throws Exception {
-            given(productService.getById(1L)).willReturn(mock(ProductResponse.class));
+            given(productService.getByIdForUser(eq(1L), any())).willReturn(mock(ProductResponse.class));
 
             mockMvc.perform(get("/api/products/1"))
                     .andExpect(status().isOk())
@@ -133,7 +137,7 @@ class ProductControllerTest {
         @WithMockUser
         @DisplayName("존재하지 않는 상품 → 404")
         void returnsNotFound() throws Exception {
-            given(productService.getById(999L))
+            given(productService.getByIdForUser(eq(999L), any()))
                     .willThrow(new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
             mockMvc.perform(get("/api/products/999"))
@@ -152,7 +156,7 @@ class ProductControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 상품 목록 페이징 조회 → 200")
         void returnsList() throws Exception {
-            given(productService.getList(any(Pageable.class), any()))
+            given(productService.getList(any(Pageable.class), any(), any()))
                     .willReturn(new PageImpl<>(List.of()));
 
             mockMvc.perform(get("/api/products"))

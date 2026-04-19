@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -41,7 +42,7 @@ public class GlobalExceptionHandler {
         ErrorCode errorCode = e.getErrorCode();
         return ResponseEntity
                 .status(errorCode.getHttpStatus())
-                .body(ApiResponse.error(e.getMessage()));
+                .body(ApiResponse.error(errorCode, e.getMessage()));
     }
 
     /**
@@ -50,12 +51,12 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException e) {
-        String message = e.getBindingResult().getFieldErrors().stream()
-                .map(FieldError::getDefaultMessage)
-                .collect(Collectors.joining(", "));
+        List<ApiResponse.FieldErrorDetail> errors = e.getBindingResult().getFieldErrors().stream()
+                .map(fe -> new ApiResponse.FieldErrorDetail(fe.getField(), fe.getDefaultMessage()))
+                .collect(Collectors.toList());
         return ResponseEntity
                 .badRequest()
-                .body(ApiResponse.error(message));
+                .body(ApiResponse.validationError(errors));
     }
 
     /**

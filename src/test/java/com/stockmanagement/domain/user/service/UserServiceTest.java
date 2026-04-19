@@ -4,6 +4,7 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.domain.point.entity.UserPoint;
 import com.stockmanagement.domain.point.repository.UserPointRepository;
 import com.stockmanagement.domain.user.dto.ChangePasswordRequest;
@@ -33,6 +34,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -66,6 +68,9 @@ class UserServiceTest {
     @Mock
     private RefreshTokenStore refreshTokenStore;
 
+    @Mock
+    private ShipmentRepository shipmentRepository;
+
     @InjectMocks
     private UserService userService;
 
@@ -80,6 +85,7 @@ class UserServiceTest {
                 .email("test@example.com")
                 .role(UserRole.USER)
                 .build();
+        lenient().when(shipmentRepository.findStatusMapByOrderIds(any())).thenReturn(new java.util.HashMap<>());
     }
 
     // ===== signup() =====

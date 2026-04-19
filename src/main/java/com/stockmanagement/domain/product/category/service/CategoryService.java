@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -63,6 +64,8 @@ public class CategoryService {
     @Cacheable(cacheNames = "categories", key = "'tree'")
     public List<CategoryResponse> getTree() {
         List<Category> all = categoryRepository.findAll();
+        Set<Long> allIds = all.stream().map(Category::getId).collect(Collectors.toSet());
+        Map<Long, Long> countMap = productRepository.countMapByCategoryIds(allIds);
 
         // id → (mutable) children list
         Map<Long, List<CategoryResponse>> childrenMap = new LinkedHashMap<>();
@@ -77,22 +80,27 @@ public class CategoryService {
                 roots.add(c);
             } else {
                 childrenMap.get(c.getParent().getId())
-                        .add(CategoryResponse.from(c));
+                        .add(CategoryResponse.from(c, new ArrayList<>(), countMap.getOrDefault(c.getId(), 0L)));
             }
         }
 
         return roots.stream()
-                .map(r -> CategoryResponse.from(r, childrenMap.get(r.getId())))
+                .map(r -> CategoryResponse.from(r, childrenMap.get(r.getId()), countMap.getOrDefault(r.getId(), 0L)))
                 .collect(Collectors.toList());
     }
 
     /** 단건 조회 — children(하위 카테고리) 목록 포함 */
     public CategoryResponse getById(Long id) {
         Category category = findByIdWithChildren(id);
+        Set<Long> ids = category.getChildren().stream()
+                .map(Category::getId)
+                .collect(Collectors.toSet());
+        ids.add(category.getId());
+        Map<Long, Long> countMap = productRepository.countMapByCategoryIds(ids);
         List<CategoryResponse> children = category.getChildren().stream()
-                .map(CategoryResponse::from)
+                .map(c -> CategoryResponse.from(c, new ArrayList<>(), countMap.getOrDefault(c.getId(), 0L)))
                 .collect(Collectors.toList());
-        return CategoryResponse.from(category, children);
+        return CategoryResponse.from(category, children, countMap.getOrDefault(category.getId(), 0L));
     }
 
     @CacheEvict(cacheNames = "categories", allEntries = true)

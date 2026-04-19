@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -56,6 +57,10 @@ public class Shipment {
     /** 배송 완료 일시 */
     private LocalDateTime deliveredAt;
 
+    /** 택배사 예상 도착일 (출고 시 입력, 선택값) */
+    @Column(name = "estimated_delivery_at")
+    private LocalDate estimatedDeliveryAt;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -77,13 +82,14 @@ public class Shipment {
      *
      * @throws BusinessException PREPARING 상태가 아닌 경우
      */
-    public void ship(String carrier, String trackingNumber) {
+    public void ship(String carrier, String trackingNumber, LocalDate estimatedDeliveryAt) {
         if (this.status != ShipmentStatus.PREPARING) {
             throw new BusinessException(ErrorCode.INVALID_SHIPMENT_STATUS);
         }
         this.status = ShipmentStatus.SHIPPED;
         this.carrier = carrier;
         this.trackingNumber = trackingNumber;
+        this.estimatedDeliveryAt = estimatedDeliveryAt;
         this.shippedAt = LocalDateTime.now();
     }
 

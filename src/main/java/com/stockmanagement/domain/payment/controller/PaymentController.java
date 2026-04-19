@@ -5,6 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.domain.payment.dto.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import com.stockmanagement.domain.payment.infrastructure.TossWebhookVerifier;
 import com.stockmanagement.domain.payment.infrastructure.dto.TossWebhookEvent;
 import com.stockmanagement.domain.payment.service.PaymentService;
@@ -81,6 +85,15 @@ public class PaymentController {
         webhookVerifier.verify(rawBody, signature);
         TossWebhookEvent event = objectMapper.readValue(rawBody, TossWebhookEvent.class);
         paymentService.handleWebhook(event);
+    }
+
+    @Operation(summary = "내 결제 목록", description = "현재 로그인 사용자의 결제 내역을 최신순으로 페이징 조회한다.")
+    @GetMapping("/my")
+    public ApiResponse<Page<PaymentResponse>> getMyPayments(
+            @AuthenticationPrincipal String username,
+            Authentication authentication,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ApiResponse.ok(paymentService.getMyPayments(resolveUserId(authentication, username), pageable));
     }
 
     @Operation(summary = "결제 조회", description = "paymentKey로 결제 상세 조회. 본인 결제만 가능 (ADMIN은 전체 조회).")

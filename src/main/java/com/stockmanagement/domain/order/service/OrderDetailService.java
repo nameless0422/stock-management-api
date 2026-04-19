@@ -10,6 +10,8 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.payment.dto.PaymentResponse;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
 import com.stockmanagement.domain.product.review.repository.ReviewRepository;
+import com.stockmanagement.domain.refund.dto.RefundResponse;
+import com.stockmanagement.domain.refund.repository.RefundRepository;
 import com.stockmanagement.domain.shipment.dto.ShipmentResponse;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +36,7 @@ public class OrderDetailService {
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final ShipmentRepository shipmentRepository;
+    private final RefundRepository refundRepository;
     private final ReviewRepository reviewRepository;
 
     /**
@@ -52,12 +55,18 @@ public class OrderDetailService {
         ShipmentResponse shipment = shipmentRepository.findByOrderId(order.getId())
                 .map(ShipmentResponse::from)
                 .orElse(null);
+        RefundResponse refund = refundRepository.findByOrderId(order.getId())
+                .map(RefundResponse::from)
+                .orElse(null);
         Set<Long> reviewedIds = reviewedProductIds(order.getUserId(), order.getItems());
 
+        com.stockmanagement.domain.shipment.entity.ShipmentStatus shipmentStatus =
+                shipment != null ? shipment.getStatus() : null;
         return OrderDetailResponse.builder()
-                .order(OrderResponse.from(order, reviewedIds))
+                .order(OrderResponse.from(order, reviewedIds, shipmentStatus))
                 .payment(payment)
                 .shipment(shipment)
+                .refund(refund)
                 .build();
     }
 

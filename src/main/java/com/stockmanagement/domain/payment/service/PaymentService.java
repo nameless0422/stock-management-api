@@ -7,6 +7,8 @@ import com.stockmanagement.domain.order.entity.OrderItem;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.payment.dto.*;
+import com.stockmanagement.domain.user.entity.User;
+import com.stockmanagement.domain.user.repository.UserRepository;
 import com.stockmanagement.domain.payment.entity.Payment;
 import com.stockmanagement.domain.payment.entity.PaymentStatus;
 import com.stockmanagement.domain.payment.infrastructure.PaymentIdempotencyManager;
@@ -25,6 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 /**
  * 결제 도메인 핵심 비즈니스 로직 서비스.
@@ -52,6 +57,7 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
+    private final UserRepository userRepository;
     private final TossPaymentsClient tossPaymentsClient;
     private final PaymentIdempotencyManager idempotencyManager;
     private final PaymentTransactionHelper transactionHelper;
@@ -85,24 +91,33 @@ public class PaymentService {
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
         }
 
-        // 클라이언트 제출 금액을 서버 저장 금액과 비교 — 클라이언트 조작 방지
-        if (order.getTotalAmount().compareTo(request.getAmount()) != 0) {
+        // 클라이언트 제출 금액을 실제 결제 금액(쿠폰·포인트 차감 후)과 비교 — 클라이언트 조작 방지
+        if (order.getPayableAmount().compareTo(request.getAmount()) != 0) {
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
-        }
-
-        // 멱등성: 이미 PENDING 결제가 존재하면 기존 결제 반환
-        Optional<Payment> existing = paymentRepository.findByOrderId(order.getId());
-        if (existing.isPresent() && existing.get().getStatus() == PaymentStatus.PENDING) {
-            return buildPrepareResponse(existing.get(), order);
         }
 
         // 이번 결제 시도용 고유 tossOrderId 생성
         String tossOrderId = buildTossOrderId(order.getId());
 
+        // 기존 결제 레코드 처리: PENDING → 멱등성 반환, FAILED → 재시도 허용, 기타 → 예외
+        Optional<Payment> existing = paymentRepository.findByOrderId(order.getId());
+        if (existing.isPresent()) {
+            Payment p = existing.get();
+            if (p.getStatus() == PaymentStatus.PENDING) {
+                return buildPrepareResponse(p, order);
+            }
+            if (p.getStatus() == PaymentStatus.FAILED) {
+                // FAILED 결제를 새 tossOrderId로 초기화하여 재사용
+                p.resetForRetry(tossOrderId);
+                return buildPrepareResponse(p, order);
+            }
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+
         Payment payment = Payment.builder()
                 .orderId(order.getId())
                 .tossOrderId(tossOrderId)
-                .amount(order.getTotalAmount())
+                .amount(order.getPayableAmount())
                 .build();
 
         Payment saved = paymentRepository.save(payment);
@@ -302,6 +317,11 @@ public class PaymentService {
      * @param isAdmin  ADMIN 여부
      * @return 결제 정보 (없으면 Optional.empty())
      */
+    /** 현재 인증 사용자의 결제 목록을 최신순으로 페이징 조회한다. */
+    public Page<PaymentResponse> getMyPayments(Long userId, Pageable pageable) {
+        return paymentRepository.findByUserId(userId, pageable).map(PaymentResponse::from);
+    }
+
     public Optional<PaymentResponse> getByOrderId(Long orderId, Long userId, boolean isAdmin) {
         if (!isAdmin) {
             // JWT claim에서 추출한 userId로 소유권 검증 — DB 조회 불필요
@@ -331,10 +351,13 @@ public class PaymentService {
      * 예시: "MacBook Pro 외 2건"
      */
     private PaymentPrepareResponse buildPrepareResponse(Payment payment, Order order) {
+        User user = userRepository.findById(order.getUserId()).orElse(null);
         return new PaymentPrepareResponse(
                 payment.getTossOrderId(),
                 payment.getAmount(),
-                buildOrderName(order)
+                buildOrderName(order),
+                user != null ? user.getUsername() : null,
+                user != null ? user.getEmail() : null
         );
     }
 

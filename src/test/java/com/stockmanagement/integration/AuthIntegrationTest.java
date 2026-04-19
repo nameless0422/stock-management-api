@@ -146,10 +146,10 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         }
 
         @Test
-        @DisplayName("토큰 없음 → 403")
+        @DisplayName("토큰 없음 → 401")
         void getMe_withoutToken_forbidden() throws Exception {
             mockMvc.perform(get("/api/users/me"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

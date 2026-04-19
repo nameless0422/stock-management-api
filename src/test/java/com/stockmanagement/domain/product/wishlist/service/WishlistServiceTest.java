@@ -2,6 +2,7 @@ package com.stockmanagement.domain.product.wishlist.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.product.wishlist.dto.WishlistResponse;
@@ -15,6 +16,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -32,6 +37,7 @@ class WishlistServiceTest {
 
     @Mock private WishlistRepository wishlistRepository;
     @Mock private ProductRepository productRepository;
+    @Mock private InventoryRepository inventoryRepository;
 
     @InjectMocks private WishlistService wishlistService;
 
@@ -56,6 +62,7 @@ class WishlistServiceTest {
         void success() {
             given(productRepository.findById(10L)).willReturn(Optional.of(mockProduct(10L)));
             given(wishlistRepository.existsByUserIdAndProductId(1L, 10L)).willReturn(false);
+            given(inventoryRepository.findByProductId(10L)).willReturn(Optional.empty());
             WishlistItem saved = mockItem(5L, 1L, 10L);
             given(wishlistRepository.save(any())).willReturn(saved);
 
@@ -104,7 +111,7 @@ class WishlistServiceTest {
     }
 
     @Nested
-    @DisplayName("getList() — 위시리스트 조회")
+    @DisplayName("getList() — 위시리스트 페이징 조회")
     class GetList {
 
         @Test
@@ -112,13 +119,16 @@ class WishlistServiceTest {
         void success() {
             WishlistItem item = mockItem(5L, 1L, 10L);
             Product product = mockProduct(10L);
-            given(wishlistRepository.findByUserIdOrderByCreatedAtDesc(1L)).willReturn(List.of(item));
+            Pageable pageable = PageRequest.of(0, 20);
+            given(wishlistRepository.findByUserIdOrderByCreatedAtDesc(1L, pageable))
+                    .willReturn(new PageImpl<>(List.of(item)));
             given(productRepository.findAllById(List.of(10L))).willReturn(List.of(product));
+            given(inventoryRepository.findAllByProductIdIn(List.of(10L))).willReturn(List.of());
 
-            List<WishlistResponse> list = wishlistService.getList(1L);
+            var page = wishlistService.getList(1L, pageable);
 
-            assertThat(list).hasSize(1);
-            assertThat(list.get(0).getProductName()).isEqualTo("상품A");
+            assertThat(page.getContent()).hasSize(1);
+            assertThat(page.getContent().get(0).getProductName()).isEqualTo("상품A");
         }
     }
 }

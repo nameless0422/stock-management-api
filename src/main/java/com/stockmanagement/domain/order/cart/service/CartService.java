@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -85,6 +86,7 @@ public class CartService {
                     .userId(userId)
                     .product(product)
                     .quantity(request.getQuantity())
+                    .savedPrice(product.getPrice())
                     .build();
             cartRepository.save(item);
         }
@@ -127,7 +129,19 @@ public class CartService {
      */
     @Transactional
     public OrderResponse checkout(Long userId, CartCheckoutRequest checkoutRequest) {
-        List<CartItem> items = cartRepository.findByUserId(userId);
+        List<CartItem> allItems = cartRepository.findByUserId(userId);
+        if (allItems.isEmpty()) {
+            throw new BusinessException(ErrorCode.CART_EMPTY);
+        }
+
+        // selectedProductIds가 없으면 전체, 있으면 해당 상품만 결제
+        List<Long> selected = checkoutRequest.getSelectedProductIds();
+        List<CartItem> items = (selected == null || selected.isEmpty())
+                ? allItems
+                : allItems.stream()
+                        .filter(i -> selected.contains(i.getProduct().getId()))
+                        .toList();
+
         if (items.isEmpty()) {
             throw new BusinessException(ErrorCode.CART_EMPTY);
         }
@@ -146,8 +160,11 @@ public class CartService {
 
         OrderResponse orderResponse = orderService.create(orderRequest, userId);
 
-        // 주문 생성 성공 후 장바구니 비우기
-        cartRepository.deleteByUserId(userId);
+        // 결제한 상품만 장바구니에서 제거 (선택 결제 시 나머지 유지)
+        Set<Long> checkedOutProductIds = items.stream()
+                .map(i -> i.getProduct().getId())
+                .collect(Collectors.toSet());
+        cartRepository.deleteByUserIdAndProductIdIn(userId, checkedOutProductIds);
 
         return orderResponse;
     }

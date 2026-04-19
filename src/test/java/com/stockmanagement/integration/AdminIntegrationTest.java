@@ -48,10 +48,10 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticatedForbidden() throws Exception {
             mockMvc.perform(get("/api/admin/dashboard"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 

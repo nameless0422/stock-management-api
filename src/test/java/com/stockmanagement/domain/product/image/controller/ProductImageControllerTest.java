@@ -66,7 +66,7 @@ class ProductImageControllerTest {
         }
 
         @Test
-        @DisplayName("비인증 — 403")
+        @DisplayName("비인증 — 401")
         void unauthenticated_403() throws Exception {
             String body = objectMapper.writeValueAsString(
                     Map.of("fileExtension", "jpg", "contentType", "image/jpeg", "imageType", "THUMBNAIL"));
@@ -74,7 +74,7 @@ class ProductImageControllerTest {
             mockMvc.perform(post(BASE_URL + "/presigned")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 

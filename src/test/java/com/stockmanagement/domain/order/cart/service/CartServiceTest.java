@@ -167,7 +167,7 @@ class CartServiceTest {
             cartService.checkout(1L, request);
 
             verify(orderService).create(any(), anyLong());
-            verify(cartRepository).deleteByUserId(1L);
+            verify(cartRepository).deleteByUserIdAndProductIdIn(eq(1L), any());
         }
 
         @Test

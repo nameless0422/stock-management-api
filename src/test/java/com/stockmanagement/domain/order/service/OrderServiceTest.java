@@ -19,6 +19,8 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.shipment.entity.ShipmentStatus;
+import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.common.outbox.OutboxEventStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +39,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -72,6 +75,9 @@ class OrderServiceTest {
     @Mock
     private DeliveryAddressService deliveryAddressService;
 
+    @Mock
+    private ShipmentRepository shipmentRepository;
+
     @InjectMocks
     private OrderService orderService;
 
@@ -100,6 +106,8 @@ class OrderServiceTest {
                 .unitPrice(new BigDecimal("10000"))
                 .build();
         order.addItem(orderItem);
+
+        lenient().when(shipmentRepository.findStatusMapByOrderIds(any())).thenReturn(new java.util.HashMap<>());
     }
 
     // ===== create() =====
@@ -192,6 +200,29 @@ class OrderServiceTest {
                             .isEqualTo(ErrorCode.INVALID_INPUT));
 
             verify(orderRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("동일 상품 중복 포함 시 INVALID_INPUT 예외 발생")
+        void throwsWhenDuplicateProductId() {
+            OrderItemRequest item1 = mock(OrderItemRequest.class);
+            given(item1.getProductId()).willReturn(1L);
+            OrderItemRequest item2 = mock(OrderItemRequest.class);
+            given(item2.getProductId()).willReturn(1L); // 중복 상품
+
+            OrderCreateRequest request = mock(OrderCreateRequest.class);
+            given(request.getIdempotencyKey()).willReturn("idem-key-dup");
+            given(request.getItems()).willReturn(List.of(item1, item2));
+
+            given(orderRepository.findByIdempotencyKey("idem-key-dup")).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> orderService.create(request))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.INVALID_INPUT));
+
+            verify(orderRepository, never()).save(any());
+            verifyNoInteractions(inventoryService);
         }
 
         @Test
@@ -323,7 +354,7 @@ class OrderServiceTest {
         void cancelsPendingOrder() {
             given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
-            OrderResponse response = orderService.cancel(1L, 1L, false); // userId=1L, order.userId=1L
+            OrderResponse response = orderService.cancel(1L, 1L, false, null); // userId=1L, order.userId=1L
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
             verify(inventoryService).releaseReservation(any(), eq(1));
@@ -336,7 +367,7 @@ class OrderServiceTest {
             order.confirm(); // PENDING → CONFIRMED
             given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
-            assertThatThrownBy(() -> orderService.cancel(1L, 1L, false))
+            assertThatThrownBy(() -> orderService.cancel(1L, 1L, false, null))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_ORDER_STATUS));
@@ -349,7 +380,7 @@ class OrderServiceTest {
         void throwsWhenNotFound() {
             given(orderRepository.findByIdWithItemsForUpdate(99L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> orderService.cancel(99L, 1L, false))
+            assertThatThrownBy(() -> orderService.cancel(99L, 1L, false, null))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.ORDER_NOT_FOUND));

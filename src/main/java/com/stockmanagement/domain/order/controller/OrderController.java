@@ -4,8 +4,11 @@ import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.common.security.SecurityUtils;
+import com.stockmanagement.domain.order.dto.OrderCancelRequest;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderDetailResponse;
+import com.stockmanagement.domain.order.dto.OrderPreviewRequest;
+import com.stockmanagement.domain.order.dto.OrderPreviewResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
@@ -53,6 +56,15 @@ public class OrderController {
     private final OrderService orderService;
     private final OrderDetailService orderDetailService;
     private final UserService userService;
+
+    @Operation(summary = "주문 금액 미리보기", description = "쿠폰·포인트 적용 시 최종 결제 금액을 계산한다. 주문 생성 없이 순수 계산만 수행.")
+    @PostMapping("/preview")
+    public ApiResponse<OrderPreviewResponse> preview(
+            @RequestBody @Valid OrderPreviewRequest request,
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        return ApiResponse.ok(orderService.preview(request, resolveUserId(authentication, username)));
+    }
 
     @Operation(summary = "주문 생성", description = "재고 예약(reserved++) 후 PENDING 주문 생성. 동일 idempotencyKey 재요청 시 기존 주문 반환.")
     @PostMapping
@@ -128,10 +140,12 @@ public class OrderController {
     @PostMapping("/{id}/cancel")
     public ApiResponse<OrderResponse> cancel(
             @PathVariable Long id,
+            @RequestBody(required = false) @Valid OrderCancelRequest request,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderService.cancel(id, resolveUserId(authentication, username), isAdmin));
+        String reason = request != null ? request.reason() : null;
+        return ApiResponse.ok(orderService.cancel(id, resolveUserId(authentication, username), isAdmin, reason));
     }
 
     @Operation(summary = "주문 상태 변경 이력 조회", description = "생성·취소·확정·환불 등 모든 상태 전이를 시간순으로 반환. ADMIN은 모든 주문, USER는 본인 주문만 가능.")

@@ -67,12 +67,14 @@ public class CouponController {
         return ApiResponse.ok(null);
     }
 
-    @Operation(summary = "내 쿠폰 목록 [USER] — 발급된 쿠폰 + 사용 가능 여부")
+    @Operation(summary = "내 쿠폰 목록 [USER] — 발급된 쿠폰 + 사용 가능 여부",
+               description = "usable=true: 사용 가능한 쿠폰만, usable=false: 만료/소진된 쿠폰만, 미지정: 전체.")
     @GetMapping("/my")
     public ApiResponse<List<MyCouponResponse>> getMyCoupons(
-            @AuthenticationPrincipal String username) {
+            @AuthenticationPrincipal String username,
+            @RequestParam(required = false) Boolean usable) {
         Long userId = userService.resolveUserId(username);
-        return ApiResponse.ok(couponService.getMyCoupons(userId));
+        return ApiResponse.ok(couponService.getMyCoupons(userId, usable));
     }
 
     @Operation(summary = "공개 쿠폰 등록 [USER] — 쿠폰 코드 입력으로 내 지갑에 추가")

@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -39,6 +40,10 @@ public class CartItem {
     @Column(nullable = false)
     private int quantity;
 
+    /** 장바구니 담은 시점의 단가 — 현재 가격과 비교하여 가격 변동 감지에 사용 */
+    @Column(precision = 12, scale = 2)
+    private BigDecimal savedPrice;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -48,10 +53,11 @@ public class CartItem {
     private LocalDateTime updatedAt;
 
     @Builder
-    private CartItem(Long userId, Product product, int quantity) {
+    private CartItem(Long userId, Product product, int quantity, BigDecimal savedPrice) {
         this.userId = userId;
         this.product = product;
         this.quantity = quantity;
+        this.savedPrice = savedPrice;
     }
 
     /** 수량을 변경한다. */

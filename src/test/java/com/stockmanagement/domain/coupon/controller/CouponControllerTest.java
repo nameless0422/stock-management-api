@@ -89,12 +89,12 @@ class CouponControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(post("/api/coupons")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(CREATE_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 
@@ -191,10 +191,10 @@ class CouponControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(get("/api/coupons/my"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 
@@ -237,12 +237,12 @@ class CouponControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(post("/api/coupons/validate")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALIDATE_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

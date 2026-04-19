@@ -1,12 +1,15 @@
 package com.stockmanagement.domain.shipment.dto;
 
+import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** 배송 출고 요청 DTO (택배사 + 운송장 번호). */
+import java.time.LocalDate;
+
+/** 배송 출고 요청 DTO (택배사 + 운송장 번호 + 예상 도착일). */
 @Getter
 @NoArgsConstructor
 public class ShipmentUpdateRequest {
@@ -19,4 +22,8 @@ public class ShipmentUpdateRequest {
     @Size(max = 50, message = "운송장 번호는 50자 이하여야 합니다.")
     @Pattern(regexp = "^[A-Za-z0-9\\-]+$", message = "운송장 번호는 영문, 숫자, 하이픈만 허용됩니다.")
     private String trackingNumber;
+
+    /** 택배사 예상 도착일 (선택, 오늘 이후여야 함) */
+    @FutureOrPresent(message = "예상 도착일은 오늘 이후여야 합니다.")
+    private LocalDate estimatedDeliveryAt;
 }

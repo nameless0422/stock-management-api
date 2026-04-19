@@ -37,10 +37,10 @@ class UserIntegrationTest extends AbstractIntegrationTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticatedForbidden() throws Exception {
             mockMvc.perform(get("/api/users/me/orders"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 
@@ -69,10 +69,10 @@ class UserIntegrationTest extends AbstractIntegrationTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticatedForbidden() throws Exception {
             mockMvc.perform(delete("/api/users/me"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

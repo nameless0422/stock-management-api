@@ -8,6 +8,7 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.point.entity.UserPoint;
 import com.stockmanagement.domain.point.repository.UserPointRepository;
 import com.stockmanagement.domain.product.review.repository.ReviewRepository;
+import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.domain.user.dto.ChangePasswordRequest;
 import com.stockmanagement.domain.user.dto.LoginRequest;
 import com.stockmanagement.domain.user.dto.LoginResponse;
@@ -30,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -47,6 +49,7 @@ public class UserService {
     private final OrderRepository orderRepository;
     private final ReviewRepository reviewRepository;
     private final UserPointRepository userPointRepository;
+    private final ShipmentRepository shipmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final LoginRateLimiter loginRateLimiter;
@@ -115,11 +118,13 @@ public class UserService {
                 .getId();
     }
 
-    /** 현재 인증된 사용자 정보 조회. */
+    /** 현재 인증된 사용자 정보 조회 (포인트 잔액 포함). */
     public UserResponse getMe(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        return UserResponse.from(user);
+        Long pointBalance = userPointRepository.findByUserId(user.getId())
+                .map(up -> up.getBalance()).orElse(null);
+        return UserResponse.from(user, pointBalance);
     }
 
     /** 회원 탈퇴 — 논리 삭제 처리. username/email을 익명화하여 동일 정보로 재가입 가능. */
@@ -170,7 +175,7 @@ public class UserService {
         refreshTokenStore.revokeAll(username);
     }
 
-    /** 현재 인증된 사용자의 주문 목록 페이징 조회. hasReview 정보 포함. */
+    /** 현재 인증된 사용자의 주문 목록 페이징 조회. hasReview + shipmentStatus 정보 포함. */
     public Page<OrderResponse> getMyOrders(String username, Pageable pageable) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
@@ -182,6 +187,10 @@ public class UserService {
         Set<Long> reviewedIds = allProductIds.isEmpty()
                 ? Set.of()
                 : new HashSet<>(reviewRepository.findReviewedProductIdsByUserId(user.getId(), allProductIds));
-        return orders.map(o -> OrderResponse.from(o, reviewedIds));
+        // 배송 상태 배치 조회 (N+1 방지)
+        List<Long> orderIds = orders.map(Order::getId).toList();
+        Map<Long, com.stockmanagement.domain.shipment.entity.ShipmentStatus> statusMap =
+                shipmentRepository.findStatusMapByOrderIds(orderIds);
+        return orders.map(o -> OrderResponse.from(o, reviewedIds, statusMap.get(o.getId())));
     }
 }

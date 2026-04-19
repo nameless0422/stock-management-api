@@ -4,6 +4,7 @@ import com.stockmanagement.common.config.SecurityConfig;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.security.JwtBlacklist;
+import com.stockmanagement.domain.product.review.dto.RatingStatsResponse;
 import com.stockmanagement.domain.product.review.dto.ReviewResponse;
 import com.stockmanagement.domain.product.review.service.ReviewService;
 import com.stockmanagement.domain.user.service.UserService;
@@ -78,12 +79,12 @@ class ReviewControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(post("/api/products/1/reviews")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(REVIEW_JSON))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -124,12 +125,39 @@ class ReviewControllerTest {
         @Test
         @DisplayName("비로그인 사용자 — 리뷰 목록 조회 → 200")
         void publicGetsList() throws Exception {
-            given(reviewService.getList(anyLong(), any(Pageable.class)))
+            given(reviewService.getList(anyLong(), any(Pageable.class), any()))
                     .willReturn(new PageImpl<>(List.of(mock(ReviewResponse.class))));
 
             mockMvc.perform(get("/api/products/1/reviews"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
+        }
+    }
+
+    // ===== GET /api/products/{id}/reviews/stats =====
+
+    @Nested
+    @DisplayName("GET /api/products/{productId}/reviews/stats")
+    class GetRatingStats {
+
+        @Test
+        @DisplayName("비로그인 — 별점 분포 통계 조회 → 200")
+        void returnsStats() throws Exception {
+            given(reviewService.getRatingStats(1L)).willReturn(mock(RatingStatsResponse.class));
+
+            mockMvc.perform(get("/api/products/1/reviews/stats"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 상품 → 404")
+        void productNotFound() throws Exception {
+            given(reviewService.getRatingStats(999L))
+                    .willThrow(new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+
+            mockMvc.perform(get("/api/products/999/reviews/stats"))
+                    .andExpect(status().isNotFound());
         }
     }
 
@@ -147,10 +175,10 @@ class ReviewControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(delete("/api/products/1/reviews/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

@@ -57,7 +57,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("회원가입 성공 (인증 불필요) → 201")
         void signupSuccess() throws Exception {
-            UserResponse response = new UserResponse(1L, "testuser", "test@example.com", UserRole.USER, null);
+            UserResponse response = new UserResponse(1L, "testuser", "test@example.com", UserRole.USER, null, null);
             given(userService.signup(any())).willReturn(response);
 
             mockMvc.perform(post("/api/auth/signup")

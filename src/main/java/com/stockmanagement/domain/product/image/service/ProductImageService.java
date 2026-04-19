@@ -16,7 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -69,6 +71,38 @@ public class ProductImageService {
     /** 상품에 등록된 이미지 목록 조회 (displayOrder 오름차순) */
     public List<ProductImageResponse> getImages(Long productId) {
         findProduct(productId);
+        return productImageRepository.findByProductIdOrderByDisplayOrderAsc(productId)
+                .stream()
+                .map(ProductImageResponse::from)
+                .toList();
+    }
+
+    /**
+     * 이미지 순서를 일괄 변경한다.
+     *
+     * <p>요청의 imageId가 모두 해당 productId에 속해야 하며, 개수가 일치해야 한다.
+     * Dirty Checking으로 UPDATE가 자동 실행된다.
+     */
+    @Transactional
+    public List<ProductImageResponse> updateImageOrder(Long productId, ImageOrderUpdateRequest request) {
+        findProduct(productId);
+
+        List<Long> requestedIds = request.getOrders().stream()
+                .map(ImageOrderItem::getImageId)
+                .toList();
+
+        List<ProductImage> images = productImageRepository.findByProductIdAndIdIn(productId, requestedIds);
+
+        if (images.size() != requestedIds.size()) {
+            throw new BusinessException(ErrorCode.PRODUCT_IMAGE_NOT_FOUND);
+        }
+
+        Map<Long, ProductImage> imageMap = images.stream()
+                .collect(Collectors.toMap(ProductImage::getId, img -> img));
+
+        request.getOrders().forEach(item -> imageMap.get(item.getImageId())
+                .updateDisplayOrder(item.getDisplayOrder()));
+
         return productImageRepository.findByProductIdOrderByDisplayOrderAsc(productId)
                 .stream()
                 .map(ProductImageResponse::from)

@@ -5,6 +5,7 @@ import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.service.UserService;
+import com.stockmanagement.domain.product.review.service.ReviewService;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
@@ -53,6 +54,9 @@ class UserControllerTest {
     private JwtTokenProvider jwtTokenProvider;
 
     @MockBean
+    private ReviewService reviewService;
+
+    @MockBean
     private JwtBlacklist jwtBlacklist;
 
     /** String principal을 가진 인증 토큰 생성 헬퍼 */
@@ -70,7 +74,7 @@ class UserControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 내 정보 조회 → 200")
         void returnsMyInfo() throws Exception {
-            UserResponse response = new UserResponse(1L, "testuser", "test@example.com", UserRole.USER, null);
+            UserResponse response = new UserResponse(1L, "testuser", "test@example.com", UserRole.USER, null, null);
             given(userService.getMe("testuser")).willReturn(response);
 
             mockMvc.perform(get("/api/users/me")
@@ -81,10 +85,10 @@ class UserControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(get("/api/users/me"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 
@@ -106,10 +110,10 @@ class UserControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(delete("/api/users/me"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 
@@ -132,10 +136,10 @@ class UserControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(get("/api/users/me/orders"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

@@ -58,7 +58,7 @@ class ShipmentServiceTest {
         preparingShipment = Shipment.builder().orderId(1L).build();
         // 테스트용 SHIPPED 배송 — ReflectionTestUtils로 status 세팅
         shippedShipment = Shipment.builder().orderId(2L).build();
-        shippedShipment.ship("CJ대한통운", "123456789");
+        shippedShipment.ship("CJ대한통운", "123456789", null);
     }
 
     @Nested

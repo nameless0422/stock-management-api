@@ -1,5 +1,8 @@
 package com.stockmanagement.common.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.JwtAuthenticationFilter;
 import com.stockmanagement.common.security.JwtTokenProvider;
@@ -9,6 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -23,6 +27,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
@@ -33,6 +38,7 @@ public class SecurityConfig {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtBlacklist jwtBlacklist;
+    private final ObjectMapper objectMapper;
 
     @Value("${cors.allowed-origins:http://localhost:3000}")
     private String allowedOrigins;
@@ -94,6 +100,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/products/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/inventory/**").hasRole("ADMIN")
+                        // 내 배송 목록 조회 — 인증된 사용자 전용 (ADMIN PATCH 패턴보다 앞에 선언)
+                        .requestMatchers(HttpMethod.GET, "/api/shipments/my").authenticated()
                         // 배송 상태 변경 (출고/완료/반품)은 ADMIN 전용
                         .requestMatchers(HttpMethod.PATCH, "/api/shipments/**").hasRole("ADMIN")
                         // 카테고리 조회 공개, 관리 (생성/수정/삭제)는 ADMIN 전용
@@ -142,6 +150,24 @@ public class SecurityConfig {
                                         "connect-src 'self'; " +
                                         "frame-ancestors 'none'"));
                 })
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, e) -> {
+                            response.setStatus(401);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+                            response.getWriter().write(
+                                    objectMapper.writeValueAsString(
+                                            ApiResponse.error(ErrorCode.UNAUTHORIZED, "인증이 필요합니다.")));
+                        })
+                        .accessDeniedHandler((request, response, e) -> {
+                            response.setStatus(403);
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+                            response.getWriter().write(
+                                    objectMapper.writeValueAsString(
+                                            ApiResponse.error(ErrorCode.FORBIDDEN, "접근 권한이 없습니다.")));
+                        })
+                )
                 .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider, jwtBlacklist),
                         UsernamePasswordAuthenticationFilter.class);
 

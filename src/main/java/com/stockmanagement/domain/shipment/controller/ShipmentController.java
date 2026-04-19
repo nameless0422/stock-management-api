@@ -5,10 +5,15 @@ import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.shipment.dto.ShipmentResponse;
 import com.stockmanagement.domain.shipment.dto.ShipmentUpdateRequest;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
+import com.stockmanagement.domain.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +38,17 @@ import org.springframework.web.bind.annotation.*;
 public class ShipmentController {
 
     private final ShipmentService shipmentService;
+    private final UserService userService;
+
+    @Operation(summary = "내 배송 목록 조회", description = "로그인한 사용자의 배송 목록을 최신순으로 반환한다.")
+    @GetMapping("/my")
+    public ApiResponse<Page<ShipmentResponse>> getMyShipments(
+            @AuthenticationPrincipal String username,
+            Authentication authentication,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        Long userId = resolveUserId(authentication, username);
+        return ApiResponse.ok(shipmentService.getMyShipments(userId, pageable));
+    }
 
     @Operation(summary = "주문별 배송 조회", description = "본인 주문의 배송 정보만 조회 가능. ADMIN은 전체 조회 가능.")
     @GetMapping("/orders/{orderId}")
@@ -63,5 +79,12 @@ public class ShipmentController {
     @PatchMapping("/orders/{orderId}/return")
     public ApiResponse<ShipmentResponse> processReturn(@PathVariable Long orderId) {
         return ApiResponse.ok(shipmentService.processReturn(orderId));
+    }
+
+    private Long resolveUserId(Authentication auth, String username) {
+        if (auth != null && auth.getDetails() instanceof Long userId) {
+            return userId;
+        }
+        return userService.resolveUserId(username);
     }
 }

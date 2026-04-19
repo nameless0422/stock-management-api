@@ -20,8 +20,11 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
+import org.springframework.data.domain.PageImpl;
+
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
@@ -69,10 +72,10 @@ class WishlistControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(post("/api/wishlist/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
@@ -101,10 +104,10 @@ class WishlistControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(delete("/api/wishlist/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 
@@ -117,8 +120,8 @@ class WishlistControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 위시리스트 조회 → 200")
         void returnsList() throws Exception {
-            given(wishlistService.getList(anyLong()))
-                    .willReturn(List.of(mock(WishlistResponse.class)));
+            given(wishlistService.getList(anyLong(), any()))
+                    .willReturn(new PageImpl<>(List.of(mock(WishlistResponse.class))));
 
             mockMvc.perform(get("/api/wishlist").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())
@@ -126,10 +129,10 @@ class WishlistControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(get("/api/wishlist"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

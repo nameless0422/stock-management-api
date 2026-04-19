@@ -7,6 +7,7 @@ import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.shipment.dto.ShipmentResponse;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
 import com.stockmanagement.common.security.JwtTokenProvider;
+import com.stockmanagement.domain.user.service.UserService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -14,9 +15,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
@@ -35,6 +39,34 @@ class ShipmentControllerTest {
     @MockBean private ShipmentService shipmentService;
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtBlacklist jwtBlacklist;
+    @MockBean private UserService userService;
+
+    // ===== GET /api/shipments/my =====
+
+    @Nested
+    @DisplayName("GET /api/shipments/my")
+    class GetMyShipments {
+
+        @Test
+        @WithMockUser
+        @DisplayName("인증된 사용자 — 내 배송 목록 → 200")
+        void returnsMyShipments() throws Exception {
+            given(userService.resolveUserId(any())).willReturn(1L);
+            given(shipmentService.getMyShipments(anyLong(), any()))
+                    .willReturn(new PageImpl<>(List.of(mock(ShipmentResponse.class))));
+
+            mockMvc.perform(get("/api/shipments/my"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @DisplayName("인증 없음 → 401")
+        void unauthenticated() throws Exception {
+            mockMvc.perform(get("/api/shipments/my"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
 
     // ===== GET /api/shipments/orders/{orderId} =====
 
@@ -54,10 +86,10 @@ class ShipmentControllerTest {
         }
 
         @Test
-        @DisplayName("인증 없음 → 403")
+        @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
             mockMvc.perform(get("/api/shipments/orders/1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
