@@ -1,5 +1,6 @@
 package com.stockmanagement.common.config;
 
+import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -39,6 +40,14 @@ public class TossPaymentsConfig {
 
     /** Read timeout (ms). */
     private int readTimeoutMs = 30000;
+
+    @PostConstruct
+    void validateSecretKey() {
+        if (secretKey == null || secretKey.isBlank()) {
+            throw new IllegalStateException(
+                    "toss.secret-key 프로퍼티가 설정되지 않았습니다. 환경변수 TOSS_SECRET_KEY를 확인하세요.");
+        }
+    }
 
     /**
      * Pre-configured {@link RestClient} bean for TossPayments API calls.

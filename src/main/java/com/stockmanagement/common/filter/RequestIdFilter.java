@@ -24,13 +24,19 @@ public class RequestIdFilter extends OncePerRequestFilter {
 
     private static final String REQUEST_ID_KEY    = "requestId";
     private static final String REQUEST_ID_HEADER = "X-Request-Id";
+    private static final int MAX_REQUEST_ID_LENGTH = 64;
+    private static final java.util.regex.Pattern VALID_PATTERN =
+            java.util.regex.Pattern.compile("^[a-zA-Z0-9_\\-]+$");
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         String requestId = request.getHeader(REQUEST_ID_HEADER);
-        if (requestId == null || requestId.isBlank()) {
+        // 길이·형식 검증 — 로그 인젝션(줄바꿈) 및 로그 부풀리기 방지
+        if (requestId == null || requestId.isBlank()
+                || requestId.length() > MAX_REQUEST_ID_LENGTH
+                || !VALID_PATTERN.matcher(requestId).matches()) {
             requestId = UUID.randomUUID().toString();
         }
 

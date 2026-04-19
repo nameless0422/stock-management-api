@@ -3,7 +3,7 @@ package com.stockmanagement.common.config;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
@@ -42,7 +42,13 @@ public class CacheConfig {
                 .findAndRegisterModules()
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
                 .activateDefaultTyping(
-                        LaissezFaireSubTypeValidator.instance,
+                        BasicPolymorphicTypeValidator.builder()
+                                .allowIfBaseType("com.stockmanagement.")
+                                .allowIfBaseType("java.util.")
+                                .allowIfBaseType("java.time.")
+                                .allowIfBaseType("java.lang.")
+                                .allowIfBaseType("org.springframework.data.domain.")
+                                .build(),
                         ObjectMapper.DefaultTyping.NON_FINAL,
                         JsonTypeInfo.As.WRAPPER_ARRAY
                 );

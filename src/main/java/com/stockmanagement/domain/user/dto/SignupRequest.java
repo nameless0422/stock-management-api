@@ -2,12 +2,14 @@ package com.stockmanagement.domain.user.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record SignupRequest(
 
         @NotBlank
         @Size(min = 3, max = 50)
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$", message = "영문, 숫자, 밑줄(_), 하이픈(-)만 사용 가능합니다.")
         String username,
 
         @NotBlank

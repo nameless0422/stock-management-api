@@ -13,6 +13,7 @@ import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 
 import java.util.ArrayList;
@@ -96,6 +97,10 @@ public class PointService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void earn(Long userId, long paidAmount, Long orderId) {
         if (paidAmount <= 0) return; // 쿠폰/포인트 전액 할인 시 적립 없음
+        // 멱등성 보장 — Outbox 재처리 시 이중 적립 방지
+        if (pointTransactionRepository.existsByOrderIdAndType(orderId, PointTransactionType.EARN)) {
+            return;
+        }
         long earnAmount = Math.max(1L, Math.round(paidAmount * EARN_RATE));
         UserPoint userPoint = getOrCreate(userId);
         userPoint.earn(earnAmount);
@@ -190,8 +195,16 @@ public class PointService {
 
     private UserPoint getOrCreate(Long userId) {
         return userPointRepository.findByUserIdWithLock(userId)
-                .orElseGet(() -> userPointRepository.save(
-                        UserPoint.builder().userId(userId).build()));
+                .orElseGet(() -> {
+                    try {
+                        return userPointRepository.save(
+                                UserPoint.builder().userId(userId).build());
+                    } catch (DataIntegrityViolationException e) {
+                        // 동시 생성 충돌 — 재조회하여 이미 생성된 레코드 반환
+                        return userPointRepository.findByUserIdWithLock(userId)
+                                .orElseThrow(() -> e);
+                    }
+                });
     }
 
     private User findUser(String username) {

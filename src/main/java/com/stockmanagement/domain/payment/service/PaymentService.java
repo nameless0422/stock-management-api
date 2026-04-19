@@ -180,7 +180,12 @@ public class PaymentService {
 
         } catch (Exception e) {
             // PAYMENT_IN_PROGRESS → PENDING 복원: 재시도 시 스케줄러가 다시 접근 가능하도록 되돌린다
-            transactionHelper.resetOrderOnPaymentError(request.getTossOrderId());
+            try {
+                transactionHelper.resetOrderOnPaymentError(request.getTossOrderId());
+            } catch (Exception resetEx) {
+                // DB 장애로 reset 실패해도 idempotency 키는 반드시 해제해야 함
+                log.error("Order 상태 PENDING 복원 실패 — tossOrderId={}", request.getTossOrderId(), resetEx);
+            }
             // 실패 시 Redis 키 삭제 → 클라이언트 재시도 허용
             idempotencyManager.release(idempotencyKey);
             throw e;

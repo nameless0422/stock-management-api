@@ -47,8 +47,11 @@ public class UserController {
 
     @Operation(summary = "회원 탈퇴", description = "논리 삭제 처리. 탈퇴 후 동일 계정으로 로그인 불가.")
     @DeleteMapping("/me")
-    public ApiResponse<Void> deactivate(@AuthenticationPrincipal String username) {
-        userService.deactivate(username);
+    public ApiResponse<Void> deactivate(
+            @AuthenticationPrincipal String username,
+            @RequestHeader("Authorization") String authHeader) {
+        String accessToken = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+        userService.deactivate(username, accessToken);
         return ApiResponse.ok(null);
     }
 

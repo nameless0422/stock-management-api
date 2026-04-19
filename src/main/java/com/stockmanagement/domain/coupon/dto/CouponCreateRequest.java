@@ -37,6 +37,7 @@ public class CouponCreateRequest {
     /** FIXED_AMOUNT: 할인 금액(원) / PERCENTAGE: 할인율(1~100). */
     @NotNull
     @DecimalMin("0.01")
+    @DecimalMax("999999999")
     private BigDecimal discountValue;
 
     /** null 허용 — 최소 주문 금액 제한 없음. */

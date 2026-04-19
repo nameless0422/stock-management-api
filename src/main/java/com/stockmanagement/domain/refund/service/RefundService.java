@@ -18,6 +18,7 @@ import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -88,13 +89,23 @@ public class RefundService {
                     existing.reset(request.getReason());
                     return existing;
                 })
-                .orElseGet(() -> refundRepository.save(Refund.builder()
-                        .paymentId(payment.getId())
-                        .orderId(payment.getOrderId())
-                        .userId(user.getId())
-                        .amount(payment.getAmount())
-                        .reason(request.getReason())
-                        .build()));
+                .orElseGet(() -> {
+                    try {
+                        Refund newRefund = refundRepository.save(Refund.builder()
+                                .paymentId(payment.getId())
+                                .orderId(payment.getOrderId())
+                                .userId(user.getId())
+                                .amount(payment.getAmount())
+                                .reason(request.getReason())
+                                .build());
+                        refundRepository.flush();
+                        return newRefund;
+                    } catch (DataIntegrityViolationException e) {
+                        // 동시 요청으로 이미 생성된 경우 재조회
+                        return refundRepository.findByPaymentId(payment.getId())
+                                .orElseThrow(() -> new BusinessException(ErrorCode.REFUND_ALREADY_EXISTS));
+                    }
+                });
 
         try {
             // 소유권은 이미 위에서 검증했으므로 userId 전달 (isAdmin=false)

@@ -237,6 +237,7 @@ class CouponServiceTest {
                 .build();
 
         given(couponUsageRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(usage));
+        given(couponRepository.findByIdWithLock(any())).willReturn(Optional.of(coupon));
 
         couponService.releaseCoupon(ORDER_ID);
 

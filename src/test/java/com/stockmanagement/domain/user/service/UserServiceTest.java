@@ -16,6 +16,7 @@ import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
+import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.LoginRateLimiter;
 import com.stockmanagement.common.security.RefreshTokenStore;
 import com.stockmanagement.common.security.JwtTokenProvider;
@@ -61,6 +62,9 @@ class UserServiceTest {
 
     @Mock
     private JwtTokenProvider jwtTokenProvider;
+
+    @Mock
+    private JwtBlacklist jwtBlacklist;
 
     @Mock
     private LoginRateLimiter loginRateLimiter;
@@ -365,7 +369,7 @@ class UserServiceTest {
         void deletesUser() {
             given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
 
-            userService.deactivate("testuser");
+            userService.deactivate("testuser", "test-access-token");
 
             verify(userRepository).delete(user);
         }
@@ -375,7 +379,7 @@ class UserServiceTest {
         void throwsWhenUserNotFound() {
             given(userRepository.findByUsername("ghost")).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> userService.deactivate("ghost"))
+            assertThatThrownBy(() -> userService.deactivate("ghost", "test-token"))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.USER_NOT_FOUND));

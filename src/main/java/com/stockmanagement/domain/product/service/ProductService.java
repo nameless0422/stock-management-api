@@ -24,7 +24,6 @@ import com.stockmanagement.common.event.ProductSyncEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -176,10 +175,10 @@ public class ProductService {
     /**
      * 상품 정보를 수정한다.
      * 더티 체킹(dirty checking)으로 별도 save() 호출 없이 UPDATE가 수행된다.
-     * 수정 후 캐시도 최신 상태로 갱신한다.
+     * 수정 후 캐시를 무효화하여 다음 조회 시 이미지 포함 응답이 재캐싱되도록 한다.
      */
     @Transactional
-    @CachePut(cacheNames = "products", key = "#id")
+    @CacheEvict(cacheNames = "products", key = "#id")
     public ProductResponse update(Long id, ProductUpdateRequest request) {
         Product product = findById(id);
         Category category = resolveCategory(request.getCategoryId());
