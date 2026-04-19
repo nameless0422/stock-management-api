@@ -91,8 +91,8 @@ public class PaymentService {
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
         }
 
-        // 클라이언트 제출 금액을 서버 저장 금액과 비교 — 클라이언트 조작 방지
-        if (order.getTotalAmount().compareTo(request.getAmount()) != 0) {
+        // 클라이언트 제출 금액을 실제 결제 금액(쿠폰·포인트 차감 후)과 비교 — 클라이언트 조작 방지
+        if (order.getPayableAmount().compareTo(request.getAmount()) != 0) {
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
         }
 
@@ -117,7 +117,7 @@ public class PaymentService {
         Payment payment = Payment.builder()
                 .orderId(order.getId())
                 .tossOrderId(tossOrderId)
-                .amount(order.getTotalAmount())
+                .amount(order.getPayableAmount())
                 .build();
 
         Payment saved = paymentRepository.save(payment);

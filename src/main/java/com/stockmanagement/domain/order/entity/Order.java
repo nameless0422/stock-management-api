@@ -187,6 +187,18 @@ public class Order {
     }
 
     /**
+     * 실제 결제 금액을 계산한다 (= totalAmount - discountAmount - usedPoints, 최소 0).
+     *
+     * <p>쿠폰 할인과 포인트 사용을 차감한 금액으로, Toss 결제 요청에 사용된다.
+     */
+    public BigDecimal getPayableAmount() {
+        BigDecimal payable = totalAmount
+                .subtract(discountAmount)
+                .subtract(BigDecimal.valueOf(usedPoints));
+        return payable.compareTo(BigDecimal.ZERO) > 0 ? payable : BigDecimal.ZERO;
+    }
+
+    /**
      * 쿠폰 할인을 적용한다.
      * 저장 후 couponService.applyCoupon() 결과를 받아 호출한다.
      */

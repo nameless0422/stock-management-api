@@ -42,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -124,10 +125,15 @@ public class OrderService {
         List<OrderItem> items = new ArrayList<>();
         BigDecimal totalAmount = BigDecimal.ZERO;
 
-        // 상품 ID 일괄 조회 — 루프마다 findById()를 호출하는 N+1 방지
+        // 중복 상품 ID 검증 — 동일 상품이 여러 항목에 포함되면 수량을 합쳐서 제출해야 함
         List<Long> productIds = request.getItems().stream()
                 .map(OrderItemRequest::getProductId)
                 .toList();
+        if (new HashSet<>(productIds).size() != productIds.size()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "동일 상품이 중복으로 포함되어 있습니다. 수량을 합쳐서 제출해주세요.");
+        }
+
+        // 상품 ID 일괄 조회 — 루프마다 findById()를 호출하는 N+1 방지
         Map<Long, Product> productMap = productRepository.findAllById(productIds).stream()
                 .collect(Collectors.toMap(Product::getId, p -> p));
 
@@ -453,6 +459,10 @@ public class OrderService {
         List<Long> productIds = request.getItems().stream()
                 .map(OrderItemRequest::getProductId)
                 .toList();
+        if (new HashSet<>(productIds).size() != productIds.size()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "동일 상품이 중복으로 포함되어 있습니다. 수량을 합쳐서 제출해주세요.");
+        }
+
         Map<Long, Product> productMap = productRepository.findAllById(productIds).stream()
                 .collect(Collectors.toMap(Product::getId, p -> p));
 

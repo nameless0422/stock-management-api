@@ -44,6 +44,9 @@ public class OrderResponse {
     /** 사용한 포인트 */
     private final long usedPoints;
 
+    /** 실제 결제 금액 (= totalAmount - discountAmount - usedPoints) */
+    private final BigDecimal payableAmount;
+
     /** 주문 항목 목록 */
     private final List<OrderItemResponse> items;
 
@@ -84,6 +87,7 @@ public class OrderResponse {
                 .couponId(order.getCouponId())
                 .discountAmount(order.getDiscountAmount())
                 .usedPoints(order.getUsedPoints())
+                .payableAmount(order.getPayableAmount())
                 .items(order.getItems().stream()
                         .map(i -> OrderItemResponse.from(i,
                                 reviewedProductIds != null

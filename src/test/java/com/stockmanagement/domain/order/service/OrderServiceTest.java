@@ -203,6 +203,29 @@ class OrderServiceTest {
         }
 
         @Test
+        @DisplayName("동일 상품 중복 포함 시 INVALID_INPUT 예외 발생")
+        void throwsWhenDuplicateProductId() {
+            OrderItemRequest item1 = mock(OrderItemRequest.class);
+            given(item1.getProductId()).willReturn(1L);
+            OrderItemRequest item2 = mock(OrderItemRequest.class);
+            given(item2.getProductId()).willReturn(1L); // 중복 상품
+
+            OrderCreateRequest request = mock(OrderCreateRequest.class);
+            given(request.getIdempotencyKey()).willReturn("idem-key-dup");
+            given(request.getItems()).willReturn(List.of(item1, item2));
+
+            given(orderRepository.findByIdempotencyKey("idem-key-dup")).willReturn(Optional.empty());
+
+            assertThatThrownBy(() -> orderService.create(request))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.INVALID_INPUT));
+
+            verify(orderRepository, never()).save(any());
+            verifyNoInteractions(inventoryService);
+        }
+
+        @Test
         @DisplayName("쿠폰 코드 포함 주문 생성 — discountAmount 적용")
         void createOrderWithCoupon() {
             OrderItemRequest itemRequest = mock(OrderItemRequest.class);
