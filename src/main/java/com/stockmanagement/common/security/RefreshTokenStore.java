@@ -42,7 +42,10 @@ public class RefreshTokenStore {
         redissonClient.<String>getBucket(TOKEN_PREFIX + token)
                 .set(username, TTL_DAYS, TimeUnit.DAYS);
         // 역색인: 회원 탈퇴 시 일괄 폐기를 위해 username → token UUID 매핑 유지
-        redissonClient.<String>getSet(USER_PREFIX + username).add(token);
+        var userSet = redissonClient.<String>getSet(USER_PREFIX + username);
+        userSet.add(token);
+        // 역색인 Set에 TTL 설정 — 토큰 만료(30일)보다 약간 길게 설정하여 메모리 누수 방지
+        userSet.expire(java.time.Duration.ofDays(TTL_DAYS + 5));
         return token;
     }
 

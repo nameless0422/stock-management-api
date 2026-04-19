@@ -102,6 +102,8 @@ public class WishlistService {
                         productMap.get(item.getProductId()),
                         availableMap.get(item.getProductId())))
                 .toList();
-        return new org.springframework.data.domain.PageImpl<>(content, pageable, page.getTotalElements());
+        // 필터링 후 totalElements 보정 — 삭제 상품 수만큼 차감
+        long filteredTotal = page.getTotalElements() - (page.getContent().size() - content.size());
+        return new org.springframework.data.domain.PageImpl<>(content, pageable, Math.max(0, filteredTotal));
     }
 }

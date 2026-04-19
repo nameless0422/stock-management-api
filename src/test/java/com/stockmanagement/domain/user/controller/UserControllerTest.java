@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willDoNothing;
@@ -101,9 +102,10 @@ class UserControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 회원 탈퇴 → 200")
         void deactivatesAccount() throws Exception {
-            willDoNothing().given(userService).deactivate("testuser");
+            willDoNothing().given(userService).deactivate(eq("testuser"), anyString());
 
             mockMvc.perform(delete("/api/users/me")
+                            .header("Authorization", "Bearer test-access-token")
                             .with(authentication(userAuth("testuser"))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));

@@ -19,6 +19,7 @@ import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
+import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.LoginRateLimiter;
 import com.stockmanagement.common.security.RefreshTokenStore;
 import com.stockmanagement.common.security.JwtTokenProvider;
@@ -52,6 +53,7 @@ public class UserService {
     private final ShipmentRepository shipmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final JwtBlacklist jwtBlacklist;
     private final LoginRateLimiter loginRateLimiter;
     private final RefreshTokenStore refreshTokenStore;
 
@@ -129,7 +131,7 @@ public class UserService {
 
     /** 회원 탈퇴 — 논리 삭제 처리. username/email을 익명화하여 동일 정보로 재가입 가능. */
     @Transactional
-    public void deactivate(String username) {
+    public void deactivate(String username, String accessToken) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
@@ -138,8 +140,9 @@ public class UserService {
 
         userRepository.delete(user); // @SQLDelete → UPDATE users SET deleted_at = NOW(6) WHERE id = ?
 
-        // 탈퇴 시 해당 사용자의 모든 Refresh Token 즉시 폐기 (보안)
-        // Access Token은 JWT 만료 시까지 유효하나, 재발급 경로인 Refresh Token을 차단한다
+        // 탈퇴 시 Access Token을 블랙리스트에 등록하여 즉시 무효화
+        jwtBlacklist.revoke(accessToken);
+        // 해당 사용자의 모든 Refresh Token 즉시 폐기 (재발급 차단)
         refreshTokenStore.revokeAll(username);
     }
 

@@ -22,8 +22,13 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import java.util.List;
 
 @WebMvcTest(AuthController.class)
 @Import(SecurityConfig.class)
@@ -191,13 +196,26 @@ class AuthControllerTest {
     @DisplayName("POST /api/auth/logout")
     class Logout {
 
+        private static UsernamePasswordAuthenticationToken userAuth(String username) {
+            return new UsernamePasswordAuthenticationToken(
+                    username, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        }
+
         @Test
         @DisplayName("유효한 Bearer 토큰 → 200, 블랙리스트 등록")
         void logoutSuccess() throws Exception {
             mockMvc.perform(post("/api/auth/logout")
-                            .header("Authorization", "Bearer valid-jwt-token"))
+                            .header("Authorization", "Bearer valid-jwt-token")
+                            .with(authentication(userAuth("testuser"))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @DisplayName("인증 없음 → 401")
+        void unauthorizedWithoutAuth() throws Exception {
+            mockMvc.perform(post("/api/auth/logout"))
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

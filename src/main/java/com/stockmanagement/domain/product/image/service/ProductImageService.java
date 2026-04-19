@@ -11,6 +11,7 @@ import com.stockmanagement.domain.product.image.entity.ProductImage;
 import com.stockmanagement.domain.product.image.repository.ProductImageRepository;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +50,7 @@ public class ProductImageService {
 
     /** 업로드 완료 후 이미지 메타데이터를 DB에 저장. THUMBNAIL이면 products.thumbnail_url도 갱신. */
     @Transactional
+    @CacheEvict(cacheNames = "products", key = "#productId")
     public ProductImageResponse saveImage(Long productId, ProductImageSaveRequest request) {
         Product product = findProduct(productId);
 
@@ -84,6 +86,7 @@ public class ProductImageService {
      * Dirty Checking으로 UPDATE가 자동 실행된다.
      */
     @Transactional
+    @CacheEvict(cacheNames = "products", key = "#productId")
     public List<ProductImageResponse> updateImageOrder(Long productId, ImageOrderUpdateRequest request) {
         findProduct(productId);
 
@@ -111,6 +114,7 @@ public class ProductImageService {
 
     /** 이미지 삭제 — 스토리지 오브젝트 + DB 레코드 순으로 제거 */
     @Transactional
+    @CacheEvict(cacheNames = "products", key = "#productId")
     public void deleteImage(Long productId, Long imageId) {
         ProductImage image = productImageRepository.findByIdAndProductId(imageId, productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_IMAGE_NOT_FOUND));

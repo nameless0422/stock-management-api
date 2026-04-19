@@ -71,7 +71,8 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Public 엔드포인트
+                        // Public 엔드포인트 — 로그아웃은 인증 필요 (permitAll 범위에서 제외)
+                        .requestMatchers("/api/auth/logout").authenticated()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/payments/webhook").permitAll()
                         // Actuator — health/info/prometheus는 공개 (내부망 전용), 나머지는 ADMIN 전용

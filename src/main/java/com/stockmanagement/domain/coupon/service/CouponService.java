@@ -12,11 +12,13 @@ import com.stockmanagement.domain.coupon.dto.CouponValidateResponse;
 import com.stockmanagement.domain.coupon.dto.MyCouponResponse;
 import com.stockmanagement.domain.coupon.entity.Coupon;
 import com.stockmanagement.domain.coupon.entity.CouponUsage;
+import com.stockmanagement.domain.coupon.entity.DiscountType;
 import com.stockmanagement.domain.coupon.entity.UserCoupon;
 import com.stockmanagement.domain.coupon.repository.CouponRepository;
 import com.stockmanagement.domain.coupon.repository.CouponUsageRepository;
 import com.stockmanagement.domain.coupon.repository.UserCouponRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -49,6 +51,15 @@ public class CouponService {
 
     @Transactional
     public CouponResponse create(CouponCreateRequest request) {
+        // 날짜 교차 검증 — 시작일이 종료일 이후면 즉시 만료 쿠폰이 생성됨
+        if (request.getValidFrom().isAfter(request.getValidUntil())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "쿠폰 시작일이 종료일보다 이후일 수 없습니다.");
+        }
+        // PERCENTAGE 할인율 100% 초과 방지
+        if (request.getDiscountType() == DiscountType.PERCENTAGE
+                && request.getDiscountValue().compareTo(BigDecimal.valueOf(100)) > 0) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "할인율은 100%를 초과할 수 없습니다.");
+        }
         Coupon coupon = Coupon.builder()
                 .code(request.getCode())
                 .name(request.getName())
@@ -91,10 +102,15 @@ public class CouponService {
         if (userCouponRepository.existsByUserIdAndCouponId(userId, couponId)) {
             throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
         }
-        userCouponRepository.save(UserCoupon.builder()
-                .userId(userId)
-                .coupon(coupon)
-                .build());
+        try {
+            userCouponRepository.save(UserCoupon.builder()
+                    .userId(userId)
+                    .coupon(coupon)
+                    .build());
+            userCouponRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
+        }
     }
 
     /**
@@ -167,8 +183,14 @@ public class CouponService {
         // 유효기간 검증 — 만료 쿠폰은 등록 시점에 차단
         validatePeriod(coupon);
 
-        UserCoupon userCoupon = userCouponRepository.save(
-                UserCoupon.builder().userId(userId).coupon(coupon).build());
+        UserCoupon userCoupon;
+        try {
+            userCoupon = userCouponRepository.save(
+                    UserCoupon.builder().userId(userId).coupon(coupon).build());
+            userCouponRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
+        }
 
         int usedCount = couponUsageRepository.countByCoupon_IdAndUserId(coupon.getId(), userId);
         return MyCouponResponse.from(userCoupon, isUsable(coupon, usedCount, LocalDateTime.now()));
@@ -227,6 +249,7 @@ public class CouponService {
     /**
      * 쿠폰 반환 — 주문 취소 또는 환불 시 usageCount 복원.
      * 쿠폰 미사용 주문이면 아무 동작도 하지 않는다.
+     * 비관적 락으로 applyCoupon()과의 lost update를 방지한다.
      */
     @Transactional
     public void releaseCoupon(Long orderId) {
@@ -235,7 +258,10 @@ public class CouponService {
             return; // 쿠폰 미사용 주문
         }
         CouponUsage usage = usageOpt.get();
-        usage.getCoupon().decreaseUsage();
+        // 비관적 락으로 쿠폰 재조회 — LAZY 로드된 인스턴스 대신 잠금 보장
+        Coupon coupon = couponRepository.findByIdWithLock(usage.getCoupon().getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
+        coupon.decreaseUsage();
         couponUsageRepository.delete(usage);
     }
 

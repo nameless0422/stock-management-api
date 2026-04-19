@@ -149,9 +149,8 @@ class PaymentTransactionHelper {
                 failureCode = tossResponse.getFailure().getCode();
                 failureMessage = tossResponse.getFailure().getMessage();
             }
-            payment.fail(failureCode, failureMessage);
-            log.warn("[Payment] 결제 승인 실패: tossOrderId={}, code={}, message={}",
-                    tossOrderId, failureCode, failureMessage);
+            // fail() 상태를 독립 트랜잭션으로 커밋 — 예외에 의한 롤백으로 PENDING 잔존 방지
+            markPaymentFailed(tossOrderId, failureCode, failureMessage);
             throw new BusinessException(ErrorCode.TOSS_PAYMENTS_ERROR,
                     failureMessage != null ? failureMessage : "결제 승인 실패");
         }
@@ -164,6 +163,19 @@ class PaymentTransactionHelper {
         );
 
         return doPostConfirmWork(payment);
+    }
+
+    /**
+     * 결제 실패 상태를 독립 트랜잭션으로 커밋한다.
+     * applyConfirmResult() 내 예외에 의한 롤백으로 fail() 상태가 소실되는 것을 방지.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    void markPaymentFailed(String tossOrderId, String failureCode, String failureMessage) {
+        Payment payment = paymentRepository.findByTossOrderIdWithLock(tossOrderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+        payment.fail(failureCode, failureMessage);
+        log.warn("[Payment] 결제 승인 실패: tossOrderId={}, code={}, message={}",
+                tossOrderId, failureCode, failureMessage);
     }
 
     /**
