@@ -71,6 +71,10 @@ public class Payment {
     /** Timestamp when TossPayments approved the payment. */
     private LocalDateTime approvedAt;
 
+    /** 누적 취소 금액. 전액 취소 시 amount와 동일, 부분 취소 시 취소된 부분 합계. */
+    @Column(precision = 12, scale = 2)
+    private BigDecimal cancelledAmount;
+
     /** Reason provided by the caller when cancelling the payment. */
     @Column(length = 200)
     private String cancelReason;
@@ -120,18 +124,38 @@ public class Payment {
     }
 
     /**
-     * Marks this payment as cancelled.
-     * Only a DONE payment can be cancelled (a failed payment cannot be refunded).
+     * 결제를 취소한다. 전액 취소 또는 부분 취소를 지원한다.
      *
-     * @param cancelReason human-readable reason for cancellation
-     * @throws BusinessException if the current status is not DONE
+     * <p>cancelAmount가 null이면 전액 취소(CANCELLED),
+     * 누적 취소 금액이 결제 금액 미만이면 부분 취소(PARTIAL_CANCELLED),
+     * 누적 취소 금액이 결제 금액 이상이면 전액 취소(CANCELLED)로 전환한다.
+     *
+     * @param cancelReason 취소 사유
+     * @param cancelAmount 부분 취소 금액 (null이면 전액 취소)
+     * @throws BusinessException DONE 또는 PARTIAL_CANCELLED 상태가 아닌 경우
      */
-    public void cancel(String cancelReason) {
-        if (this.status != PaymentStatus.DONE) {
+    public void cancel(String cancelReason, BigDecimal cancelAmount) {
+        if (this.status != PaymentStatus.DONE && this.status != PaymentStatus.PARTIAL_CANCELLED) {
             throw new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS);
         }
         this.cancelReason = cancelReason;
-        this.status = PaymentStatus.CANCELLED;
+
+        if (cancelAmount == null) {
+            // 전액 취소
+            this.cancelledAmount = this.amount;
+            this.status = PaymentStatus.CANCELLED;
+        } else {
+            // 부분 취소: 누적
+            BigDecimal accumulated = (this.cancelledAmount != null ? this.cancelledAmount : BigDecimal.ZERO)
+                    .add(cancelAmount);
+            this.cancelledAmount = accumulated;
+
+            if (accumulated.compareTo(this.amount) >= 0) {
+                this.status = PaymentStatus.CANCELLED;
+            } else {
+                this.status = PaymentStatus.PARTIAL_CANCELLED;
+            }
+        }
     }
 
     /**

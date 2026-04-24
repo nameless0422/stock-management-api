@@ -25,6 +25,7 @@ public class PaymentResponse {
     private String method;
     private LocalDateTime requestedAt;
     private LocalDateTime approvedAt;
+    private BigDecimal cancelledAmount;
     private String cancelReason;
     private String failureCode;
     private String failureMessage;
@@ -42,6 +43,7 @@ public class PaymentResponse {
                 .method(payment.getMethod())
                 .requestedAt(payment.getRequestedAt())
                 .approvedAt(payment.getApprovedAt())
+                .cancelledAmount(payment.getCancelledAmount())
                 .cancelReason(payment.getCancelReason())
                 .failureCode(payment.getFailureCode())
                 .failureMessage(payment.getFailureMessage())
