@@ -292,7 +292,8 @@ class PaymentTransactionHelper {
         if (payment.getStatus() == PaymentStatus.CANCELLED) {
             return Optional.of(PaymentResponse.from(payment));
         }
-        if (payment.getStatus() != PaymentStatus.DONE) {
+        if (payment.getStatus() != PaymentStatus.DONE
+                && payment.getStatus() != PaymentStatus.PARTIAL_CANCELLED) {
             throw new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS);
         }
 
@@ -303,26 +304,33 @@ class PaymentTransactionHelper {
      * Toss 취소 결과를 DB에 반영하는 트랜잭션.
      *
      * <p>외부 HTTP 호출 성공 이후에 실행된다. 재시도 시 이미 CANCELLED이면 현재 상태를 반환한다.
+     * 부분 취소(cancelAmount != null)이면 PARTIAL_CANCELLED로 전환하고 주문 환불은 수행하지 않는다.
      *
      * @param paymentKey   Toss 결제 키
      * @param cancelReason 취소 사유
+     * @param cancelAmount 부분 취소 금액 (null이면 전액 취소)
      * @return 업데이트된 결제 상세 정보
      */
     @Transactional
-    PaymentResponse applyCancelResult(String paymentKey, String cancelReason) {
+    PaymentResponse applyCancelResult(String paymentKey, String cancelReason, BigDecimal cancelAmount) {
         Payment payment = paymentRepository.findByPaymentKeyWithLock(paymentKey)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
-        // 재시도 시 이미 반영됐으면 그대로 반환
+        // 재시도 시 이미 전액 취소 반영됐으면 그대로 반환
         if (payment.getStatus() == PaymentStatus.CANCELLED) {
             return PaymentResponse.from(payment);
         }
 
-        payment.cancel(cancelReason);
-        orderService.refund(payment.getOrderId());
+        payment.cancel(cancelReason, cancelAmount);
 
-        log.info("[Payment] 결제 취소 완료: paymentKey={}, orderId={}, reason={}",
-                paymentKey, payment.getOrderId(), cancelReason);
+        // 전액 취소(CANCELLED)일 때만 주문 환불 (재고 복구, 쿠폰 반환, 포인트 환불)
+        if (payment.getStatus() == PaymentStatus.CANCELLED) {
+            orderService.refund(payment.getOrderId());
+        }
+
+        log.info("[Payment] 결제 {} 완료: paymentKey={}, orderId={}, cancelAmount={}, reason={}",
+                payment.getStatus() == PaymentStatus.CANCELLED ? "전액 취소" : "부분 취소",
+                paymentKey, payment.getOrderId(), cancelAmount, cancelReason);
         return PaymentResponse.from(payment);
     }
 

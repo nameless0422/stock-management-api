@@ -4,7 +4,8 @@ package com.stockmanagement.domain.payment.entity;
  * Payment lifecycle states.
  *
  * <pre>
- *   PENDING ──→ DONE ──→ CANCELLED
+ *   PENDING ──→ DONE ──→ PARTIAL_CANCELLED ──→ CANCELLED
+ *           │        └──→ CANCELLED
  *           └──→ FAILED
  * </pre>
  *
@@ -13,7 +14,7 @@ package com.stockmanagement.domain.payment.entity;
  *   <li>DONE              – payment approved by TossPayments
  *   <li>CANCELLED         – payment cancelled / fully refunded after approval
  *   <li>FAILED            – payment approval rejected by TossPayments
- *   <li>PARTIAL_CANCELLED – partial refund applied (reserved for future use)
+ *   <li>PARTIAL_CANCELLED – partial refund applied; accumulated cancelledAmount &lt; amount
  * </ul>
  */
 public enum PaymentStatus {

@@ -625,6 +625,115 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 
 ---
 
+## 10. 코드 리뷰 개선 항목
+
+> 코드 리뷰를 통해 발견한 보안 취약점·버그·성능 결함·코드 품질 문제 중 완료된 항목.
+> 항목 1~9의 주요 개선과 별도로, 세부 항목 단위로 정리한다.
+
+### 프로덕션 버그 수정
+
+| # | 항목 | 조치 |
+|---|------|------|
+| 80 | Payment 금액에 쿠폰/포인트 할인 미반영 — 사용자 과다 결제 | `Order.getPayableAmount()` 추가 (totalAmount − discountAmount − usedPoints), `PaymentService.prepare()`에서 payableAmount 기준으로 검증·저장 |
+| 81 | 동일 상품 중복 주문 항목 시 `Collectors.toMap` 500 에러 | `OrderService.create()/preview()`에서 중복 productId 사전 차단 (INVALID_INPUT 400) |
+| 1 | 음수 재고 허용 버그 | `InventoryService` — `BusinessException(INVENTORY_STATE_INCONSISTENT)` throw |
+| 2 | 포인트 롤백 불일치 | `OrderService.create()` — `validateBalance()` fail-fast 사전 검증 추가 |
+| 3 | 배송·포인트 무음 삼킴 | `PaymentTransactionHelper` — Outbox 패턴(`SHIPMENT_CREATE`, `POINT_EARN`) 전환 |
+| 4 | null userId NPE | `OrderExpiryScheduler` — `cancelBySystem()` 전용 메서드, Order에서 userId 직접 조회 |
+| 5 | saveAll() 예외 무음 삼킴 | `InventorySnapshotScheduler` — `DataIntegrityViolationException` 분리, 장애 시 re-throw |
+| 6 | SpEL null NPE | `DistributedLockAspect` — `resolveKey()` null/예외 시 `BusinessException` throw |
+| 113 | 부분 취소 금액 DB 미반영 — Toss 부분 환불 + DB 전액 CANCELLED | `Payment.cancel(reason, cancelAmount)` 2인자, `cancelledAmount` 누적 필드, `PARTIAL_CANCELLED` 상태 활성화, 부분 취소 시 `orderService.refund()` 미실행 |
+
+---
+
+### 보안 취약점 수정
+
+| # | 항목 | 조치 |
+|---|------|------|
+| 46 | JWT Secret 기본값 → 시작 실패 | `JwtTokenProvider @PostConstruct` `IllegalStateException` |
+| 58 | Admin 기본 자격증명 → 시작 실패 | `AdminSecurityConfig @PostConstruct` `IllegalStateException` |
+| 110 | TossPaymentsConfig secretKey null 시 `"null:"` 인코딩 | `@PostConstruct` null/blank 검증 후 `IllegalStateException` throw |
+| 63 | Actuator 엔드포인트 과다 노출 | `env/heapdump/threaddump/beans/mappings/loggers` 비활성화 |
+| 56 | PaymentController IDOR | 소유권 검증 + `orderRepository.findUserIdById()` |
+| 82 | 회원 탈퇴 시 Access Token 미무효화 (최대 24시간 접근 가능) | `deactivate()` 시 현재 Access Token `jwtBlacklist.revoke()` 등록 |
+| 97 | `AuthController.logout()` 인증 없이 호출 가능 | `/api/auth/logout`을 `authenticated()` 규칙 적용, SecurityConfig 분리 |
+| 85 | `CacheConfig LaissezFaireSubTypeValidator` — RCE 가능 | `BasicPolymorphicTypeValidator` 화이트리스트 (`com.stockmanagement.`, `java.util.`, `java.time.`) |
+| 84 | `SignupRequest.username` 패턴 검증 없음 — Redis 키 오염 | `@Pattern(regexp = "^[a-zA-Z0-9_-]+$")` 추가 |
+| 89 | `PresignedUrlRequest.fileExtension` 문자 검증 없음 | `@Pattern(regexp = "^[a-zA-Z0-9]{1,10}$")` 추가 |
+| 64 | `CouponValidateRequest @Size` 누락 | `@Size(min=8, max=50)` 추가 |
+| 57 | `TossWebhookVerifier` Mac 직렬화 위험 | 싱글턴 + `synchronized` → 호출마다 `Mac.getInstance()` |
+| 100 | `RequestIdFilter` 외부 `X-Request-Id` 무검증 — 로그 인젝션 | 길이 64자 상한 + 영숫자/하이픈 패턴 검증, 초과 시 UUID 생성 |
+
+---
+
+### 동시성·안정성 개선
+
+| # | 항목 | 조치 |
+|---|------|------|
+| 66 | `PaymentService.confirm()` catch — `release()` 미실행 가능 | `try-finally`로 `release()` 보장 |
+| 72 | `CouponService.releaseCoupon()` — `usageCount` lost update | `findByIdWithLock()` 비관적 락으로 교체 |
+| 73 | `CouponService.claim()/issueToUser()` TOCTOU — 제네릭 409 | `DataIntegrityViolationException` catch → `BusinessException(COUPON_ALREADY_ISSUED)` 재발행 |
+| 77 | Outbox `POINT_EARN` 포인트 이중 적립 가능 | `earn()` 내부 `existsByOrderIdAndType()` 멱등성 체크 추가 |
+| 91 | `PointService.getOrCreate()` 동시 요청 Duplicate Key | `DataIntegrityViolationException` catch 후 재조회 retry 패턴 적용 |
+| 94 | `RefundService.requestRefund()` 동시 요청 Duplicate Key → 500 | `DataIntegrityViolationException` catch 후 재조회 방어 |
+| 102 | `applyConfirmResult()` non-DONE 응답 시 `fail()` 롤백 가능 | `markPaymentFailed()` `REQUIRES_NEW` 트랜잭션으로 분리 |
+| 52 | Toss 승인 완료 후 주문 만료 경합 | `PAYMENT_IN_PROGRESS` 상태 도입, `findExpiredPendingOrderIds()` PENDING만 조회 |
+
+---
+
+### 캐시·인프라 개선
+
+| # | 항목 | 조치 |
+|---|------|------|
+| 87 | `ProductService.update()` `@CachePut` 이미지 없는 응답 캐시 | `@CachePut` → `@CacheEvict` 전환 |
+| 88 | `ProductImageService` 이미지 변경 시 products 캐시 미무효화 | `saveImage()/deleteImage()/updateImageOrder()`에 `@CacheEvict(products, key=#productId)` 추가 |
+| 86 | `StorageConfig S3Presigner` `forcePathStyle` 누락 | `pathStyleAccessEnabled(true)` 추가 |
+| 98 | `RefreshTokenStore` 역색인 Set TTL 없음 — Redis 메모리 누수 | `issue()` 시 Set에 35일 TTL 설정 |
+| 99 | `AsyncConfig RejectedExecutionHandler` 미설정 — 이벤트 소실 | `CallerRunsPolicy` 적용 |
+| 112 | `RedisConfig RedissonClient` `destroyMethod` 미설정 | `@Bean(destroyMethod = "shutdown")` 명시 |
+
+---
+
+### 성능 최적화
+
+| # | 항목 | 조치 |
+|---|------|------|
+| 7 | `InventoryRepository` N+1 | `@EntityGraph({"product"})` 추가 |
+| 29 | `ReviewService·WishlistService` DB round-trip | `resolveUserId()` 헬퍼 패턴, `findByUsername()` 제거 |
+| 30 | `OutboxEventRelayScheduler` 지수 백오프 없음 | `nextRetryAt` 컬럼(V34) + 최대 1시간 백오프 |
+| 32 | `ReviewService.create()` Product 전체 로드 | `findById()` → `existsById()` |
+| 49 | `ShipmentService` userId 프로젝션 | `orderRepository.findUserIdById()` 스칼라 쿼리 |
+| 50 | `CouponService` 검증 중복 | `applyCoupon()` → `validateConditions()` 통합 |
+| 48 | `CartService` N+1 | `CartRepository.findByUserId()` `@EntityGraph(product)` 확인 완료 |
+
+---
+
+### DB·마이그레이션·코드 품질 개선
+
+| # | 항목 | 조치 |
+|---|------|------|
+| 10 | `applyConfirmResult()` 이중 DB 조회 | `confirm()` → `Order` 반환, 재사용 |
+| 11 | Outbox 배치 크기 하드코딩 | `@Value("${outbox.relay.batch-size:100}")` + Prometheus counter |
+| 12 | DB 인덱스 누락 | V23/V25/V27 마이그레이션 |
+| 14 | `RefundService` 이중 쿼리 | `userId` 비정규화, `validateOwnership()` orders 조회 제거 |
+| 17 | P6Spy 운영 오버헤드 | `implementation` → `runtimeOnly` |
+| 18 | Zipkin 샘플링 100% | 1.0 → 0.1 |
+| 19 | `OrderSearchRequest` mutable DTO | `of(request, forceUserId)` 오버로드 |
+| 28 | Payment 도메인 주석 언어 불일치 | 한국어(키워드 영문) 통일 |
+| 33 | `refunds.user_id DEFAULT 0` | V29 백필 + FK 제약 |
+| 34 | `payments` CHARSET/COLLATE 미정의 | V29 utf8mb4 변환 |
+| 35 | `orders` 복합 인덱스 누락 | V29 `idx_orders_status_created` |
+| 36 | `coupons` 인덱스 누락 + N UPDATE | V29 인덱스 + `@Modifying` 벌크 UPDATE |
+| 37 | `products.status` 인덱스 누락 | V29 `idx_products_status` |
+| 38 | `cart_items.user_id` FK 누락 | V29 FK 제약 |
+| 39 | `point_transactions.order_id` FK 누락 | V29 FK (ON DELETE SET NULL) |
+| 40 | `created_at` DEFAULT 없는 테이블 6개 | V33 ALTER |
+| 44 | 일부 테이블 COLLATE 미정의 | V30 charset/collation 통일 |
+| 92 | `CouponCreateRequest` 날짜 교차 검증 없음 + PERCENTAGE 100% 초과 | `validFrom >= validUntil` 검증 + `discountValue <= 100` 제약 추가 |
+| 93 | `WishlistService.getList()` 필터링 후 `totalElements` 불일치 | 필터링 후 content 크기 기반 totalElements 재계산 |
+
+---
+
 ## 테스트 커버리지 추이
 
 | 시점 | 테스트 수 |
@@ -633,4 +742,5 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 리뷰 / 위시리스트 / 포인트 / 환불 + 통합 테스트 | 465개 |
 | 전 컨트롤러 단위 테스트 완비 | 529개 |
 | 배치 / Elasticsearch / 쿠폰 / 카테고리 추가 | ~580개 |
-| 성능 최적화 (#7/#8/#9) 이후 | **605개** |
+| 성능 최적화 (#7/#8/#9) 이후 | 605개 |
+| 코드 리뷰 개선 항목 (#10) + Wave 2/3 프론트엔드 API 개선 | **623개** |

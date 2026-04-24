@@ -238,7 +238,7 @@ public class PaymentService {
 
             // 5. Short TX: 취소 결과 반영
             PaymentResponse response = transactionHelper.applyCancelResult(
-                    paymentKey, request.getCancelReason());
+                    paymentKey, request.getCancelReason(), request.getCancelAmount());
             idempotencyManager.complete(idempotencyKey, response);
             return response;
 
