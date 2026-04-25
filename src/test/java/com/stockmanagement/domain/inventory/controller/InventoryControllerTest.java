@@ -53,8 +53,8 @@ class InventoryControllerTest {
     class Search {
 
         @Test
-        @WithMockUser
-        @DisplayName("인증된 사용자 — 필터 없이 조회 → 200, Page 구조 반환")
+        @WithMockUser(roles = "ADMIN")
+        @DisplayName("ADMIN — 필터 없이 조회 → 200, Page 구조 반환")
         void returnsPage() throws Exception {
             given(inventoryService.search(any(), any())).willReturn(Page.empty());
 
@@ -65,7 +65,7 @@ class InventoryControllerTest {
         }
 
         @Test
-        @WithMockUser
+        @WithMockUser(roles = "ADMIN")
         @DisplayName("status=LOW_STOCK 파라미터 → 200")
         void filterByStatus() throws Exception {
             given(inventoryService.search(any(), any())).willReturn(Page.empty());
@@ -76,7 +76,7 @@ class InventoryControllerTest {
         }
 
         @Test
-        @WithMockUser
+        @WithMockUser(roles = "ADMIN")
         @DisplayName("productName + category + 가용 범위 복합 파라미터 → 200")
         void filterByMultipleParams() throws Exception {
             given(inventoryService.search(any(), any())).willReturn(Page.empty());
@@ -92,7 +92,7 @@ class InventoryControllerTest {
         }
 
         @Test
-        @WithMockUser
+        @WithMockUser(roles = "ADMIN")
         @DisplayName("잘못된 status 값 → 400")
         void invalidStatusParam_returns400() throws Exception {
             mockMvc.perform(get("/api/inventory").param("status", "INVALID_STATUS"))
@@ -114,8 +114,8 @@ class InventoryControllerTest {
     class GetByProductId {
 
         @Test
-        @WithMockUser
-        @DisplayName("인증된 사용자 — 재고 현황 조회 → 200")
+        @WithMockUser(roles = "ADMIN")
+        @DisplayName("ADMIN — 재고 현황 조회 → 200")
         void returnsInventory() throws Exception {
             given(inventoryService.getByProductId(1L)).willReturn(mock(InventoryResponse.class));
 
@@ -132,7 +132,7 @@ class InventoryControllerTest {
         }
 
         @Test
-        @WithMockUser
+        @WithMockUser(roles = "ADMIN")
         @DisplayName("존재하지 않는 상품 재고 조회 → 404")
         void returnsNotFound() throws Exception {
             given(inventoryService.getByProductId(999L))
@@ -151,8 +151,8 @@ class InventoryControllerTest {
     class GetTransactions {
 
         @Test
-        @WithMockUser
-        @DisplayName("인증된 사용자 — 이력 조회 → 200 (커서 페이지)")
+        @WithMockUser(roles = "ADMIN")
+        @DisplayName("ADMIN — 이력 조회 → 200 (커서 페이지)")
         void returnsTransactions() throws Exception {
             given(inventoryService.getTransactions(eq(1L), any(), eq(20)))
                     .willReturn(CursorPage.of(java.util.List.of(), 20, t -> t.getId()));
@@ -171,7 +171,7 @@ class InventoryControllerTest {
         }
 
         @Test
-        @WithMockUser
+        @WithMockUser(roles = "ADMIN")
         @DisplayName("재고가 없는 상품 이력 조회 → 404")
         void returnsNotFoundWhenInventoryMissing() throws Exception {
             given(inventoryService.getTransactions(eq(999L), any(), eq(20)))

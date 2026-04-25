@@ -54,6 +54,7 @@ public class AuthController {
     @Operation(summary = "Access Token 재발급",
                description = "Refresh Token으로 새 Access Token + Refresh Token 발급(rotation). 기존 Refresh Token은 무효화.")
     @PostMapping("/refresh")
+    @RateLimit(limit = 10, windowSeconds = 60, keyType = RateLimit.KeyType.IP)
     public ApiResponse<LoginResponse> refresh(@RequestBody @Valid RefreshRequest request) {
         return ApiResponse.ok(userService.refresh(request));
     }

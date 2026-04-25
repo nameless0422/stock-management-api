@@ -63,13 +63,15 @@ public class UserController {
         return ApiResponse.ok(userService.updateProfile(username, request));
     }
 
-    @Operation(summary = "비밀번호 변경", description = "현재 비밀번호 확인 후 새 비밀번호로 변경.")
+    @Operation(summary = "비밀번호 변경", description = "현재 비밀번호 확인 후 새 비밀번호로 변경. 기존 Access/Refresh Token 일괄 무효화.")
     @PatchMapping("/me/password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void changePassword(
             @AuthenticationPrincipal String username,
+            @RequestHeader("Authorization") String authHeader,
             @Valid @RequestBody ChangePasswordRequest request) {
-        userService.changePassword(username, request);
+        String accessToken = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+        userService.changePassword(username, request, accessToken);
     }
 
     @Operation(summary = "내 주문 목록 (페이징)", description = "기본: 최신순, 20건.")

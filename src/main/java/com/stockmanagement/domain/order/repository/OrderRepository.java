@@ -87,6 +87,18 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     List<Long> findExpiredPendingOrderIds(@Param("threshold") LocalDateTime threshold);
 
     /**
+     * 기준 시각 이전에 PAYMENT_IN_PROGRESS 상태로 머무른 주문 ID 목록을 반환한다.
+     *
+     * <p>결제 처리 중 오류로 {@code resetOrderOnPaymentError()}가 실패한 주문을
+     * 주기적으로 PENDING으로 복원하여 만료 스케줄러가 정리할 수 있도록 한다.
+     * updatedAt 기준으로 조회하여 최근에 PAYMENT_IN_PROGRESS로 전환된 주문을 제외한다.
+     *
+     * @param threshold 기준 시각 (현재 시각 - 허용 대기 시간)
+     */
+    @Query("SELECT o.id FROM Order o WHERE o.status = com.stockmanagement.domain.order.entity.OrderStatus.PAYMENT_IN_PROGRESS AND o.updatedAt < :threshold")
+    List<Long> findStuckPaymentInProgressOrderIds(@Param("threshold") LocalDateTime threshold);
+
+    /**
      * 주문 소유자의 userId만 조회한다 (소유권 검증 전용 — Order 전체 로드 불필요).
      *
      * @param id 주문 ID

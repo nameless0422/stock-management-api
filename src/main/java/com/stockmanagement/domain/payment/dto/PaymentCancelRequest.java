@@ -2,6 +2,7 @@ package com.stockmanagement.domain.payment.dto;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -16,6 +17,7 @@ public class PaymentCancelRequest {
 
     /** Mandatory human-readable reason for the cancellation. */
     @NotBlank(message = "cancelReason is required")
+    @Size(max = 200, message = "cancelReason must not exceed 200 characters")
     private String cancelReason;
 
     /**

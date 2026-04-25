@@ -205,9 +205,10 @@ public class OrderService {
         }
 
         // 6. 재고 예약 (fail-fast: 재고 부족이 가장 빈번한 실패 원인이므로 쿠폰/포인트 처리 전에 검증)
-        for (OrderItem item : savedOrder.getItems()) {
-            inventoryService.reserve(item.getProduct().getId(), item.getQuantity());
-        }
+        // productId 오름차순 정렬 후 예약 — 여러 주문이 동시에 같은 상품들을 예약할 때 데드락 방지
+        savedOrder.getItems().stream()
+                .sorted(java.util.Comparator.comparing(i -> i.getProduct().getId()))
+                .forEach(item -> inventoryService.reserve(item.getProduct().getId(), item.getQuantity()));
 
         // 7. 쿠폰 적용 — 쿠폰 코드가 있으면 할인 금액 계산 및 사용 기록
         if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
@@ -398,6 +399,24 @@ public class OrderService {
 
         recordHistory(order.getId(), OrderStatus.PENDING, OrderStatus.CANCELLED, "system:expiry");
         outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "SYSTEM_EXPIRY"));
+    }
+
+    /**
+     * 결제 오류로 묶인 PAYMENT_IN_PROGRESS 주문을 PENDING으로 복원한다 (스케줄러 전용).
+     *
+     * <p>Toss API 호출 중 {@code resetOrderOnPaymentError()}가 실패하면 주문이
+     * PAYMENT_IN_PROGRESS에 고착될 수 있다. 이 메서드는 일정 시간이 지난 후 주문을
+     * 다시 PENDING으로 되돌려 만료 스케줄러 또는 사용자가 재시도할 수 있도록 한다.
+     *
+     * @param id 복원할 주문 ID
+     */
+    @Transactional
+    @CacheEvict(cacheNames = "orders", key = "#id")
+    public void resetPaymentInProgressBySystem(Long id) {
+        Order order = orderRepository.findByIdWithItemsForUpdate(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        order.resetPaymentFailed();
+        recordHistory(order.getId(), OrderStatus.PAYMENT_IN_PROGRESS, OrderStatus.PENDING, "system:stuck-payment-reset");
     }
 
     /**

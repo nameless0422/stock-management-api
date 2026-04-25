@@ -74,7 +74,18 @@ public class UserService {
                 .role(UserRole.USER)
                 .build();
 
-        User savedUser = userRepository.save(user);
+        // username/email UNIQUE 경쟁 조건: 두 요청이 동시에 existsBy를 통과하면 UNIQUE 제약 위반 발생.
+        // flush()로 즉시 예외를 유도하고, 어느 필드가 중복인지 재조회해 명확한 에러 코드를 반환한다.
+        User savedUser;
+        try {
+            savedUser = userRepository.save(user);
+            userRepository.flush();
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            if (userRepository.existsByUsername(request.username())) {
+                throw new BusinessException(ErrorCode.DUPLICATE_USERNAME);
+            }
+            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+        }
         // 포인트 계정을 회원가입 시점에 미리 생성 — getOrCreate() 경쟁 조건 원천 차단
         userPointRepository.save(UserPoint.builder().userId(savedUser.getId()).build());
         return UserResponse.from(savedUser);
@@ -167,7 +178,7 @@ public class UserService {
      * 계정 탈취·비밀번호 유출 상황에서 공격자가 기존 토큰으로 재발급받지 못하도록 차단한다.
      */
     @Transactional
-    public void changePassword(String username, ChangePasswordRequest request) {
+    public void changePassword(String username, ChangePasswordRequest request, String accessToken) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
@@ -176,6 +187,8 @@ public class UserService {
         user.updatePassword(passwordEncoder.encode(request.getNewPassword()));
         // 비밀번호 변경 시 모든 기기 Refresh Token 일괄 폐기 (전체 로그아웃 효과)
         refreshTokenStore.revokeAll(username);
+        // 현재 Access Token도 블랙리스트에 등록하여 즉시 무효화 — 탈취된 토큰 차단
+        jwtBlacklist.revoke(accessToken);
     }
 
     /** 현재 인증된 사용자의 주문 목록 페이징 조회. hasReview + shipmentStatus 정보 포함. */

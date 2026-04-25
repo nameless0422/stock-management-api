@@ -120,7 +120,17 @@ public class PaymentService {
                 .amount(order.getPayableAmount())
                 .build();
 
-        Payment saved = paymentRepository.save(payment);
+        // 멱등성 키 경쟁 조건: 두 요청이 동시에 결제 레코드를 생성하면 UNIQUE(orderId) 제약 위반 발생.
+        // 이 경우 기존 레코드를 재조회해 반환하여 클라이언트에 500 대신 정상 응답을 제공한다.
+        Payment saved;
+        try {
+            saved = paymentRepository.save(payment);
+            paymentRepository.flush();
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            return paymentRepository.findByOrderId(order.getId())
+                    .map(p -> buildPrepareResponse(p, order))
+                    .orElseThrow(() -> e);
+        }
         return buildPrepareResponse(saved, order);
     }
 
@@ -257,7 +267,6 @@ public class PaymentService {
      *
      * @param event 파싱된 Webhook 페이로드
      */
-    @Transactional
     public void handleWebhook(TossWebhookEvent event) {
         if (!"PAYMENT_STATUS_CHANGED".equals(event.getEventType())) {
             log.debug("지원하지 않는 Webhook 이벤트 타입 무시: {}", event.getEventType());

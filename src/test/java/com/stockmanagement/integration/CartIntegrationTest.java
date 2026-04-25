@@ -162,9 +162,9 @@ class CartIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isEmpty());
 
-        // 재고 예약 확인
+        // 재고 예약 확인 — ADMIN 전용 엔드포인트
         mockMvc.perform(get("/api/inventory/" + productId)
-                        .header("Authorization", "Bearer " + userToken))
+                        .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reserved").value(2))
                 .andExpect(jsonPath("$.data.available").value(18));

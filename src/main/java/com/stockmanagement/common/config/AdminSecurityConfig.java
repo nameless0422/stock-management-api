@@ -71,7 +71,7 @@ public class AdminSecurityConfig {
         InMemoryUserDetailsManager detailsManager = new InMemoryUserDetailsManager(adminUser);
 
         http
-                .securityMatcher("/admin-ui/**")
+                .securityMatcher("/admin-ui/**", "/instances/**")
                 .authorizeHttpRequests(auth -> auth
                         // SBA UI 정적 자원과 로그인 페이지는 공개
                         .requestMatchers("/admin-ui/assets/**", "/admin-ui/login").permitAll()

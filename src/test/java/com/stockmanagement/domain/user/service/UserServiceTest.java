@@ -323,7 +323,7 @@ class UserServiceTest {
     class ChangePassword {
 
         @Test
-        @DisplayName("정상 변경 — 새 비밀번호 인코딩 저장 + 모든 Refresh Token 폐기")
+        @DisplayName("정상 변경 — 새 비밀번호 인코딩 저장 + 모든 Refresh Token 폐기 + Access Token 무효화")
         void changesPasswordAndRevokesAllTokens() {
             ChangePasswordRequest request = new ChangePasswordRequest();
             org.springframework.test.util.ReflectionTestUtils.setField(request, "currentPassword", "old-pw");
@@ -333,10 +333,11 @@ class UserServiceTest {
             given(passwordEncoder.matches("old-pw", "encoded-pw")).willReturn(true);
             given(passwordEncoder.encode("new-pw")).willReturn("new-encoded-pw");
 
-            userService.changePassword("testuser", request);
+            userService.changePassword("testuser", request, "test-access-token");
 
             verify(passwordEncoder).encode("new-pw");
             verify(refreshTokenStore).revokeAll("testuser");
+            verify(jwtBlacklist).revoke("test-access-token");
         }
 
         @Test
@@ -349,7 +350,7 @@ class UserServiceTest {
             given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
             given(passwordEncoder.matches("wrong-pw", "encoded-pw")).willReturn(false);
 
-            assertThatThrownBy(() -> userService.changePassword("testuser", request))
+            assertThatThrownBy(() -> userService.changePassword("testuser", request, "test-token"))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_CREDENTIALS));

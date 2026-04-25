@@ -62,8 +62,13 @@ public class DeliveryAddressService {
                 .address2(request.getAddress2())
                 .build();
 
+        long count = repository.countByUserId(userId);
+        // 배송지 최대 20개 제한 — 무제한 등록으로 인한 DB 비대화 방지
+        if (count >= 20) {
+            throw new BusinessException(ErrorCode.DELIVERY_ADDRESS_LIMIT_EXCEEDED);
+        }
         // 첫 번째 배송지 → 자동 기본 배송지 설정
-        if (repository.countByUserId(userId) == 0) {
+        if (count == 0) {
             address.setAsDefault();
         }
 

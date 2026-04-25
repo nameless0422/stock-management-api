@@ -45,6 +45,7 @@ public enum ErrorCode {
     // ===== DeliveryAddress =====
     DELIVERY_ADDRESS_NOT_FOUND(HttpStatus.NOT_FOUND, "배송지를 찾을 수 없습니다."),
     DELIVERY_ADDRESS_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 배송지만 접근할 수 있습니다."),
+    DELIVERY_ADDRESS_LIMIT_EXCEEDED(HttpStatus.UNPROCESSABLE_ENTITY, "배송지는 최대 20개까지 등록할 수 있습니다."),
 
     // ===== Cart =====
     CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니에서 해당 상품을 찾을 수 없습니다."),
