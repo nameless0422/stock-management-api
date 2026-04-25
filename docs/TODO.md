@@ -40,46 +40,6 @@ Client
 
 ---
 
-### 114. 주문 멱등성 키 경쟁 조건 — `DataIntegrityViolationException` 미처리
-
-**위치**: `domain/order/service/OrderService.java:119-122`
-
-**문제**: `findByIdempotencyKey()` 조회 시 락이 없어 두 요청이 동시에 같은 idempotencyKey로 진입하면 모두 `existing.isPresent() == false`를 반환한다. 두 번째 `save()`에서 DB UNIQUE 제약 위반으로 `DataIntegrityViolationException`이 발생하지만, 이 시점에 첫 번째 주문의 재고 예약은 이미 실행된 상태다. 클라이언트에 500 에러 반환.
-
-**개선**: `DataIntegrityViolationException`을 catch하여 기존 주문을 재조회해 반환. 또는 idempotencyKey 기준 Redis 분산 락 획득.
-
----
-
-### 115. 매출 통계 `usedPoints` 미차감 — 매출액 과대 집계
-
-**위치**: `domain/order/repository/OrderRepository.java:154-158`
-
-**문제**: `sumRevenueByCreatedAtBetween()`가 `SUM(o.totalAmount - o.discountAmount)`로 계산하는데 `usedPoints`를 차감하지 않는다. 50,000원 주문에 10,000포인트 사용 시 실제 결제액은 40,000원이지만 통계는 50,000원으로 집계된다.
-
-**개선**: `SUM(o.totalAmount - o.discountAmount - o.usedPoints)` 로 변경. 또는 GMV(총 주문액)와 실결제액을 분리 집계.
-
----
-
-### 116. `OrderCreateRequest.usePoints` — 음수 검증 없음
-
-**위치**: `domain/order/dto/OrderCreateRequest.java:54`
-
-**문제**: `usePoints` 필드에 `@Min(0)` 검증이 없다. 음수 전송 시 `usePointsLong > 0` 조건으로 차감은 스킵되지만, `Order.usedPoints`에 음수가 저장되어 `getPayableAmount() = totalAmount - discountAmount - (-100) = totalAmount + 100`이 된다. 결제 금액 왜곡.
-
-**개선**: `@Min(0)` 검증 추가.
-
----
-
-### 117. `Inventory.confirmAllocation()` — reserved 부족 시 available 불변식 위반
-
-**위치**: `domain/inventory/entity/Inventory.java:143-146`
-
-**문제**: `confirmAllocation()`에서 `reserved = Math.max(0, reserved - quantity)`, `allocated += quantity`를 수행한다. reserved=2, quantity=5인 경우 reserved는 0으로 클램핑(실제 감소 2)되지만 allocated는 5 전체가 증가하여 3단위의 재고가 허공에서 소멸한다. #109의 하위 항목이지만 별도 시나리오.
-
-**개선**: #109와 함께 수정 — Entity에서 `quantity > reserved` 시 예외를 던지도록 통일.
-
----
-
 ## 🟠 중요 — 보안·운영 안정성 (운영 전 권장)
 
 ---

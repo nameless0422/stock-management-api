@@ -150,8 +150,8 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
                                           @Param("start") LocalDateTime start,
                                           @Param("end") LocalDateTime end);
 
-    /** 기간 내 CONFIRMED 주문의 매출액 합계 (totalAmount - discountAmount) */
-    @Query("SELECT COALESCE(SUM(o.totalAmount - o.discountAmount), 0) FROM Order o " +
+    /** 기간 내 CONFIRMED 주문의 실결제 매출액 합계 (totalAmount - discountAmount - usedPoints) */
+    @Query("SELECT COALESCE(SUM(o.totalAmount - o.discountAmount - o.usedPoints), 0) FROM Order o " +
            "WHERE o.status = com.stockmanagement.domain.order.entity.OrderStatus.CONFIRMED " +
            "AND o.createdAt >= :start AND o.createdAt < :end")
     BigDecimal sumRevenueByCreatedAtBetween(@Param("start") LocalDateTime start,

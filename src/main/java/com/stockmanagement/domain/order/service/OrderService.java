@@ -37,6 +37,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -191,7 +192,17 @@ public class OrderService {
         }
 
         // 5. Order 저장 (cascade로 OrderItems도 함께 저장)
-        Order savedOrder = orderRepository.save(order);
+        // 멱등성 키 경쟁 조건: 두 요청이 동시에 step 1을 통과하면 UNIQUE 제약 위반 발생.
+        // 이 경우 기존 주문을 재조회해 반환하여 클라이언트에 500 대신 정상 응답을 제공한다.
+        Order savedOrder;
+        try {
+            savedOrder = orderRepository.save(order);
+            orderRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            return orderRepository.findByIdempotencyKey(request.getIdempotencyKey())
+                    .map(OrderResponse::from)
+                    .orElseThrow(() -> e);
+        }
 
         // 6. 재고 예약 (fail-fast: 재고 부족이 가장 빈번한 실패 원인이므로 쿠폰/포인트 처리 전에 검증)
         for (OrderItem item : savedOrder.getItems()) {

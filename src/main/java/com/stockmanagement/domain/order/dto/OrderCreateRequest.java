@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.order.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -50,7 +51,8 @@ public class OrderCreateRequest {
     @Size(max = 50, message = "쿠폰 코드는 50자 이하여야 합니다.")
     private String couponCode;
 
-    /** 사용할 포인트 — 선택 항목. null 또는 0이면 포인트 미사용 */
+    /** 사용할 포인트 — 선택 항목. null 또는 0이면 포인트 미사용. 음수 불가 */
+    @Min(value = 0, message = "사용 포인트는 0 이상이어야 합니다.")
     private Long usePoints;
 
     /** 장바구니 결제 전환 등 내부 호출용 팩토리 메서드 (쿠폰/포인트/배송지 미적용). */

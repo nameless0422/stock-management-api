@@ -643,6 +643,10 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 5 | saveAll() 예외 무음 삼킴 | `InventorySnapshotScheduler` — `DataIntegrityViolationException` 분리, 장애 시 re-throw |
 | 6 | SpEL null NPE | `DistributedLockAspect` — `resolveKey()` null/예외 시 `BusinessException` throw |
 | 113 | 부분 취소 금액 DB 미반영 — Toss 부분 환불 + DB 전액 CANCELLED | `Payment.cancel(reason, cancelAmount)` 2인자, `cancelledAmount` 누적 필드, `PARTIAL_CANCELLED` 상태 활성화, 부분 취소 시 `orderService.refund()` 미실행 |
+| 114 | 주문 멱등성 키 경쟁 조건 — `save()` UNIQUE 위반 시 500 반환 | `DataIntegrityViolationException` catch 후 `findByIdempotencyKey()` 재조회 반환 (`flush()` 추가로 JPA 쓰기 지연 즉시 방출) |
+| 115 | 매출 통계 `usedPoints` 미차감 — 매출액 과대 집계 | `sumRevenueByCreatedAtBetween()` JPQL `SUM(totalAmount - discountAmount - usedPoints)`로 수정 |
+| 116 | `OrderCreateRequest.usePoints` 음수 허용 — 결제 금액 왜곡 | `@Min(0)` 추가, 음수 전송 시 `getPayableAmount()` 과다 계산 차단 |
+| 117 | `Inventory.confirmAllocation()` reserved 클램핑 — 재고 불변식 위반 | `quantity > reserved` 시 `INVENTORY_STATE_INCONSISTENT` 예외 throw (기존 `Math.max(0, ...)` 클램핑 제거) |
 
 ---
 

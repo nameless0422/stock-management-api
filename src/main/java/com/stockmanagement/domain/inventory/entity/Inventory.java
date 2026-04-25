@@ -1,5 +1,7 @@
 package com.stockmanagement.domain.inventory.entity;
 
+import com.stockmanagement.common.exception.BusinessException;
+import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.exception.InsufficientStockException;
 import com.stockmanagement.domain.product.entity.Product;
 import jakarta.persistence.*;
@@ -138,10 +140,20 @@ public class Inventory {
      * 결제 완료 시 예약을 확정으로 전환한다.
      * reserved를 감소시키고 allocated를 증가시킨다.
      *
+     * <p>quantity > reserved이면 재고 불변식(available = onHand - reserved - allocated)이
+     * 깨지므로 예외를 던진다. 정상 흐름에서는 발생하지 않아야 하며 발생 시 운영 점검이 필요하다.
+     *
      * @param quantity 확정 수량
+     * @throws BusinessException quantity &gt; reserved인 경우 INVENTORY_STATE_INCONSISTENT
      */
     public void confirmAllocation(int quantity) {
-        this.reserved = Math.max(0, this.reserved - quantity);
+        if (quantity > this.reserved) {
+            throw new BusinessException(ErrorCode.INVENTORY_STATE_INCONSISTENT,
+                    String.format("confirmAllocation 실패: quantity=%d > reserved=%d (productId=%s)",
+                            quantity, this.reserved,
+                            this.product != null ? this.product.getId() : "unknown"));
+        }
+        this.reserved -= quantity;
         this.allocated += quantity;
     }
 

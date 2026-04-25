@@ -143,6 +143,32 @@ class OrderServiceTest {
         }
 
         @Test
+        @DisplayName("멱등성 키 경쟁 조건 — save()에서 DataIntegrityViolationException 발생 시 기존 주문 반환")
+        void returnsExistingOrderOnDataIntegrityViolation() {
+            OrderItemRequest itemRequest = mock(OrderItemRequest.class);
+            given(itemRequest.getProductId()).willReturn(1L);
+            given(itemRequest.getQuantity()).willReturn(1);
+            given(itemRequest.getUnitPrice()).willReturn(new BigDecimal("10000"));
+
+            OrderCreateRequest request = mock(OrderCreateRequest.class);
+            given(request.getIdempotencyKey()).willReturn("idem-key-race");
+            given(request.getUserId()).willReturn(1L);
+            given(request.getItems()).willReturn(List.of(itemRequest));
+
+            given(orderRepository.findByIdempotencyKey("idem-key-race"))
+                    .willReturn(Optional.empty())   // 1차 조회: 없음 → 저장 진행
+                    .willReturn(Optional.of(order)); // 2차 조회(catch 내부): 기존 주문 반환
+            given(productRepository.findAllById(anyIterable())).willReturn(List.of(product));
+            given(orderRepository.save(any(Order.class)))
+                    .willThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate"));
+
+            OrderResponse response = orderService.create(request);
+
+            assertThat(response.getIdempotencyKey()).isEqualTo("idem-key-001");
+            verifyNoInteractions(inventoryService);
+        }
+
+        @Test
         @DisplayName("멱등성 키 중복 — 기존 주문을 반환하고 저장/예약을 수행하지 않는다")
         void returnsExistingOrderForDuplicateIdempotencyKey() {
             OrderCreateRequest request = mock(OrderCreateRequest.class);
