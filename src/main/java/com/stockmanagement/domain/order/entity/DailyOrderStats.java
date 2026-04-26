@@ -44,7 +44,7 @@ public class DailyOrderStats {
     private int cancelledOrders;
 
     /** 전일 매출액 (CONFIRMED 기준, 쿠폰 할인 차감) */
-    @Column(nullable = false, precision = 19, scale = 2)
+    @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal totalRevenue;
 
     @CreationTimestamp

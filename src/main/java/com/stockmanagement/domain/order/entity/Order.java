@@ -50,7 +50,7 @@ public class Order {
     private OrderStatus status;
 
     /** 주문 총액 — 생성 시 OrderItems 합계로 산출 */
-    @Column(nullable = false, precision = 12, scale = 2)
+    @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal totalAmount;
 
     /**
@@ -78,7 +78,7 @@ public class Order {
     private Long couponId;
 
     /** 쿠폰 할인 금액 (기본 0). */
-    @Column(nullable = false, precision = 19, scale = 2)
+    @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal discountAmount;
 
     /** 주문 시 사용한 포인트 (기본 0). */

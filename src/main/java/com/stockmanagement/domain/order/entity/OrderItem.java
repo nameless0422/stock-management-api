@@ -48,11 +48,11 @@ public class OrderItem {
     private int quantity;
 
     /** 주문 당시 단가 — 이후 상품 가격 변경과 무관하게 보존 */
-    @Column(nullable = false, precision = 12, scale = 2)
+    @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal unitPrice;
 
     /** 소계 = unitPrice × quantity */
-    @Column(nullable = false, precision = 12, scale = 2)
+    @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal subtotal;
 
     @CreationTimestamp

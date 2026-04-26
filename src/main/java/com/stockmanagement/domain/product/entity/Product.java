@@ -42,7 +42,7 @@ public class Product {
     private String description;
 
     /** 판매가 — 소수점 2자리까지 허용 (최대 12자리) */
-    @Column(nullable = false, precision = 12, scale = 2)
+    @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal price;
 
     /** Stock Keeping Unit — 상품을 고유하게 식별하는 관리 코드 */

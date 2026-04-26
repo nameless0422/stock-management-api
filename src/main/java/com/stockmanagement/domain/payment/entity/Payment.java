@@ -54,7 +54,7 @@ public class Payment {
     private String tossOrderId;
 
     /** Payment amount agreed at prepare time; used for server-side amount verification. */
-    @Column(nullable = false, precision = 12, scale = 2)
+    @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal amount;
 
     @Enumerated(EnumType.STRING)
@@ -72,7 +72,7 @@ public class Payment {
     private LocalDateTime approvedAt;
 
     /** 누적 취소 금액. 전액 취소 시 amount와 동일, 부분 취소 시 취소된 부분 합계. */
-    @Column(precision = 12, scale = 2)
+    @Column(precision = 15, scale = 2)
     private BigDecimal cancelledAmount;
 
     /** Reason provided by the caller when cancelling the payment. */
