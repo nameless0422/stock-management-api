@@ -9,9 +9,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -114,6 +117,39 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(ErrorCode.LOCK_ACQUISITION_FAILED.getMessage()));
+    }
+
+    /**
+     * JSON 파싱 실패 처리 — malformed JSON body 등.
+     * 400 Bad Request를 반환한다.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
+        log.warn("HttpMessageNotReadableException: {}", e.getMessage());
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("요청 본문을 읽을 수 없습니다. JSON 형식을 확인해주세요."));
+    }
+
+    /**
+     * 쿼리 파라미터 타입 불일치 처리 (예: Long 파라미터에 문자열 전달).
+     * 400 Bad Request를 반환한다.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.warn("MethodArgumentTypeMismatchException: param={}, value={}", e.getName(), e.getValue());
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("'" + e.getName() + "' 파라미터의 타입이 올바르지 않습니다."));
+    }
+
+    /**
+     * 필수 쿼리 파라미터 누락 처리.
+     * 400 Bad Request를 반환한다.
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParam(MissingServletRequestParameterException e) {
+        log.warn("MissingServletRequestParameterException: param={}", e.getParameterName());
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("필수 파라미터 '" + e.getParameterName() + "'이(가) 누락되었습니다."));
     }
 
     /**
