@@ -403,7 +403,8 @@ class PaymentServiceTest {
             given(request.getCancelReason()).willReturn("고객 요청");
             given(request.getCancelAmount()).willReturn(null);
 
-            given(transactionHelper.loadAndValidateForCancel(eq("pk-001"), anyLong(), anyBoolean())).willReturn(Optional.empty());
+            given(transactionHelper.loadAndValidateForCancel(eq("pk-001"), anyLong(), anyBoolean()))
+                    .willReturn(new PaymentTransactionHelper.CancelValidation(Optional.empty(), 1L));
 
             donePayment.cancel("고객 요청", null);
             PaymentResponse cancelledResponse = PaymentResponse.from(donePayment);
@@ -413,6 +414,7 @@ class PaymentServiceTest {
 
             verify(tossPaymentsClient).cancel(eq("pk-001"), any());
             verify(transactionHelper).applyCancelResult(eq("pk-001"), eq("고객 요청"), isNull());
+            verify(transactionHelper, never()).resetCancellationFailed(anyLong());
             assertThat(response.getStatus()).isEqualTo(PaymentStatus.CANCELLED);
         }
 
@@ -422,7 +424,7 @@ class PaymentServiceTest {
             donePayment.cancel("이미 취소됨", null);
             PaymentResponse cancelledResponse = PaymentResponse.from(donePayment);
             given(transactionHelper.loadAndValidateForCancel(eq("pk-001"), anyLong(), anyBoolean()))
-                    .willReturn(Optional.of(cancelledResponse));
+                    .willReturn(new PaymentTransactionHelper.CancelValidation(Optional.of(cancelledResponse), 1L));
 
             PaymentResponse response = paymentService.cancel("pk-001", mock(PaymentCancelRequest.class), 1L, false);
 
@@ -492,7 +494,7 @@ class PaymentServiceTest {
             given(request.getCancelAmount()).willReturn(cancelAmount);
 
             given(transactionHelper.loadAndValidateForCancel(eq("pk-001"), anyLong(), anyBoolean()))
-                    .willReturn(Optional.empty());
+                    .willReturn(new PaymentTransactionHelper.CancelValidation(Optional.empty(), 1L));
 
             donePayment.cancel("부분 환불", cancelAmount);
             PaymentResponse partialResponse = PaymentResponse.from(donePayment);
@@ -505,6 +507,23 @@ class PaymentServiceTest {
             verify(transactionHelper).applyCancelResult(eq("pk-001"), eq("부분 환불"), eq(cancelAmount));
             assertThat(response.getStatus()).isEqualTo(PaymentStatus.PARTIAL_CANCELLED);
             assertThat(response.getCancelledAmount()).isEqualByComparingTo("3000");
+        }
+
+        @Test
+        @DisplayName("Toss 취소 API 오류 시 CANCEL_IN_PROGRESS → CONFIRMED 복원(resetCancellationFailed) 호출")
+        void resetsOrderOnCancelError() {
+            given(transactionHelper.loadAndValidateForCancel(eq("pk-001"), anyLong(), anyBoolean()))
+                    .willReturn(new PaymentTransactionHelper.CancelValidation(Optional.empty(), 1L));
+            doThrow(new BusinessException(ErrorCode.TOSS_PAYMENTS_ERROR))
+                    .when(tossPaymentsClient).cancel(anyString(), any());
+
+            assertThatThrownBy(() -> paymentService.cancel("pk-001", mock(PaymentCancelRequest.class), 1L, false))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.TOSS_PAYMENTS_ERROR));
+
+            verify(transactionHelper).resetCancellationFailed(1L);
+            verify(transactionHelper, never()).applyCancelResult(any(), any(), any());
         }
     }
 

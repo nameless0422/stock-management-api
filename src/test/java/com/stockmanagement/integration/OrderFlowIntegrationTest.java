@@ -56,9 +56,9 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
 
         long orderId = objectMapper.readTree(createOrderBody).path("data").path("id").asLong();
 
-        // 4. 재고 예약 확인 (reserved = 3, available = 47)
+        // 4. 재고 예약 확인 (reserved = 3, available = 47) — ADMIN 전용 엔드포인트
         mockMvc.perform(get("/api/inventory/" + productId)
-                        .header("Authorization", "Bearer " + userToken))
+                        .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.onHand").value(50))
                 .andExpect(jsonPath("$.data.reserved").value(3))
@@ -70,9 +70,9 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"));
 
-        // 6. 재고 예약 해제 확인 (reserved = 0, available = 50 복원)
+        // 6. 재고 예약 해제 확인 (reserved = 0, available = 50 복원) — ADMIN 전용 엔드포인트
         mockMvc.perform(get("/api/inventory/" + productId)
-                        .header("Authorization", "Bearer " + userToken))
+                        .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reserved").value(0))
                 .andExpect(jsonPath("$.data.available").value(50));
@@ -198,9 +198,9 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
         // 동일한 주문 ID 반환 확인
         assertEquals(firstOrderId, secondOrderId);
 
-        // 재고 이중 예약 없음 — reserved = 2 (중복 아님)
+        // 재고 이중 예약 없음 — reserved = 2 (중복 아님) — ADMIN 전용 엔드포인트
         mockMvc.perform(get("/api/inventory/" + productId)
-                        .header("Authorization", "Bearer " + userToken))
+                        .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reserved").value(2))
                 .andExpect(jsonPath("$.data.available").value(18));

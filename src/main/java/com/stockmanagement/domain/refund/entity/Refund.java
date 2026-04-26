@@ -20,7 +20,8 @@ public class Refund {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "payment_id", nullable = false, unique = true, updatable = false)
+    /** 부분 취소 여러 건 허용을 위해 unique 제약 제거 (V39 migration 참조). */
+    @Column(name = "payment_id", nullable = false, updatable = false)
     private Long paymentId;
 
     @Column(name = "order_id", nullable = false, updatable = false)

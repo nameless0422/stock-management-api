@@ -14,6 +14,7 @@ import org.springframework.http.MediaType;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -53,6 +54,19 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
                 .build();
         payment.approve("pk-" + System.nanoTime(), "카드",
                 LocalDateTime.now().minusMinutes(1), LocalDateTime.now());
+        return paymentRepository.save(payment);
+    }
+
+    /** PARTIAL_CANCELLED 상태의 Payment를 DB에 직접 저장하고 반환한다. */
+    private Payment createPartialCancelledPayment(long orderId) {
+        Payment payment = Payment.builder()
+                .orderId(orderId)
+                .tossOrderId("toss-" + System.nanoTime())
+                .amount(BigDecimal.valueOf(20000))
+                .build();
+        payment.approve("pk-" + System.nanoTime(), "카드",
+                LocalDateTime.now().minusMinutes(10), LocalDateTime.now().minusMinutes(9));
+        payment.cancel("부분 취소", BigDecimal.valueOf(10000)); // → PARTIAL_CANCELLED
         return paymentRepository.save(payment);
     }
 
@@ -114,6 +128,28 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.paymentId").value(payment.getId()))
                 .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+    }
+
+    @Test
+    @DisplayName("PARTIAL_CANCELLED 결제 — 이미 환불 이력 있어도 REFUND_ALREADY_EXISTS(409) 반환 안 함")
+    void requestRefund_partialCancelledAllowsSecond() throws Exception {
+        String userToken = signupAndLogin("user5", "password1", "u5@test.com");
+        long userId = userRepository.findByUsername("user5").orElseThrow().getId();
+
+        long orderId = createConfirmedOrder(userId);
+        Payment payment = createPartialCancelledPayment(orderId);
+        // COMPLETED 환불 이력 1건 존재
+        createCompletedRefund(payment.getId(), orderId, userId);
+
+        // 추가 부분 취소 요청 — REFUND_ALREADY_EXISTS(409)가 아닌 다른 응답(Toss 연동 실패)
+        int status = mockMvc.perform(post("/api/refunds")
+                        .header("Authorization", "Bearer " + userToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format(
+                                "{\"paymentId\":%d,\"reason\":\"추가 부분 취소\"}",
+                                payment.getId())))
+                .andReturn().getResponse().getStatus();
+        assertThat(status).isNotEqualTo(409);
     }
 
     @Test

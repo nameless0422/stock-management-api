@@ -4,6 +4,7 @@ import com.stockmanagement.domain.product.wishlist.entity.WishlistItem;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -28,4 +29,9 @@ public interface WishlistRepository extends JpaRepository<WishlistItem, Long> {
     @Query("SELECT w.productId FROM WishlistItem w WHERE w.userId = :userId AND w.productId IN :productIds")
     Set<Long> findWishlistedProductIds(@Param("userId") Long userId,
                                        @Param("productIds") Collection<Long> productIds);
+
+    /** 회원 탈퇴 시 사용자의 위시리스트 전체를 일괄 삭제한다. */
+    @Modifying
+    @Query("DELETE FROM WishlistItem w WHERE w.userId = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 }

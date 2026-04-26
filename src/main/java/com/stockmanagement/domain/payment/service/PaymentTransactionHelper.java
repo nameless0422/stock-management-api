@@ -263,41 +263,63 @@ class PaymentTransactionHelper {
     // ===== cancel 흐름 =====
 
     /**
+     * 취소 검증 결과 홀더.
+     *
+     * @param earlyReturn 이미 CANCELLED이면 캐시 반환용 응답(non-empty), 정상 진행이면 empty
+     * @param orderId     취소 대상 주문 ID (Toss 오류 복원에 사용)
+     */
+    record CancelValidation(Optional<PaymentResponse> earlyReturn, long orderId) {}
+
+    /**
      * 결제 취소 전 DB 검증 트랜잭션 (짧게 끝난다).
      *
      * <p>비관적 락({@code SELECT ... FOR UPDATE})으로 payment 행을 잠그고 소유권·상태를 검증한다.
+     * 상태가 DONE/PARTIAL_CANCELLED이면 주문을 CANCEL_IN_PROGRESS로 전환하여 이 TX 커밋 시 DB에 반영한다.
      * Redis 장애 등으로 분산 락이 우회된 경우에도 DB 레벨에서 중복 취소를 방지한다.
      * 메서드가 반환되면 DB 커넥션은 즉시 반환된다.
      *
      * @param paymentKey Toss 결제 키
      * @param userId     요청자 userId (JWT claim에서 추출 — IDOR 방지용 소유권 검증)
      * @param isAdmin    ADMIN 권한 여부 (ADMIN은 모든 결제 취소 가능)
-     * @return 이미 CANCELLED이면 {@code Optional.of(response)}, 정상 진행이면 {@code Optional.empty()}
+     * @return earlyReturn이 present이면 이미 처리된 상태, empty이면 정상 진행
      */
     @Transactional
-    Optional<PaymentResponse> loadAndValidateForCancel(String paymentKey, Long userId, boolean isAdmin) {
+    CancelValidation loadAndValidateForCancel(String paymentKey, Long userId, boolean isAdmin) {
         Payment payment = paymentRepository.findByPaymentKeyWithLock(paymentKey)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
+        Order order = orderRepository.findById(payment.getOrderId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
         // 소유권 검증 — paymentKey를 아는 누구나 타인의 결제를 취소할 수 있는 IDOR 방지
-        // JWT claim에서 추출한 userId 사용 — DB users 조회 불필요
-        if (!isAdmin) {
-            Order order = orderRepository.findById(payment.getOrderId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-            if (!order.getUserId().equals(userId)) {
-                throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
-            }
+        if (!isAdmin && !order.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
         }
 
         if (payment.getStatus() == PaymentStatus.CANCELLED) {
-            return Optional.of(PaymentResponse.from(payment));
+            return new CancelValidation(Optional.of(PaymentResponse.from(payment)), order.getId());
         }
         if (payment.getStatus() != PaymentStatus.DONE
                 && payment.getStatus() != PaymentStatus.PARTIAL_CANCELLED) {
             throw new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS);
         }
 
-        return Optional.empty();
+        // CONFIRMED → CANCEL_IN_PROGRESS: TX 커밋 시 DB에 반영되어 중복 취소 경쟁 차단
+        order.startCancellation();
+        return new CancelValidation(Optional.empty(), order.getId());
+    }
+
+    /**
+     * Toss 취소 API 오류 시 CANCEL_IN_PROGRESS → CONFIRMED 복원 (독립 트랜잭션).
+     *
+     * <p>PaymentService.cancel()의 catch 블록에서 호출한다.
+     * REQUIRES_NEW를 사용하여 외부 트랜잭션 롤백과 독립적으로 DB에 커밋된다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    void resetCancellationFailed(long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        order.resetCancellationFailed();
     }
 
     /**

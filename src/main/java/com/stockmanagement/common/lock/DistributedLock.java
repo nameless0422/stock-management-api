@@ -25,8 +25,8 @@ public @interface DistributedLock {
     /** 락 획득 대기 최대 시간 (기본 5초) */
     long waitTime() default 5;
 
-    /** 락 보유 최대 시간 — 이 시간이 지나면 자동 해제 (기본 3초) */
-    long leaseTime() default 3;
+    /** 락 보유 최대 시간 — 이 시간이 지나면 자동 해제 (기본 10초) */
+    long leaseTime() default 10;
 
     TimeUnit timeUnit() default TimeUnit.SECONDS;
 

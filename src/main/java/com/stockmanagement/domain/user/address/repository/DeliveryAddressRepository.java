@@ -4,6 +4,7 @@ import com.stockmanagement.domain.user.address.entity.DeliveryAddress;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
@@ -38,4 +39,9 @@ public interface DeliveryAddressRepository extends JpaRepository<DeliveryAddress
 
     /** 사용자의 배송지 수 조회 (배송지 삭제 후 다른 배송지 자동 지정에 사용) */
     long countByUserId(Long userId);
+
+    /** 회원 탈퇴 시 사용자의 배송지 전체를 일괄 삭제한다. orders.delivery_address_id는 ON DELETE SET NULL. */
+    @Modifying
+    @Query("DELETE FROM DeliveryAddress d WHERE d.userId = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 }

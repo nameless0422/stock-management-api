@@ -643,6 +643,10 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 5 | saveAll() 예외 무음 삼킴 | `InventorySnapshotScheduler` — `DataIntegrityViolationException` 분리, 장애 시 re-throw |
 | 6 | SpEL null NPE | `DistributedLockAspect` — `resolveKey()` null/예외 시 `BusinessException` throw |
 | 113 | 부분 취소 금액 DB 미반영 — Toss 부분 환불 + DB 전액 CANCELLED | `Payment.cancel(reason, cancelAmount)` 2인자, `cancelledAmount` 누적 필드, `PARTIAL_CANCELLED` 상태 활성화, 부분 취소 시 `orderService.refund()` 미실행 |
+| 114 | 주문 멱등성 키 경쟁 조건 — `save()` UNIQUE 위반 시 500 반환 | `DataIntegrityViolationException` catch 후 `findByIdempotencyKey()` 재조회 반환 (`flush()` 추가로 JPA 쓰기 지연 즉시 방출) |
+| 115 | 매출 통계 `usedPoints` 미차감 — 매출액 과대 집계 | `sumRevenueByCreatedAtBetween()` JPQL `SUM(totalAmount - discountAmount - usedPoints)`로 수정 |
+| 116 | `OrderCreateRequest.usePoints` 음수 허용 — 결제 금액 왜곡 | `@Min(0)` 추가, 음수 전송 시 `getPayableAmount()` 과다 계산 차단 |
+| 117 | `Inventory.confirmAllocation()` reserved 클램핑 — 재고 불변식 위반 | `quantity > reserved` 시 `INVENTORY_STATE_INCONSISTENT` 예외 throw (기존 `Math.max(0, ...)` 클램핑 제거) |
 
 ---
 
@@ -656,11 +660,23 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 63 | Actuator 엔드포인트 과다 노출 | `env/heapdump/threaddump/beans/mappings/loggers` 비활성화 |
 | 56 | PaymentController IDOR | 소유권 검증 + `orderRepository.findUserIdById()` |
 | 82 | 회원 탈퇴 시 Access Token 미무효화 (최대 24시간 접근 가능) | `deactivate()` 시 현재 Access Token `jwtBlacklist.revoke()` 등록 |
+| 125 | `GET /api/inventory/**` 미인증 사용자 접근 가능 — 재고 민감 정보 노출 | SecurityConfig에 `GET /api/inventory/**` ADMIN 전용 규칙 추가 |
+| 134 | 비밀번호 변경 시 Access Token 미무효화 — 탈취된 토큰 24시간 유효 | `changePassword()` 3인자 추가, `jwtBlacklist.revoke(accessToken)` 호출 |
+| 142 | `AdminSecurityConfig` securityMatcher `/instances/**` 누락 — SBA 클라이언트 등록 시 JWT 체인으로 라우팅 | `securityMatcher("/admin-ui/**", "/instances/**")` |
 | 97 | `AuthController.logout()` 인증 없이 호출 가능 | `/api/auth/logout`을 `authenticated()` 규칙 적용, SecurityConfig 분리 |
 | 85 | `CacheConfig LaissezFaireSubTypeValidator` — RCE 가능 | `BasicPolymorphicTypeValidator` 화이트리스트 (`com.stockmanagement.`, `java.util.`, `java.time.`) |
 | 84 | `SignupRequest.username` 패턴 검증 없음 — Redis 키 오염 | `@Pattern(regexp = "^[a-zA-Z0-9_-]+$")` 추가 |
 | 89 | `PresignedUrlRequest.fileExtension` 문자 검증 없음 | `@Pattern(regexp = "^[a-zA-Z0-9]{1,10}$")` 추가 |
 | 64 | `CouponValidateRequest @Size` 누락 | `@Size(min=8, max=50)` 추가 |
+| 121 | `PaymentService.handleWebhook()` `@Transactional` — `REQUIRES_NEW` 내부 호출 시 커넥션 이중 점유 | 메서드 레벨 `@Transactional` 제거 (클래스 레벨 readOnly 사용) |
+| 122 | `PaymentCancelRequest.cancelReason` 길이 미검증 — DB truncation 위험 | `@Size(max=200)` 추가 |
+| 123 | `PaymentConfirmRequest` paymentKey/tossOrderId 길이 미검증 | `@Size(max=200)` / `@Size(max=64)` 추가 |
+| 124 | `DistributedLock.leaseTime` 기본값 3초 — 느린 쿼리 시 락 자동 해제 | 기본값 10초로 변경 |
+| 138 | `/api/auth/refresh` Rate Limit 없음 — 무제한 토큰 발급 가능 | `@RateLimit(limit=10, windowSeconds=60, keyType=IP)` 추가 |
+| 140 | `UpdateProfileRequest.email` 길이 미검증 | `@Size(max=100)` 추가 |
+| 141 | `ChangePasswordRequest.newPassword` 최대 길이 미검증 — BCrypt 72바이트 초과 묵살 | `@Size(max=100)` 추가 |
+| 143 | `DeliveryAddressService.create()` 개수 제한 없음 — 무제한 등록 DoS 가능 | 20개 초과 시 `DELIVERY_ADDRESS_LIMIT_EXCEEDED` 예외, `ErrorCode` 추가 |
+| 59 | `application.properties` useSSL=false — 운영 배포 시 평문 전송 위험 | 운영 배포 시 `useSSL=true` 변경 주석 추가 |
 | 57 | `TossWebhookVerifier` Mac 직렬화 위험 | 싱글턴 + `synchronized` → 호출마다 `Mac.getInstance()` |
 | 100 | `RequestIdFilter` 외부 `X-Request-Id` 무검증 — 로그 인젝션 | 길이 64자 상한 + 영숫자/하이픈 패턴 검증, 초과 시 UUID 생성 |
 
@@ -673,6 +689,10 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 66 | `PaymentService.confirm()` catch — `release()` 미실행 가능 | `try-finally`로 `release()` 보장 |
 | 72 | `CouponService.releaseCoupon()` — `usageCount` lost update | `findByIdWithLock()` 비관적 락으로 교체 |
 | 73 | `CouponService.claim()/issueToUser()` TOCTOU — 제네릭 409 | `DataIntegrityViolationException` catch → `BusinessException(COUPON_ALREADY_ISSUED)` 재발행 |
+| 119 | `PaymentService.prepare()` UNIQUE(orderId) 경쟁 조건 — 동시 요청 시 500 | `save()+flush()` `DataIntegrityViolationException` catch, `findByOrderId()` 재조회 반환 |
+| 120 | 재고 예약 순서 비결정적 — 데드락 가능성 | `savedOrder.getItems()` productId 오름차순 정렬 후 `reserve()` 호출 |
+| 139 | `UserService.signup()` TOCTOU — 동시 가입 시 500 | `save()+flush()` `DataIntegrityViolationException` catch, username/email 재조회로 에러 코드 분기 |
+| 118 | `PAYMENT_IN_PROGRESS` 고착 — `resetOrderOnPaymentError()` 실패 시 영구 결제 불가 | `OrderExpiryScheduler` — `findStuckPaymentInProgressOrderIds()` 10분 초과 시 PENDING 복원, `OrderService.resetPaymentInProgressBySystem()` 추가 |
 | 77 | Outbox `POINT_EARN` 포인트 이중 적립 가능 | `earn()` 내부 `existsByOrderIdAndType()` 멱등성 체크 추가 |
 | 91 | `PointService.getOrCreate()` 동시 요청 Duplicate Key | `DataIntegrityViolationException` catch 후 재조회 retry 패턴 적용 |
 | 94 | `RefundService.requestRefund()` 동시 요청 Duplicate Key → 500 | `DataIntegrityViolationException` catch 후 재조회 방어 |

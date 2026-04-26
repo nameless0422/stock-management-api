@@ -172,15 +172,42 @@ public class Order {
     }
 
     /**
-     * Transitions a CONFIRMED order back to CANCELLED after payment refund.
+     * Toss 취소 API 호출 직전 CONFIRMED → CANCEL_IN_PROGRESS 로 전환한다.
+     *
+     * <p>이미 CANCEL_IN_PROGRESS이면 멱등적으로 무시한다 (재시도 안전).
+     *
+     * @throws BusinessException CONFIRMED 또는 CANCEL_IN_PROGRESS가 아닌 상태에서 호출 시
+     */
+    public void startCancellation() {
+        if (this.status == OrderStatus.CANCEL_IN_PROGRESS) return; // 재시도 시 idempotent
+        if (this.status != OrderStatus.CONFIRMED) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+        this.status = OrderStatus.CANCEL_IN_PROGRESS;
+    }
+
+    /**
+     * Toss 오류 시 CANCEL_IN_PROGRESS → CONFIRMED 복원.
+     *
+     * @throws BusinessException CANCEL_IN_PROGRESS가 아닌 상태에서 호출 시
+     */
+    public void resetCancellationFailed() {
+        if (this.status != OrderStatus.CANCEL_IN_PROGRESS) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+        this.status = OrderStatus.CONFIRMED;
+    }
+
+    /**
+     * Transitions a CONFIRMED or CANCEL_IN_PROGRESS order to CANCELLED after payment refund.
      * Called by the Payment domain when a DONE payment is cancelled.
      *
      * <p>Different from {@link #cancel()} which handles pre-payment cancellation (PENDING → CANCELLED).
      *
-     * @throws BusinessException if the current status is not CONFIRMED
+     * @throws BusinessException if the current status is not CONFIRMED or CANCEL_IN_PROGRESS
      */
     public void refund() {
-        if (this.status != OrderStatus.CONFIRMED) {
+        if (this.status != OrderStatus.CONFIRMED && this.status != OrderStatus.CANCEL_IN_PROGRESS) {
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
         }
         this.status = OrderStatus.CANCELLED;

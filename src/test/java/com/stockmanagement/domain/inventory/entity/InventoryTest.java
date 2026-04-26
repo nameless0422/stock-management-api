@@ -1,5 +1,7 @@
 package com.stockmanagement.domain.inventory.entity;
 
+import com.stockmanagement.common.exception.BusinessException;
+import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.exception.InsufficientStockException;
 import com.stockmanagement.domain.product.entity.Product;
 import org.junit.jupiter.api.BeforeEach;
@@ -246,6 +248,19 @@ class InventoryTest {
             inventory.confirmAllocation(5);
 
             assertThat(inventory.getOnHand()).isEqualTo(10);
+        }
+
+        @Test
+        @DisplayName("quantity > reserved이면 INVENTORY_STATE_INCONSISTENT 예외 발생")
+        void throwsWhenQuantityExceedsReserved() {
+            Inventory inventory = createInventory();
+            inventory.receive(10);
+            inventory.reserve(3);
+
+            assertThatThrownBy(() -> inventory.confirmAllocation(5))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.INVENTORY_STATE_INCONSISTENT));
         }
 
         @Test

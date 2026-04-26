@@ -50,6 +50,10 @@ public class RateLimitAspect {
     @Value("${rate-limit.trust-proxy:true}")
     private boolean trustProxy;
 
+    /** 신뢰하는 프록시 수 — X-Forwarded-For 끝에서 이 값만큼 건너뛰어 실제 클라이언트 IP 추출 */
+    @Value("${rate-limit.trusted-proxy-count:1}")
+    private int trustedProxyCount;
+
     @Around("@annotation(com.stockmanagement.common.ratelimit.RateLimit)")
     public Object rateLimit(ProceedingJoinPoint joinPoint) throws Throwable {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
@@ -93,8 +97,12 @@ public class RateLimitAspect {
 
     /**
      * 클라이언트 IP 추출.
-     * trust-proxy=true (기본): X-Real-IP → X-Forwarded-For 마지막 IP → RemoteAddr 순으로 사용.
+     * trust-proxy=true (기본): X-Real-IP → X-Forwarded-For → RemoteAddr 순으로 사용.
      * trust-proxy=false: 프록시 없이 직접 노출된 환경 — RemoteAddr만 사용 (헤더 위조 방지).
+     *
+     * <p>X-Forwarded-For 처리: "client, proxy1, proxy2"에서 trusted-proxy-count=1이면
+     * 끝에서 1개(proxy2 제거)를 건너뛰어 proxy1 위치를 실제 클라이언트 IP로 간주.
+     * 공격자가 헤더를 "attacker, real_client, proxy"로 조작해도 proxy를 제외한 real_client를 사용.
      */
     private String resolveClientIp() {
         ServletRequestAttributes attrs =
@@ -108,12 +116,13 @@ public class RateLimitAspect {
                 return realIp.trim();
             }
 
-            // X-Forwarded-For: 프록시 체인에서 마지막(가장 가까운) 프록시가 추가한 IP 사용
-            // 첫 번째 값은 클라이언트가 위조 가능하므로 마지막 값 사용
+            // X-Forwarded-For: 끝에서 trustedProxyCount번째 IP를 클라이언트 IP로 사용
+            // trustedProxyCount=1: "client, proxy1" → index 0 = client IP
             String forwarded = request.getHeader("X-Forwarded-For");
             if (forwarded != null && !forwarded.isBlank()) {
                 String[] ips = forwarded.split(",");
-                return ips[ips.length - 1].trim();
+                int idx = Math.max(0, ips.length - 1 - trustedProxyCount);
+                return ips[idx].trim();
             }
         }
 

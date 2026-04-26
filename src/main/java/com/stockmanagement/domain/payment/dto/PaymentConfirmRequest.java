@@ -3,6 +3,7 @@ package com.stockmanagement.domain.payment.dto;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -21,10 +22,12 @@ public class PaymentConfirmRequest {
 
     /** TossPayments-assigned payment key received from the checkout widget. */
     @NotBlank(message = "paymentKey is required")
+    @Size(max = 200, message = "paymentKey must not exceed 200 characters")
     private String paymentKey;
 
     /** Our tossOrderId previously returned by the prepare endpoint. */
     @NotBlank(message = "tossOrderId is required")
+    @Size(max = 64, message = "tossOrderId must not exceed 64 characters")
     private String tossOrderId;
 
     /**

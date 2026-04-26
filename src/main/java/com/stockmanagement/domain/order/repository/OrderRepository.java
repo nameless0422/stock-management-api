@@ -86,6 +86,22 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     @Query("SELECT o.id FROM Order o WHERE o.status = com.stockmanagement.domain.order.entity.OrderStatus.PENDING AND o.createdAt < :threshold")
     List<Long> findExpiredPendingOrderIds(@Param("threshold") LocalDateTime threshold);
 
+    /** 회원 탈퇴 시 재고 예약 누수 방지를 위해 사용자의 PENDING 주문 ID 목록을 반환한다. */
+    @Query("SELECT o.id FROM Order o WHERE o.userId = :userId AND o.status = com.stockmanagement.domain.order.entity.OrderStatus.PENDING")
+    List<Long> findPendingIdsByUserId(@Param("userId") Long userId);
+
+    /**
+     * 기준 시각 이전에 PAYMENT_IN_PROGRESS 상태로 머무른 주문 ID 목록을 반환한다.
+     *
+     * <p>결제 처리 중 오류로 {@code resetOrderOnPaymentError()}가 실패한 주문을
+     * 주기적으로 PENDING으로 복원하여 만료 스케줄러가 정리할 수 있도록 한다.
+     * updatedAt 기준으로 조회하여 최근에 PAYMENT_IN_PROGRESS로 전환된 주문을 제외한다.
+     *
+     * @param threshold 기준 시각 (현재 시각 - 허용 대기 시간)
+     */
+    @Query("SELECT o.id FROM Order o WHERE o.status = com.stockmanagement.domain.order.entity.OrderStatus.PAYMENT_IN_PROGRESS AND o.updatedAt < :threshold")
+    List<Long> findStuckPaymentInProgressOrderIds(@Param("threshold") LocalDateTime threshold);
+
     /**
      * 주문 소유자의 userId만 조회한다 (소유권 검증 전용 — Order 전체 로드 불필요).
      *
@@ -150,8 +166,8 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
                                           @Param("start") LocalDateTime start,
                                           @Param("end") LocalDateTime end);
 
-    /** 기간 내 CONFIRMED 주문의 매출액 합계 (totalAmount - discountAmount) */
-    @Query("SELECT COALESCE(SUM(o.totalAmount - o.discountAmount), 0) FROM Order o " +
+    /** 기간 내 CONFIRMED 주문의 실결제 매출액 합계 (totalAmount - discountAmount - usedPoints) */
+    @Query("SELECT COALESCE(SUM(o.totalAmount - o.discountAmount - o.usedPoints), 0) FROM Order o " +
            "WHERE o.status = com.stockmanagement.domain.order.entity.OrderStatus.CONFIRMED " +
            "AND o.createdAt >= :start AND o.createdAt < :end")
     BigDecimal sumRevenueByCreatedAtBetween(@Param("start") LocalDateTime start,

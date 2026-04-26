@@ -100,6 +100,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/products").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/products/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/inventory/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/inventory/**").hasRole("ADMIN")
                         // 내 배송 목록 조회 — 인증된 사용자 전용 (ADMIN PATCH 패턴보다 앞에 선언)
                         .requestMatchers(HttpMethod.GET, "/api/shipments/my").authenticated()
