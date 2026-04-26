@@ -23,6 +23,7 @@ public class ProductUpdateRequest {
     private String name;
 
     /** 선택 입력 — null 전달 시 기존 설명이 null로 갱신됨 */
+    @Size(max = 10000, message = "상품 설명은 10000자를 초과할 수 없습니다.")
     private String description;
 
     @NotNull(message = "가격은 필수입니다.")
