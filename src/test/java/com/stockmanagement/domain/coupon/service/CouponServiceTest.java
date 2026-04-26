@@ -382,4 +382,57 @@ class CouponServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.COUPON_ALREADY_ISSUED);
     }
+
+    // ===== create() =====
+
+    @Test
+    @DisplayName("create — PERCENTAGE 할인율 100% 초과 시 INVALID_INPUT 예외")
+    void create_rejectsPercentageOver100() {
+        CouponCreateRequest request = buildCreateRequest(DiscountType.PERCENTAGE, BigDecimal.valueOf(101));
+
+        assertThatThrownBy(() -> couponService.create(request))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("create — 시작일이 종료일 이후이면 INVALID_INPUT 예외")
+    void create_rejectsInvalidDateRange() {
+        CouponCreateRequest request = buildCreateRequest(DiscountType.FIXED_AMOUNT, BigDecimal.valueOf(1000));
+        // buildCreateRequest 는 validFrom=FUTURE, validUntil=PAST 로 역전되도록 오버라이드 필요
+        // 별도 헬퍼로 작성
+        CouponCreateRequest badDate = buildCreateRequestWithDates(
+                DiscountType.FIXED_AMOUNT, BigDecimal.valueOf(1000), FUTURE, PAST);
+
+        assertThatThrownBy(() -> couponService.create(badDate))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+    }
+
+    private CouponCreateRequest buildCreateRequest(DiscountType type, BigDecimal value) {
+        return buildCreateRequestWithDates(type, value, PAST, FUTURE);
+    }
+
+    private CouponCreateRequest buildCreateRequestWithDates(
+            DiscountType type, BigDecimal value, LocalDateTime from, LocalDateTime until) {
+        try {
+            CouponCreateRequest req = new CouponCreateRequest();
+            setField(req, "code", "TEST12ab");
+            setField(req, "name", "테스트쿠폰");
+            setField(req, "discountType", type);
+            setField(req, "discountValue", value);
+            setField(req, "maxUsagePerUser", 1);
+            setField(req, "validFrom", from);
+            setField(req, "validUntil", until);
+            return req;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void setField(Object target, String name, Object value) throws Exception {
+        java.lang.reflect.Field f = target.getClass().getDeclaredField(name);
+        f.setAccessible(true);
+        f.set(target, value);
+    }
 }
