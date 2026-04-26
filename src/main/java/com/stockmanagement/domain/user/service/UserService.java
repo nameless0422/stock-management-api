@@ -199,6 +199,9 @@ public class UserService {
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
+        if (request.getCurrentPassword().equals(request.getNewPassword())) {
+            throw new BusinessException(ErrorCode.SAME_PASSWORD);
+        }
         user.updatePassword(passwordEncoder.encode(request.getNewPassword()));
         // 비밀번호 변경 시 모든 기기 Refresh Token 일괄 폐기 (전체 로그아웃 효과)
         refreshTokenStore.revokeAll(username);
