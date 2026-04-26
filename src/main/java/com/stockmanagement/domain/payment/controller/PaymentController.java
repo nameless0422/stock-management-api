@@ -2,6 +2,7 @@ package com.stockmanagement.domain.payment.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.domain.payment.dto.*;
@@ -36,6 +37,7 @@ import org.springframework.web.bind.annotation.*;
  * </pre>
  */
 @Tag(name = "결제", description = "TossPayments 결제 준비 · 승인 · 취소 · 조회 · 웹훅")
+@Slf4j
 @RestController
 @RequestMapping("/api/payments")
 @RequiredArgsConstructor
@@ -81,10 +83,15 @@ public class PaymentController {
     @ResponseStatus(org.springframework.http.HttpStatus.OK)
     public void webhook(
             @RequestHeader(value = "Toss-Signature", required = false) String signature,
-            @RequestBody String rawBody) throws JsonProcessingException {
+            @RequestBody String rawBody) {
         webhookVerifier.verify(rawBody, signature);
-        TossWebhookEvent event = objectMapper.readValue(rawBody, TossWebhookEvent.class);
-        paymentService.handleWebhook(event);
+        try {
+            TossWebhookEvent event = objectMapper.readValue(rawBody, TossWebhookEvent.class);
+            paymentService.handleWebhook(event);
+        } catch (JsonProcessingException e) {
+            // malformed payload — 200 반환하여 Toss의 불필요한 재시도 방지
+            log.warn("[Webhook] JSON 파싱 실패 — payload 무시: {}", e.getOriginalMessage());
+        }
     }
 
     @Operation(summary = "내 결제 목록", description = "현재 로그인 사용자의 결제 내역을 최신순으로 페이징 조회한다.")
