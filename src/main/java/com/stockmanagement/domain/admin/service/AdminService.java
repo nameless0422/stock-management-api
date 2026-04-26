@@ -20,6 +20,7 @@ import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.User;
+import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -100,6 +101,11 @@ public class AdminService {
     public UserResponse updateRole(Long userId, RoleUpdateRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        // 마지막 ADMIN을 USER로 강등 시도 시 차단
+        if (user.getRole() == UserRole.ADMIN && request.role() != UserRole.ADMIN
+                && userRepository.countByRole(UserRole.ADMIN) <= 1) {
+            throw new BusinessException(ErrorCode.LAST_ADMIN);
+        }
         user.changeRole(request.role());
         return UserResponse.from(user);
     }

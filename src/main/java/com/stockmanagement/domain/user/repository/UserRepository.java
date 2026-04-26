@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.user.repository;
 
 import com.stockmanagement.domain.user.entity.User;
+import com.stockmanagement.domain.user.entity.UserRole;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -20,4 +21,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** username 또는 email로 사용자 검색 (대소문자 무시, 관리자 전용) */
     @Query("SELECT u FROM User u WHERE LOWER(u.username) LIKE LOWER(CONCAT('%', :q, '%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%', :q, '%'))")
     Page<User> searchByUsernameOrEmail(@Param("q") String query, Pageable pageable);
+
+    /** 특정 역할을 가진 사용자 수 조회 (마지막 ADMIN 해제 방지용) */
+    long countByRole(UserRole role);
 }

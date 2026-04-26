@@ -104,6 +104,9 @@ public enum ErrorCode {
     SAME_PASSWORD(HttpStatus.BAD_REQUEST, "현재 비밀번호와 동일한 비밀번호로는 변경할 수 없습니다."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 Refresh Token입니다."),
 
+    // ===== Admin =====
+    LAST_ADMIN(HttpStatus.CONFLICT, "마지막 관리자의 권한은 해제할 수 없습니다."),
+
     // ===== Admin Setting =====
     SETTING_NOT_FOUND(HttpStatus.NOT_FOUND, "시스템 설정을 찾을 수 없습니다."),
 
