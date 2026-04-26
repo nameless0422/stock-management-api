@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.inventory.dto;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -17,6 +18,7 @@ public class InventoryAdjustRequest {
     @NotNull(message = "조정 수량은 필수입니다.")
     private Integer quantity;
 
-    /** 조정 사유 (선택) */
+    /** 조정 사유 (선택) — InventoryTransaction.note 컬럼 length=255 */
+    @Size(max = 255)
     private String note;
 }

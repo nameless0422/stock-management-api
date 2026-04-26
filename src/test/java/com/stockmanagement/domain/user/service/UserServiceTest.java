@@ -373,6 +373,24 @@ class UserServiceTest {
 
             verify(refreshTokenStore, never()).revokeAll(anyString());
         }
+
+        @Test
+        @DisplayName("현재/신규 비밀번호 동일 — SAME_PASSWORD 예외 발생")
+        void throwsWhenSamePassword() {
+            ChangePasswordRequest request = new ChangePasswordRequest();
+            org.springframework.test.util.ReflectionTestUtils.setField(request, "currentPassword", "same-pw");
+            org.springframework.test.util.ReflectionTestUtils.setField(request, "newPassword", "same-pw");
+
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+            given(passwordEncoder.matches("same-pw", "encoded-pw")).willReturn(true);
+
+            assertThatThrownBy(() -> userService.changePassword("testuser", request, "test-token"))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.SAME_PASSWORD));
+
+            verify(refreshTokenStore, never()).revokeAll(anyString());
+        }
     }
 
     // ===== deactivate() =====

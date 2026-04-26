@@ -80,7 +80,7 @@ public class ReviewService {
                 ? reviewRepository.findByProductIdAndRating(productId, rating, pageable)
                 : reviewRepository.findByProductId(productId, pageable);
         Map<Long, String> usernameMap = buildUsernameMap(reviews.map(Review::getUserId).toList());
-        return reviews.map(r -> ReviewResponse.from(r, usernameMap.get(r.getUserId())));
+        return reviews.map(r -> ReviewResponse.from(r, usernameMap.getOrDefault(r.getUserId(), "[탈퇴사용자]")));
     }
 
     /** 특정 사용자의 리뷰 목록을 페이징 조회한다. 별점 필터 지원. */

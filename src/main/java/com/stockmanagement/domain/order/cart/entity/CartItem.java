@@ -41,7 +41,7 @@ public class CartItem {
     private int quantity;
 
     /** 장바구니 담은 시점의 단가 — 현재 가격과 비교하여 가격 변동 감지에 사용 */
-    @Column(precision = 12, scale = 2)
+    @Column(precision = 15, scale = 2)
     private BigDecimal savedPrice;
 
     @CreationTimestamp

@@ -31,7 +31,7 @@ public class CouponUsage {
     private Long orderId;
 
     /** 실제 할인된 금액 (쿠폰 계산 결과). */
-    @Column(nullable = false, precision = 19, scale = 2)
+    @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal discountAmount;
 
     @Column(nullable = false)

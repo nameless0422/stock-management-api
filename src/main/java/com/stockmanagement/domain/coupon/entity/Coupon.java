@@ -44,15 +44,15 @@ public class Coupon {
     private DiscountType discountType;
 
     /** 할인 금액(FIXED_AMOUNT) 또는 할인율(PERCENTAGE, 0~100). */
-    @Column(nullable = false, precision = 19, scale = 2)
+    @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal discountValue;
 
     /** 최소 주문 금액 조건. null이면 제한 없음. */
-    @Column(precision = 19, scale = 2)
+    @Column(precision = 15, scale = 2)
     private BigDecimal minimumOrderAmount;
 
     /** 퍼센트 할인 시 최대 할인 금액 상한. null이면 제한 없음. */
-    @Column(precision = 19, scale = 2)
+    @Column(precision = 15, scale = 2)
     private BigDecimal maxDiscountAmount;
 
     /** 전체 사용 가능 횟수 제한. null이면 무제한. */

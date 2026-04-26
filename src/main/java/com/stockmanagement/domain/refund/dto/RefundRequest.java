@@ -2,6 +2,7 @@ package com.stockmanagement.domain.refund.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -13,5 +14,6 @@ public class RefundRequest {
     private Long paymentId;
 
     @NotBlank
+    @Size(max = 300)
     private String reason;
 }
