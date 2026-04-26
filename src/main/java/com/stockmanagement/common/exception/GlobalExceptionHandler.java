@@ -2,6 +2,7 @@ package com.stockmanagement.common.exception;
 
 import com.stockmanagement.common.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -53,6 +54,24 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException e) {
         List<ApiResponse.FieldErrorDetail> errors = e.getBindingResult().getFieldErrors().stream()
                 .map(fe -> new ApiResponse.FieldErrorDetail(fe.getField(), fe.getDefaultMessage()))
+                .collect(Collectors.toList());
+        return ResponseEntity
+                .badRequest()
+                .body(ApiResponse.validationError(errors));
+    }
+
+    /**
+     * @Validated 파라미터 제약 위반 처리 (@Min/@Max 등).
+     * 400 Bad Request를 반환한다.
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(ConstraintViolationException e) {
+        List<ApiResponse.FieldErrorDetail> errors = e.getConstraintViolations().stream()
+                .map(cv -> {
+                    String path = cv.getPropertyPath().toString();
+                    String field = path.contains(".") ? path.substring(path.lastIndexOf('.') + 1) : path;
+                    return new ApiResponse.FieldErrorDetail(field, cv.getMessage());
+                })
                 .collect(Collectors.toList());
         return ResponseEntity
                 .badRequest()
