@@ -220,6 +220,13 @@ public class OrderService {
 
         // 8. 포인트 차감 (사용 포인트가 있으면)
         if (usePointsLong > 0) {
+            // 쿠폰 할인 후 남은 금액 초과 포인트 사용 방지 (초과 시 실질 결제액 = 음수)
+            BigDecimal maxUsablePoints = totalAmount.subtract(savedOrder.getDiscountAmount());
+            if (BigDecimal.valueOf(usePointsLong).compareTo(maxUsablePoints) > 0) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT,
+                        "포인트 사용 금액이 결제 가능 금액을 초과합니다. 최대 사용 가능 포인트: "
+                                + maxUsablePoints.longValue() + "P");
+            }
             pointService.use(savedOrder.getUserId(), usePointsLong, savedOrder.getId());
         }
 
