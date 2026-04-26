@@ -20,6 +20,7 @@ public class ProductCreateRequest {
     private String name;
 
     /** 선택 입력 — null 허용 */
+    @Size(max = 10000)
     private String description;
 
     @NotNull(message = "가격은 필수입니다.")
