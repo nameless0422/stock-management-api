@@ -362,6 +362,7 @@ public class OrderService {
         validateOrderOwnership(order, userId, isAdmin);
 
         // 상태 검증 + CANCELLED 전환 (PENDING이 아니면 INVALID_ORDER_STATUS 예외)
+        OrderStatus previousStatus = order.getStatus();
         order.cancel(reason);
 
         // 재고 예약 해제
@@ -375,7 +376,7 @@ public class OrderService {
         // 포인트 환불 (사용된 포인트 반환 + 적립금 회수)
         pointService.refundByOrder(order.getUserId(), order.getId());
 
-        recordHistory(order.getId(), OrderStatus.PENDING, OrderStatus.CANCELLED, null);
+        recordHistory(order.getId(), previousStatus, OrderStatus.CANCELLED, null);
         outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "PENDING_CANCELLED"));
         return OrderResponse.from(order);
     }
@@ -395,6 +396,7 @@ public class OrderService {
         Order order = orderRepository.findByIdWithItemsForUpdate(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
+        OrderStatus previousStatus = order.getStatus();
         order.cancel(null);
 
         for (OrderItem item : order.getItems()) {
@@ -404,7 +406,7 @@ public class OrderService {
         couponService.releaseCoupon(order.getId());
         pointService.refundByOrder(order.getUserId(), order.getId());
 
-        recordHistory(order.getId(), OrderStatus.PENDING, OrderStatus.CANCELLED, "system:expiry");
+        recordHistory(order.getId(), previousStatus, OrderStatus.CANCELLED, "system:expiry");
         outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "SYSTEM_EXPIRY"));
     }
 
