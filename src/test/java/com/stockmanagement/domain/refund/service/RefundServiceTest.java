@@ -88,7 +88,7 @@ class RefundServiceTest {
             Payment payment = mockPayment(10L, 100L);
             given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
             given(orderRepository.findById(100L)).willReturn(Optional.of(mockOrder(100L, 1L)));
-            given(refundRepository.findByPaymentId(10L)).willReturn(Optional.empty());
+            given(refundRepository.findFirstByPaymentIdOrderByCreatedAtDesc(10L)).willReturn(Optional.empty());
 
             Refund saved = Refund.builder()
                     .paymentId(10L).orderId(100L)
@@ -116,7 +116,7 @@ class RefundServiceTest {
                     .amount(BigDecimal.valueOf(50000)).reason("변심")
                     .build();
             completed.complete();
-            given(refundRepository.findByPaymentId(10L)).willReturn(Optional.of(completed));
+            given(refundRepository.findFirstByPaymentIdOrderByCreatedAtDesc(10L)).willReturn(Optional.of(completed));
 
             assertThatThrownBy(() -> refundService.requestRefund(mockRequest(10L), "user1"))
                     .isInstanceOf(BusinessException.class)
@@ -138,7 +138,7 @@ class RefundServiceTest {
                     .build();
             failedRefund.fail();
             ReflectionTestUtils.setField(failedRefund, "id", 5L);
-            given(refundRepository.findByPaymentId(10L)).willReturn(Optional.of(failedRefund));
+            given(refundRepository.findFirstByPaymentIdOrderByCreatedAtDesc(10L)).willReturn(Optional.of(failedRefund));
 
             refundService.requestRefund(mockRequest(10L), "user1");
 
@@ -153,7 +153,7 @@ class RefundServiceTest {
             Payment payment = mockPayment(10L, 100L);
             given(paymentRepository.findById(10L)).willReturn(Optional.of(payment));
             given(orderRepository.findById(100L)).willReturn(Optional.of(mockOrder(100L, 1L)));
-            given(refundRepository.findByPaymentId(10L)).willReturn(Optional.empty());
+            given(refundRepository.findFirstByPaymentIdOrderByCreatedAtDesc(10L)).willReturn(Optional.empty());
 
             Refund saved = Refund.builder()
                     .paymentId(10L).orderId(100L)

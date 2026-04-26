@@ -7,6 +7,7 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.payment.dto.PaymentCancelRequest;
 import com.stockmanagement.domain.payment.entity.Payment;
 import com.stockmanagement.domain.payment.entity.PaymentStatus;
+import java.util.Optional;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
 import com.stockmanagement.domain.payment.service.PaymentService;
 import com.stockmanagement.domain.refund.dto.RefundRequest;
@@ -73,21 +74,27 @@ public class RefundService {
             throw new BusinessException(ErrorCode.REFUND_ACCESS_DENIED);
         }
 
-        // DONE 상태가 아닌 결제는 환불 불가 (paymentKey가 null이면 NPE 발생 방지)
-        if (payment.getStatus() != PaymentStatus.DONE || payment.getPaymentKey() == null) {
+        // DONE 또는 PARTIAL_CANCELLED 상태가 아닌 결제는 환불 불가 (paymentKey가 null이면 NPE 발생 방지)
+        if ((payment.getStatus() != PaymentStatus.DONE && payment.getStatus() != PaymentStatus.PARTIAL_CANCELLED)
+                || payment.getPaymentKey() == null) {
             throw new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS);
         }
 
-        // 기존 환불 레코드 조회
-        // - PENDING/COMPLETED: 중복 환불 → 예외
-        // - FAILED: 이전 시도 실패 → 재시도 허용 (paymentId UNIQUE 제약으로 새 레코드 생성 불가 → 기존 레코드 재사용)
-        Refund refund = refundRepository.findByPaymentId(payment.getId())
-                .map(existing -> {
-                    if (existing.getStatus() != RefundStatus.FAILED) {
-                        throw new BusinessException(ErrorCode.REFUND_ALREADY_EXISTS);
+        // 기존 환불 레코드(최신) 조회
+        // - FAILED: 이전 시도 실패 → 기존 레코드 재사용(reset)
+        // - COMPLETED + PARTIAL_CANCELLED: 추가 부분 취소 허용 → 새 레코드 생성
+        // - 그 외 PENDING/COMPLETED: 중복 환불 → 예외
+        Refund refund = refundRepository.findFirstByPaymentIdOrderByCreatedAtDesc(payment.getId())
+                .flatMap(existing -> {
+                    if (existing.getStatus() == RefundStatus.FAILED) {
+                        existing.reset(request.getReason());
+                        return Optional.of(existing);
                     }
-                    existing.reset(request.getReason());
-                    return existing;
+                    if (existing.getStatus() == RefundStatus.COMPLETED
+                            && payment.getStatus() == PaymentStatus.PARTIAL_CANCELLED) {
+                        return Optional.empty(); // 추가 부분 취소 허용 → 새 레코드 생성 경로
+                    }
+                    throw new BusinessException(ErrorCode.REFUND_ALREADY_EXISTS);
                 })
                 .orElseGet(() -> {
                     try {
@@ -102,7 +109,7 @@ public class RefundService {
                         return newRefund;
                     } catch (DataIntegrityViolationException e) {
                         // 동시 요청으로 이미 생성된 경우 재조회
-                        return refundRepository.findByPaymentId(payment.getId())
+                        return refundRepository.findFirstByPaymentIdOrderByCreatedAtDesc(payment.getId())
                                 .orElseThrow(() -> new BusinessException(ErrorCode.REFUND_ALREADY_EXISTS));
                     }
                 });
