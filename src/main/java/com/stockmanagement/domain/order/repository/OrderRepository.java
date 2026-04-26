@@ -157,8 +157,9 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
 
     // ===== 일별 통계 집계 (DailyOrderStatsScheduler) =====
 
-    /** 기간 내 전체 주문 수 */
-    long countByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
+    /** 기간 내 전체 주문 수 (>= start AND < end) */
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.createdAt >= :start AND o.createdAt < :end")
+    long countByCreatedAtBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     /** 기간 내 특정 상태 주문 수 */
     @Query("SELECT COUNT(o) FROM Order o WHERE o.status = :status AND o.createdAt >= :start AND o.createdAt < :end")
