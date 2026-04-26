@@ -18,5 +18,6 @@ public class ReviewUpdateRequest {
     private String title;
 
     @NotBlank
+    @Size(max = 5000)
     private String content;
 }
