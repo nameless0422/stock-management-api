@@ -402,6 +402,20 @@ public class OrderService {
     }
 
     /**
+     * 회원 탈퇴 시 사용자의 모든 PENDING 주문을 강제 취소한다.
+     *
+     * <p>탈퇴 시 PENDING 상태 주문이 남아 있으면 재고 예약({@code reserved})이
+     * 만료 스케줄러 동작 전까지 불필요하게 잠긴다.
+     * 기존 {@link #cancelBySystem(Long)}을 재사용하여 재고 해제·쿠폰 반환·포인트 환불을 수행한다.
+     *
+     * @param userId 탈퇴 대상 사용자 ID
+     */
+    public void cancelPendingOrdersByUser(Long userId) {
+        orderRepository.findPendingIdsByUserId(userId)
+                .forEach(this::cancelBySystem);
+    }
+
+    /**
      * 결제 오류로 묶인 PAYMENT_IN_PROGRESS 주문을 PENDING으로 복원한다 (스케줄러 전용).
      *
      * <p>Toss API 호출 중 {@code resetOrderOnPaymentError()}가 실패하면 주문이

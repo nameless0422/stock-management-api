@@ -2,13 +2,17 @@ package com.stockmanagement.domain.user.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.order.cart.repository.CartRepository;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.order.service.OrderService;
 import com.stockmanagement.domain.point.entity.UserPoint;
 import com.stockmanagement.domain.point.repository.UserPointRepository;
 import com.stockmanagement.domain.product.review.repository.ReviewRepository;
+import com.stockmanagement.domain.product.wishlist.repository.WishlistRepository;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
+import com.stockmanagement.domain.user.address.repository.DeliveryAddressRepository;
 import com.stockmanagement.domain.user.dto.ChangePasswordRequest;
 import com.stockmanagement.domain.user.dto.LoginRequest;
 import com.stockmanagement.domain.user.dto.LoginResponse;
@@ -48,6 +52,10 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
+    private final OrderService orderService;
+    private final CartRepository cartRepository;
+    private final WishlistRepository wishlistRepository;
+    private final DeliveryAddressRepository deliveryAddressRepository;
     private final ReviewRepository reviewRepository;
     private final UserPointRepository userPointRepository;
     private final ShipmentRepository shipmentRepository;
@@ -145,6 +153,13 @@ public class UserService {
     public void deactivate(String username, String accessToken) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        // PENDING 주문 강제 취소 — 재고 예약 해제 + 쿠폰 반환 + 포인트 환불
+        orderService.cancelPendingOrdersByUser(user.getId());
+        // 장바구니, 위시리스트, 배송지 일괄 삭제
+        cartRepository.deleteByUserId(user.getId());
+        wishlistRepository.deleteByUserId(user.getId());
+        deliveryAddressRepository.deleteByUserId(user.getId());
 
         // unique 슬롯 해방: 탈퇴 계정이 email/username UNIQUE KEY를 점유하지 않도록 익명화
         user.anonymize(user.getId());

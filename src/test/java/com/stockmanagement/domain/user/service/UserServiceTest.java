@@ -2,9 +2,13 @@ package com.stockmanagement.domain.user.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.order.cart.repository.CartRepository;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.order.service.OrderService;
+import com.stockmanagement.domain.product.wishlist.repository.WishlistRepository;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
+import com.stockmanagement.domain.user.address.repository.DeliveryAddressRepository;
 import com.stockmanagement.domain.point.entity.UserPoint;
 import com.stockmanagement.domain.point.repository.UserPointRepository;
 import com.stockmanagement.domain.user.dto.ChangePasswordRequest;
@@ -53,6 +57,18 @@ class UserServiceTest {
 
     @Mock
     private OrderRepository orderRepository;
+
+    @Mock
+    private OrderService orderService;
+
+    @Mock
+    private CartRepository cartRepository;
+
+    @Mock
+    private WishlistRepository wishlistRepository;
+
+    @Mock
+    private DeliveryAddressRepository deliveryAddressRepository;
 
     @Mock
     private UserPointRepository userPointRepository;
@@ -366,13 +382,19 @@ class UserServiceTest {
     class Deactivate {
 
         @Test
-        @DisplayName("존재하는 사용자 — userRepository.delete() 호출 (@SQLDelete가 논리 삭제 처리)")
+        @DisplayName("존재하는 사용자 — PENDING 주문 취소·장바구니·위시리스트·배송지 정리 후 논리 삭제")
         void deletesUser() {
             given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
 
             userService.deactivate("testuser", "test-access-token");
 
+            verify(orderService).cancelPendingOrdersByUser(user.getId());
+            verify(cartRepository).deleteByUserId(user.getId());
+            verify(wishlistRepository).deleteByUserId(user.getId());
+            verify(deliveryAddressRepository).deleteByUserId(user.getId());
             verify(userRepository).delete(user);
+            verify(jwtBlacklist).revoke("test-access-token");
+            verify(refreshTokenStore).revokeAll("testuser");
         }
 
         @Test

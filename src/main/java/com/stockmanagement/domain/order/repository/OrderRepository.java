@@ -86,6 +86,10 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     @Query("SELECT o.id FROM Order o WHERE o.status = com.stockmanagement.domain.order.entity.OrderStatus.PENDING AND o.createdAt < :threshold")
     List<Long> findExpiredPendingOrderIds(@Param("threshold") LocalDateTime threshold);
 
+    /** 회원 탈퇴 시 재고 예약 누수 방지를 위해 사용자의 PENDING 주문 ID 목록을 반환한다. */
+    @Query("SELECT o.id FROM Order o WHERE o.userId = :userId AND o.status = com.stockmanagement.domain.order.entity.OrderStatus.PENDING")
+    List<Long> findPendingIdsByUserId(@Param("userId") Long userId);
+
     /**
      * 기준 시각 이전에 PAYMENT_IN_PROGRESS 상태로 머무른 주문 ID 목록을 반환한다.
      *
