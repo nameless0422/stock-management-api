@@ -118,9 +118,12 @@ public class Inventory {
      * 주문 생성 시 재고를 예약한다 — reserved를 증가시킨다.
      * 가용 재고가 부족하면 {@link InsufficientStockException}을 발생시킨다.
      *
-     * @param quantity 예약 수량
+     * @param quantity 예약 수량 (양수여야 한다)
      */
     public void reserve(int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("예약 수량은 0보다 커야 합니다.");
+        }
         if (getAvailable() < quantity) {
             throw new InsufficientStockException(quantity, getAvailable());
         }
@@ -130,10 +133,18 @@ public class Inventory {
     /**
      * 주문 취소 또는 결제 실패 시 예약을 해제한다 — reserved를 감소시킨다.
      *
-     * @param quantity 해제 수량
+     * @param quantity 해제 수량 (양수여야 한다)
+     * @throws BusinessException quantity &gt; reserved인 경우 INVENTORY_STATE_INCONSISTENT
      */
     public void releaseReservation(int quantity) {
-        this.reserved = Math.max(0, this.reserved - quantity);
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("해제 수량은 0보다 커야 합니다.");
+        }
+        if (quantity > this.reserved) {
+            throw new BusinessException(ErrorCode.INVENTORY_STATE_INCONSISTENT,
+                    String.format("releaseReservation 실패: quantity=%d > reserved=%d", quantity, this.reserved));
+        }
+        this.reserved -= quantity;
     }
 
     /**
@@ -147,6 +158,9 @@ public class Inventory {
      * @throws BusinessException quantity &gt; reserved인 경우 INVENTORY_STATE_INCONSISTENT
      */
     public void confirmAllocation(int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("확정 수량은 0보다 커야 합니다.");
+        }
         if (quantity > this.reserved) {
             throw new BusinessException(ErrorCode.INVENTORY_STATE_INCONSISTENT,
                     String.format("confirmAllocation 실패: quantity=%d > reserved=%d (productId=%s)",
@@ -165,7 +179,14 @@ public class Inventory {
      * @param quantity number of units to release from allocation
      */
     public void releaseAllocation(int quantity) {
-        this.allocated = Math.max(0, this.allocated - quantity);
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("해제 수량은 0보다 커야 합니다.");
+        }
+        if (quantity > this.allocated) {
+            throw new BusinessException(ErrorCode.INVENTORY_STATE_INCONSISTENT,
+                    String.format("releaseAllocation 실패: quantity=%d > allocated=%d", quantity, this.allocated));
+        }
+        this.allocated -= quantity;
     }
 
     /**
