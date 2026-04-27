@@ -43,6 +43,10 @@ public class SecurityConfig {
     @Value("${cors.allowed-origins:http://localhost:3000}")
     private String allowedOrigins;
 
+    /** true(기본값)이면 Swagger UI를 공개 접근 허용. 운영 배포 시 false로 설정할 것. */
+    @Value("${swagger.public:true}")
+    private boolean swaggerPublic;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -78,8 +82,15 @@ public class SecurityConfig {
                         // Actuator — health/info/prometheus는 공개 (내부망 전용), 나머지는 ADMIN 전용
                         .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/actuator/**").hasRole("ADMIN")
-                        // Swagger UI
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                        // Swagger UI — swagger.public=false(운영) 시 ADMIN 인증 필요
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html")
+                        .access((authSupplier, ctx) -> {
+                            if (swaggerPublic) return new org.springframework.security.authorization.AuthorizationDecision(true);
+                            var principal = authSupplier.get();
+                            boolean granted = principal != null && principal.isAuthenticated()
+                                    && principal.getAuthorities().stream().anyMatch(g -> g.getAuthority().equals("ROLE_ADMIN"));
+                            return new org.springframework.security.authorization.AuthorizationDecision(granted);
+                        })
                         // 관리자 랜딩 페이지 (정적 파일 — API 인증은 JS에서 JWT로 처리)
                         .requestMatchers("/admin-page/**").permitAll()
                         // 쇼핑몰 페이지 (정적 파일 — 비로그인 접근 허용)
