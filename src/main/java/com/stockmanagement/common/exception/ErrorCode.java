@@ -65,6 +65,7 @@ public enum ErrorCode {
 
     // ===== ProductImage =====
     PRODUCT_IMAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "상품 이미지를 찾을 수 없습니다."),
+    PRODUCT_IMAGE_LIMIT_EXCEEDED(HttpStatus.UNPROCESSABLE_ENTITY, "상품 이미지는 최대 10개까지 등록할 수 있습니다."),
 
     // ===== Coupon =====
     COUPON_NOT_FOUND(HttpStatus.NOT_FOUND, "쿠폰을 찾을 수 없습니다."),
