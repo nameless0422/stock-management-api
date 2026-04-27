@@ -39,4 +39,4 @@ CREATE TABLE payments
     PRIMARY KEY (id),
     UNIQUE KEY uk_payments_toss_order_id (toss_order_id),
     CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES orders (id)
-);
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;

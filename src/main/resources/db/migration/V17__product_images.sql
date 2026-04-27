@@ -10,4 +10,4 @@ CREATE TABLE product_images (
     created_at  DATETIME(6)  NOT NULL,
     CONSTRAINT fk_product_image FOREIGN KEY (product_id)
         REFERENCES products(id) ON DELETE CASCADE
-);
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;

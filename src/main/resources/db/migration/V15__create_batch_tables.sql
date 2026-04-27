@@ -9,7 +9,7 @@ CREATE TABLE daily_order_stats (
     cancelled_orders INT            NOT NULL DEFAULT 0 COMMENT '전일 취소 주문 수',
     total_revenue    DECIMAL(19, 2) NOT NULL DEFAULT 0 COMMENT '전일 매출액 (CONFIRMED 기준, 쿠폰 할인 차감)',
     created_at       DATETIME(6)    NOT NULL COMMENT '집계 생성 시각'
-);
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 -- 일별 재고 스냅샷 (InventorySnapshotScheduler가 매일 자정 5분에 전체 재고 캡처)
 CREATE TABLE daily_inventory_snapshots (
@@ -25,4 +25,4 @@ CREATE TABLE daily_inventory_snapshots (
     UNIQUE KEY uk_snapshot_inv_date (inventory_id, snapshot_date),
     CONSTRAINT fk_snapshot_inventory
         FOREIGN KEY (inventory_id) REFERENCES inventory (id) ON DELETE CASCADE
-);
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;

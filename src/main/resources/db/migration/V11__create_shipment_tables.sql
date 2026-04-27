@@ -13,4 +13,4 @@ CREATE TABLE shipments (
     updated_at       DATETIME(6)  NOT NULL,
 
     CONSTRAINT fk_shipment_order FOREIGN KEY (order_id) REFERENCES orders (id)
-);
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
