@@ -30,7 +30,7 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProduct(adminToken, "SKU-WL1", 15000);
 
-        String userToken = signupAndLogin("user1", "password1", "u1@test.com");
+        String userToken = signupAndLogin("user1", "Password1!", "u1@test.com");
         mockMvc.perform(post("/api/wishlist/" + productId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated())
@@ -43,7 +43,7 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProduct(adminToken, "SKU-WL2", 15000);
 
-        String userToken = signupAndLogin("user2", "password1", "u2@test.com");
+        String userToken = signupAndLogin("user2", "Password1!", "u2@test.com");
         mockMvc.perform(post("/api/wishlist/" + productId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated());
@@ -60,7 +60,7 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProduct(adminToken, "SKU-WL3", 20000);
 
-        String userToken = signupAndLogin("user3", "password1", "u3@test.com");
+        String userToken = signupAndLogin("user3", "Password1!", "u3@test.com");
         mockMvc.perform(post("/api/wishlist/" + productId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated());
@@ -79,7 +79,7 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProduct(adminToken, "SKU-WL4", 25000);
 
-        String userToken = signupAndLogin("user4", "password1", "u4@test.com");
+        String userToken = signupAndLogin("user4", "Password1!", "u4@test.com");
         mockMvc.perform(post("/api/wishlist/" + productId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated());
@@ -102,7 +102,7 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProduct(adminToken, "SKU-WL5", 10000);
 
-        String userToken = signupAndLogin("user5", "password1", "u5@test.com");
+        String userToken = signupAndLogin("user5", "Password1!", "u5@test.com");
         mockMvc.perform(delete("/api/wishlist/" + productId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isNotFound());

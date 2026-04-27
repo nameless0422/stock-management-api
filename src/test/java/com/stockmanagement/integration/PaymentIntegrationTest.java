@@ -107,7 +107,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         @DisplayName("정상 주문 → 200, tossOrderId 포함")
         void prepareSuccess() throws Exception {
             String adminToken = createAdminAndLogin("admin_p1", "adminpass1!", "ap1@test.com");
-            String userToken = signupAndLogin("buyer1", "password1!", "b1@test.com");
+            String userToken = signupAndLogin("buyer1", "Password1!", "b1@test.com");
             long userId = userRepository.findByUsername("buyer1").orElseThrow().getId();
             long orderId = createOrderViaApi(adminToken, userToken, userId, "PREP-001", 10000, 3);
 
@@ -125,7 +125,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         @DisplayName("금액 불일치 → 409")
         void prepareAmountMismatch() throws Exception {
             String adminToken = createAdminAndLogin("admin_p2", "adminpass2!", "ap2@test.com");
-            String userToken = signupAndLogin("buyer2", "password2!", "b2@test.com");
+            String userToken = signupAndLogin("buyer2", "Password2!", "b2@test.com");
             long userId = userRepository.findByUsername("buyer2").orElseThrow().getId();
             long orderId = createOrderViaApi(adminToken, userToken, userId, "PREP-002", 10000, 3);
 
@@ -141,7 +141,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("존재하지 않는 주문 ID → 404")
         void prepareOrderNotFound() throws Exception {
-            String userToken = signupAndLogin("buyer3", "password3!", "b3@test.com");
+            String userToken = signupAndLogin("buyer3", "Password3!", "b3@test.com");
 
             mockMvc.perform(post("/api/payments/prepare")
                             .header("Authorization", "Bearer " + userToken)
@@ -154,7 +154,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         @DisplayName("동일 PENDING 주문 중복 prepare → 200, 기존 tossOrderId 재사용")
         void prepareIdempotent() throws Exception {
             String adminToken = createAdminAndLogin("admin_p4", "adminpass4!", "ap4@test.com");
-            String userToken = signupAndLogin("buyer4", "password4!", "b4@test.com");
+            String userToken = signupAndLogin("buyer4", "Password4!", "b4@test.com");
             long userId = userRepository.findByUsername("buyer4").orElseThrow().getId();
             long orderId = createOrderViaApi(adminToken, userToken, userId, "PREP-004", 5000, 2);
 
@@ -188,7 +188,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         @DisplayName("Toss 응답 DONE → 200, 결제 상태 DONE")
         void confirmSuccess() throws Exception {
             String adminToken = createAdminAndLogin("admin1", "adminpass1", "admin1@test.com");
-            String userToken = signupAndLogin("buyer5", "password5", "b5@test.com");
+            String userToken = signupAndLogin("buyer5", "Password5!", "b5@test.com");
             long userId = userRepository.findByUsername("buyer5").orElseThrow().getId();
 
             // 상품 등록 + 입고 + 주문 생성
@@ -263,7 +263,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("결제 없는 주문 → 200, data 필드 없음")
         void noPendingPayment() throws Exception {
-            String userToken = signupAndLogin("buyer6", "password6!", "b6@test.com");
+            String userToken = signupAndLogin("buyer6", "Password6!", "b6@test.com");
             long userId = userRepository.findByUsername("buyer6").orElseThrow().getId();
             Order order = createRawOrder(userId, BigDecimal.valueOf(10_000));
 
@@ -278,7 +278,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("결제가 존재하면 → 200, 결제 정보 반환")
         void paymentExists() throws Exception {
-            String userToken = signupAndLogin("buyer7", "password7!", "b7@test.com");
+            String userToken = signupAndLogin("buyer7", "Password7!", "b7@test.com");
             long userId = userRepository.findByUsername("buyer7").orElseThrow().getId();
             Order order = createRawOrder(userId, BigDecimal.valueOf(15_000));
             Payment payment = createDonePayment(order.getId(), BigDecimal.valueOf(15_000));
@@ -300,7 +300,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("존재하는 paymentKey → 200")
         void getByExistingKey() throws Exception {
-            String userToken = signupAndLogin("buyer8", "password8!", "b8@test.com");
+            String userToken = signupAndLogin("buyer8", "Password8!", "b8@test.com");
             long userId = userRepository.findByUsername("buyer8").orElseThrow().getId();
             Order order = createRawOrder(userId, BigDecimal.valueOf(8_000));
             Payment payment = createDonePayment(order.getId(), BigDecimal.valueOf(8_000));
@@ -314,7 +314,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("없는 paymentKey → 404")
         void getByMissingKey() throws Exception {
-            String userToken = signupAndLogin("buyer9", "password9!", "b9@test.com");
+            String userToken = signupAndLogin("buyer9", "Password9!", "b9@test.com");
 
             mockMvc.perform(get("/api/payments/nonexistent-key")
                             .header("Authorization", "Bearer " + userToken))

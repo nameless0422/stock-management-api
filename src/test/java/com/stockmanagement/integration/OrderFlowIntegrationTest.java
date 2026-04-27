@@ -39,7 +39,7 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.available").value(50));
 
         // 3. 일반 유저 생성 + 주문 생성 (수량 3, 단가 10000 — product.price와 일치)
-        String userToken = signupAndLogin("buyer", "password123", "buyer@example.com");
+        String userToken = signupAndLogin("buyer", "Password1@3", "buyer@example.com");
         long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         String createOrderBody = mockMvc.perform(post("/api/orders")
@@ -98,7 +98,7 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"quantity\":10}"))
                 .andExpect(status().isOk());
 
-        String userToken = signupAndLogin("buyer2", "password123", "buyer2@example.com");
+        String userToken = signupAndLogin("buyer2", "Password1@3", "buyer2@example.com");
         long buyerId = userRepository.findByUsername("buyer2").orElseThrow().getId();
 
         // 단가 9999 ≠ 10000 → 400
@@ -133,7 +133,7 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"quantity\":5}"))
                 .andExpect(status().isOk());
 
-        String userToken = signupAndLogin("buyer3", "password123", "buyer3@example.com");
+        String userToken = signupAndLogin("buyer3", "Password1@3", "buyer3@example.com");
         long buyerId = userRepository.findByUsername("buyer3").orElseThrow().getId();
 
         // 가용 재고(5) 초과 주문(10) → 409
@@ -167,7 +167,7 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"quantity\":20}"))
                 .andExpect(status().isOk());
 
-        String userToken = signupAndLogin("buyer4", "password123", "buyer4@example.com");
+        String userToken = signupAndLogin("buyer4", "Password1@3", "buyer4@example.com");
         long buyerId = userRepository.findByUsername("buyer4").orElseThrow().getId();
 
         String orderJson = String.format(
@@ -225,7 +225,7 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"quantity\":10}"))
                 .andExpect(status().isOk());
 
-        String userToken = signupAndLogin("buyer5", "password123", "buyer5@example.com");
+        String userToken = signupAndLogin("buyer5", "Password1@3", "buyer5@example.com");
         long buyerId = userRepository.findByUsername("buyer5").orElseThrow().getId();
 
         // 주문 생성

@@ -26,7 +26,7 @@ class UserIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("인증된 사용자 — 빈 주문 목록 → 200")
         void returnsEmptyOrders() throws Exception {
-            String token = signupAndLogin("user1", "password1", "u1@test.com");
+            String token = signupAndLogin("user1", "Password1!", "u1@test.com");
 
             mockMvc.perform(get("/api/users/me/orders")
                             .header("Authorization", "Bearer " + token))
@@ -53,7 +53,7 @@ class UserIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("탈퇴 → 200, 이후 로그인 불가 → 401")
         void deactivateAndLoginFails() throws Exception {
-            String token = signupAndLogin("leaver", "password1", "leave@test.com");
+            String token = signupAndLogin("leaver", "Password1!", "leave@test.com");
 
             // 탈퇴 → 200
             mockMvc.perform(delete("/api/users/me")

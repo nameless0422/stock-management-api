@@ -100,7 +100,7 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
     void receive_userRole_403() throws Exception {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
         long productId = createProduct(adminToken, "상품C", "SKU-C", 3000);
-        String userToken = signupAndLogin("user", "userpass1", "user@example.com");
+        String userToken = signupAndLogin("user", "Userpass1!", "user@example.com");
 
         mockMvc.perform(post("/api/inventory/" + productId + "/receive")
                         .header("Authorization", "Bearer " + userToken)
@@ -167,7 +167,7 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
         long productId = createProduct(adminToken, "상품F", "SKU-F", 2000);
         receive(adminToken, productId, 20);
 
-        String userToken = signupAndLogin("buyer", "buyerpass1", "buyer@example.com");
+        String userToken = signupAndLogin("buyer", "Buyerpass1!", "buyer@example.com");
         long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         // 주문 생성 → reserve() 호출
@@ -277,7 +277,7 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
             receive(adminToken, soldOut, 2);        // available=2 → 주문으로 소진 예정
 
             // 품절 상품 재고 전량 주문 → reserved=2, available=0
-            String userToken = signupAndLogin("buyer", "buyerpass1", "buyer@example.com");
+            String userToken = signupAndLogin("buyer", "Buyerpass1!", "buyer@example.com");
             long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
             mockMvc.perform(post("/api/orders")
                             .header("Authorization", "Bearer " + userToken)

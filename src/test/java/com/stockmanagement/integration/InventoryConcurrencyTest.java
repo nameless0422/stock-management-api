@@ -125,7 +125,7 @@ class InventoryConcurrencyTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
         long productId = setupProduct(adminToken, "SKU-CONC-S", 5); // 가용 재고 5
 
-        String userToken = signupAndLogin("buyer", "buyerpass1", "buyer@example.com");
+        String userToken = signupAndLogin("buyer", "Buyerpass1!", "buyer@example.com");
         long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         AtomicInteger successCount = new AtomicInteger(0);

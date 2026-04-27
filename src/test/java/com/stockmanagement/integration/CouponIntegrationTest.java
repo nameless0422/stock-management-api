@@ -76,11 +76,11 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("쿠폰 생성 → 주문에 쿠폰 적용 → discountAmount 확인")
     void applyCouponOnOrder() throws Exception {
-        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP1", 30000, 10);
         createCoupon(adminToken, "FIXED5000", "FIXED_AMOUNT", 5000, 100);
 
-        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         String body = mockMvc.perform(post("/api/orders")
@@ -102,7 +102,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("PERCENTAGE 쿠폰 적용 — 캡 적용 확인")
     void percentageCouponWithCap() throws Exception {
-        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP2", 50000, 10);
 
         // 10% 할인, 캡 3000
@@ -117,7 +117,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                         .content(json))
                 .andExpect(status().isCreated());
 
-        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         // 50000 × 10% = 5000 → 캡 3000 적용
@@ -135,11 +135,11 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("주문 생성 후 취소 → 쿠폰 usageCount 복원 확인")
     void cancelOrderRestoresCouponUsage() throws Exception {
-        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP3", 20000, 10);
         long couponId  = createCoupon(adminToken, "CANCEL10", "FIXED_AMOUNT", 2000, 5);
 
-        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
         long orderId = createOrder(userToken, userId, productId, 20000, "CANCEL10");
 
@@ -164,17 +164,17 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("소진 쿠폰 (maxUsageCount=1) — 2번째 사용 → 422")
     void exhaustedCoupon() throws Exception {
-        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP4", 10000, 10);
         createCoupon(adminToken, "ONE1TIME", "FIXED_AMOUNT", 1000, 1);
 
         // 첫 번째 사용자 — 성공
-        String user1Token = signupAndLogin("buyer1", "password1", "b1@test.com");
+        String user1Token = signupAndLogin("buyer1", "Password1!", "b1@test.com");
         long user1Id = userRepository.findByUsername("buyer1").orElseThrow().getId();
         createOrder(user1Token, user1Id, productId, 10000, "ONE1TIME");
 
         // 두 번째 사용자 — COUPON_EXHAUSTED (422)
-        String user2Token = signupAndLogin("buyer2", "password1", "b2@test.com");
+        String user2Token = signupAndLogin("buyer2", "Password1!", "b2@test.com");
         long user2Id = userRepository.findByUsername("buyer2").orElseThrow().getId();
         mockMvc.perform(post("/api/orders")
                         .header("Authorization", "Bearer " + user2Token)
@@ -189,11 +189,11 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("같은 사용자가 동일 쿠폰 재사용 → 422")
     void sameUserCouponReuse() throws Exception {
-        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP5", 10000, 10);
         createCoupon(adminToken, "ONCE1USER", "FIXED_AMOUNT", 1000, 100);
 
-        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
         // 첫 번째 사용 — 성공
         createOrder(userToken, userId, productId, 10000, "ONCE1USER");
@@ -212,10 +212,10 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("쿠폰 유효성 확인 API — 할인 금액 미리보기")
     void validateCoupon() throws Exception {
-        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         createCoupon(adminToken, "PREVIEW1", "FIXED_AMOUNT", 3000, 100);
 
-        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
 
         mockMvc.perform(post("/api/coupons/validate")
                         .header("Authorization", "Bearer " + userToken)
@@ -229,7 +229,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("ADMIN — 쿠폰 비활성화 → 비활성화 쿠폰 사용 시 422")
     void deactivateCoupon() throws Exception {
-        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP6", 10000, 10);
         long couponId  = createCoupon(adminToken, "DEACT001", "FIXED_AMOUNT", 1000, 100);
 
@@ -240,7 +240,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.active").value(false));
 
         // 비활성화된 쿠폰 사용 → 422 COUPON_INACTIVE
-        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
         mockMvc.perform(post("/api/orders")
                         .header("Authorization", "Bearer " + userToken)
@@ -257,10 +257,10 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("ADMIN 쿠폰 발급 → GET /api/coupons/my에서 조회됨")
     void issueCouponAndGetMyCoupons() throws Exception {
-        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long couponId = createCoupon(adminToken, "MYCOUPON1", "FIXED_AMOUNT", 3000, 100);
 
-        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         // 발급
@@ -283,7 +283,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("동일 쿠폰 중복 발급 → 409 COUPON_ALREADY_ISSUED")
     void duplicateIssuance() throws Exception {
-        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long couponId = createCoupon(adminToken, "ONCE1ISSU", "FIXED_AMOUNT", 1000, 100);
         long userId = userRepository.findByUsername("admin").orElseThrow().getId();
 
@@ -307,11 +307,11 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("쿠폰 사용 후 isUsable = false")
     void usedCouponNotUsable() throws Exception {
-        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-MY1", 20000, 5);
         long couponId = createCoupon(adminToken, "USE1ONCE", "FIXED_AMOUNT", 1000, 100);
 
-        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         // 발급
@@ -334,7 +334,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("발급받지 않은 사용자 — 내 쿠폰 목록 빈 배열")
     void noIssuedCoupons() throws Exception {
-        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
 
         mockMvc.perform(get("/api/coupons/my")
                         .header("Authorization", "Bearer " + userToken))
@@ -346,10 +346,10 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("쿠폰 없는 일반 주문 — discountAmount=0")
     void orderWithoutCoupon() throws Exception {
-        String adminToken = createAdminAndLogin("admin", "password1", "a@test.com");
+        String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP7", 15000, 10);
 
-        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         mockMvc.perform(post("/api/orders")

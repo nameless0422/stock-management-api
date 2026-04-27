@@ -21,8 +21,8 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
     @BeforeEach
     void setUp() throws Exception {
         adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
-        userToken1 = signupAndLogin("user1", "password1", "u1@test.com");
-        userToken2 = signupAndLogin("user2", "password1", "u2@test.com");
+        userToken1 = signupAndLogin("user1", "Password1!", "u1@test.com");
+        userToken2 = signupAndLogin("user2", "Password1!", "u2@test.com");
         userId1 = userRepository.findByUsername("user1").orElseThrow().getId();
         userId2 = userRepository.findByUsername("user2").orElseThrow().getId();
         productId = createProductAndReceive("SKU-F1", 1000, 100);
