@@ -42,6 +42,7 @@ public class OutboxEventRelayScheduler {
     private int batchSize;
 
     private Counter relayedCounter;
+    private Counter failedCounter;
 
     @PostConstruct
     void registerMetrics() {
@@ -50,7 +51,10 @@ public class OutboxEventRelayScheduler {
                 .description("MAX_RETRY 초과로 영구 발행 실패된 Outbox 이벤트 수")
                 .register(meterRegistry);
         relayedCounter = Counter.builder("outbox.relayed")
-                .description("relay에 성공(processOne 호출)한 Outbox 이벤트 누적 수")
+                .description("relay에 성공한 Outbox 이벤트 누적 수")
+                .register(meterRegistry);
+        failedCounter = Counter.builder("outbox.relay_failed")
+                .description("relay에 실패한 Outbox 이벤트 누적 수")
                 .register(meterRegistry);
     }
 
@@ -74,8 +78,12 @@ public class OutboxEventRelayScheduler {
 
         // 건별 독립 트랜잭션: 중간 실패가 이전 성공 커밋을 롤백하지 않음
         for (OutboxEvent outbox : pending) {
-            processor.processOne(outbox.getId());
-            relayedCounter.increment();
+            boolean success = processor.processOne(outbox.getId());
+            if (success) {
+                relayedCounter.increment();
+            } else {
+                failedCounter.increment();
+            }
         }
     }
 }
