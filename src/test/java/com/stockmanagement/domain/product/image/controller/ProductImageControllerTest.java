@@ -51,7 +51,7 @@ class ProductImageControllerTest {
         @DisplayName("ADMIN — 200 + presigned URL 반환")
         void admin_success() throws Exception {
             PresignedUrlResponse res = new PresignedUrlResponse(
-                    "https://minio/presigned", "https://minio/img.jpg", "products/1/uuid.jpg");
+                    "https://minio/presigned", "https://minio/img.jpg", "products/1/550e8400-e29b-41d4-a716-446655440000.jpg");
             given(productImageService.generatePresignedUrl(eq(1L), any())).willReturn(res);
 
             String body = objectMapper.writeValueAsString(
@@ -62,7 +62,7 @@ class ProductImageControllerTest {
                             .content(body))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.presignedUrl").value("https://minio/presigned"))
-                    .andExpect(jsonPath("$.data.objectKey").value("products/1/uuid.jpg"));
+                    .andExpect(jsonPath("$.data.objectKey").value("products/1/550e8400-e29b-41d4-a716-446655440000.jpg"));
         }
 
         @Test
@@ -92,7 +92,7 @@ class ProductImageControllerTest {
 
             String body = objectMapper.writeValueAsString(Map.of(
                     "imageUrl", "https://minio/img.jpg",
-                    "objectKey", "products/1/uuid.jpg",
+                    "objectKey", "products/1/550e8400-e29b-41d4-a716-446655440000.jpg",
                     "imageType", "THUMBNAIL",
                     "displayOrder", 0));
 
