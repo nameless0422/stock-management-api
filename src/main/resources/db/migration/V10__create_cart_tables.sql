@@ -10,4 +10,4 @@ CREATE TABLE cart_items (
 
     UNIQUE KEY uk_cart_user_product (user_id, product_id),
     CONSTRAINT fk_cart_product FOREIGN KEY (product_id) REFERENCES products (id)
-);
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;

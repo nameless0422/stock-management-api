@@ -35,7 +35,7 @@ class CartIntegrationTest extends AbstractIntegrationTest {
     void addItemAndGetCart() throws Exception {
         String adminToken = createAdminAndLogin("admin", "pass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-C1", 2000, 50);
-        String userToken = signupAndLogin("buyer", "password1", "buyer@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "buyer@test.com");
 
         // 담기
         mockMvc.perform(post("/api/cart/items")
@@ -60,7 +60,7 @@ class CartIntegrationTest extends AbstractIntegrationTest {
     void addSameItemUpdatesQuantity() throws Exception {
         String adminToken = createAdminAndLogin("admin", "pass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-C2", 1000, 50);
-        String userToken = signupAndLogin("buyer", "password1", "buyer@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "buyer@test.com");
 
         mockMvc.perform(post("/api/cart/items")
                         .header("Authorization", "Bearer " + userToken)
@@ -83,7 +83,7 @@ class CartIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "pass1", "admin@test.com");
         long p1 = createProductAndReceive(adminToken, "SKU-C3", 1000, 10);
         long p2 = createProductAndReceive(adminToken, "SKU-C4", 2000, 10);
-        String userToken = signupAndLogin("buyer", "password1", "buyer@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "buyer@test.com");
 
         mockMvc.perform(post("/api/cart/items")
                         .header("Authorization", "Bearer " + userToken)
@@ -113,7 +113,7 @@ class CartIntegrationTest extends AbstractIntegrationTest {
     void clearCart() throws Exception {
         String adminToken = createAdminAndLogin("admin", "pass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-C5", 500, 20);
-        String userToken = signupAndLogin("buyer", "password1", "buyer@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "buyer@test.com");
 
         mockMvc.perform(post("/api/cart/items")
                         .header("Authorization", "Bearer " + userToken)
@@ -137,7 +137,7 @@ class CartIntegrationTest extends AbstractIntegrationTest {
     void checkout() throws Exception {
         String adminToken = createAdminAndLogin("admin", "pass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-C6", 3000, 20);
-        String userToken = signupAndLogin("buyer", "password1", "buyer@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "buyer@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         // 담기
@@ -173,8 +173,8 @@ class CartIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("빈 장바구니 주문 전환 → 400 Bad Request")
     void checkoutEmptyCart_returns400() throws Exception {
-        signupAndLogin("buyer2", "password1", "buyer2@test.com");
-        String userToken = login("buyer2", "password1");
+        signupAndLogin("buyer2", "Password1!", "buyer2@test.com");
+        String userToken = login("buyer2", "Password1!");
 
         mockMvc.perform(post("/api/cart/checkout")
                         .header("Authorization", "Bearer " + userToken)

@@ -143,7 +143,7 @@ public class ProductService {
             }
             products = productRepository.findByStatusAndCategoryIdIn(ProductStatus.ACTIVE, categoryIds, effectivePageable);
         } else if (keyword != null && !keyword.isBlank()) {
-            products = productRepository.searchByStatus(ProductStatus.ACTIVE, keyword, effectivePageable);
+            products = productRepository.searchByStatus(ProductStatus.ACTIVE, escapeLike(keyword), effectivePageable);
         } else {
             products = productRepository.findByStatus(ProductStatus.ACTIVE, effectivePageable);
         }
@@ -212,6 +212,11 @@ public class ProductService {
     }
 
     // ===== 내부 헬퍼 =====
+
+    /** LIKE 패턴 와일드카드(!, %, _)를 이스케이프한다. ESCAPE ! 기준. */
+    private static String escapeLike(String value) {
+        return value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+    }
 
     /**
      * 단일 상품에 재고·리뷰 통계를 포함한 응답을 생성한다 (이미지 미포함).

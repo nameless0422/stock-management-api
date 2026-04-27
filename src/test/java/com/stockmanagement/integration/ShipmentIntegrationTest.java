@@ -54,7 +54,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("주문별 배송 조회 → PREPARING 상태 반환")
     void getByOrderId_returnsPreparing() throws Exception {
-        String userToken = signupAndLogin("user1", "password1", "u1@test.com");
+        String userToken = signupAndLogin("user1", "Password1!", "u1@test.com");
         long userId = userRepository.findByUsername("user1").orElseThrow().getId();
         long orderId = createConfirmedOrder(userId);
         createPreparingShipment(orderId);
@@ -69,7 +69,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("존재하지 않는 배송 조회 → 404")
     void getByOrderId_notFound() throws Exception {
-        String userToken = signupAndLogin("user1", "password1", "u1@test.com");
+        String userToken = signupAndLogin("user1", "Password1!", "u1@test.com");
 
         mockMvc.perform(get("/api/shipments/orders/9999")
                         .header("Authorization", "Bearer " + userToken))
@@ -100,7 +100,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("USER 권한으로 출고 처리 → 403")
     void ship_userRole_forbidden() throws Exception {
-        String userToken = signupAndLogin("user2", "password1", "u2@test.com");
+        String userToken = signupAndLogin("user2", "Password1!", "u2@test.com");
         long userId = userRepository.findByUsername("user2").orElseThrow().getId();
         long orderId = createConfirmedOrder(userId);
         createPreparingShipment(orderId);

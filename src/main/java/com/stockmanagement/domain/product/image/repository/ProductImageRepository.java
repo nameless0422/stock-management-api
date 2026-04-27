@@ -15,4 +15,7 @@ public interface ProductImageRepository extends JpaRepository<ProductImage, Long
 
     /** 이미지 ID 목록 + productId로 배치 조회 (순서 변경 시 소유권 검증) */
     List<ProductImage> findByProductIdAndIdIn(Long productId, Collection<Long> ids);
+
+    /** 상품별 이미지 수 조회 (개수 제한 체크용) */
+    long countByProductId(Long productId);
 }

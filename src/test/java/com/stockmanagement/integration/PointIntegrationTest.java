@@ -49,7 +49,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("포인트 잔액 조회 → 초기 0")
     void getBalance_initial() throws Exception {
-        String userToken = signupAndLogin("user1", "password1", "u1@test.com");
+        String userToken = signupAndLogin("user1", "Password1!", "u1@test.com");
 
         mockMvc.perform(get("/api/points/balance")
                         .header("Authorization", "Bearer " + userToken))
@@ -60,7 +60,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("포인트 잔액 조회 → 사전 적립 후 잔액 반환")
     void getBalance_withPoints() throws Exception {
-        String userToken = signupAndLogin("user2", "password1", "u2@test.com");
+        String userToken = signupAndLogin("user2", "Password1!", "u2@test.com");
         long userId = userRepository.findByUsername("user2").orElseThrow().getId();
         seedPoints(userId, 5000);
 
@@ -73,7 +73,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("포인트 이력 조회 → 초기 빈 목록")
     void getHistory_empty() throws Exception {
-        String userToken = signupAndLogin("user3", "password1", "u3@test.com");
+        String userToken = signupAndLogin("user3", "Password1!", "u3@test.com");
 
         mockMvc.perform(get("/api/points/history")
                         .header("Authorization", "Bearer " + userToken))
@@ -88,7 +88,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-PT1", 20000, 10);
 
-        String userToken = signupAndLogin("buyer", "password1", "b@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
         seedPoints(userId, 3000);
 
@@ -116,7 +116,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-PT2", 10000, 10);
 
-        String userToken = signupAndLogin("buyer2", "password1", "b2@test.com");
+        String userToken = signupAndLogin("buyer2", "Password1!", "b2@test.com");
         long userId = userRepository.findByUsername("buyer2").orElseThrow().getId();
         seedPoints(userId, 500);
 

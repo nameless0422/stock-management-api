@@ -26,7 +26,17 @@ public class RedisConfig {
     public RedissonClient redissonClient() {
         Config config = new Config();
         config.useSingleServer()
-                .setAddress("redis://" + host + ":" + port);
+                .setAddress("redis://" + host + ":" + port)
+                // 연결 타임아웃: 2초 (기본값 10초는 너무 길어 장애 전파 위험)
+                .setConnectTimeout(2000)
+                // 응답 타임아웃: 3초
+                .setTimeout(3000)
+                // 재시도: 3회, 간격 1.5초
+                .setRetryAttempts(3)
+                .setRetryInterval(1500)
+                // 연결 풀: 최대 10개, 최소 idle 2개
+                .setConnectionPoolSize(10)
+                .setConnectionMinimumIdleSize(2);
         return Redisson.create(config);
     }
 }

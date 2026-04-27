@@ -14,8 +14,12 @@ public class PresignedUrlRequest {
     @Pattern(regexp = "^[a-zA-Z0-9]{1,10}$", message = "허용되지 않는 파일 확장자입니다.")
     private String fileExtension;
 
-    /** 업로드할 파일의 MIME 타입 (예: image/jpeg) */
+    /** 업로드할 파일의 MIME 타입 — 허용: image/jpeg, image/png, image/webp, image/gif */
     @NotBlank
+    @Pattern(
+            regexp = "^image/(jpeg|jpg|png|webp|gif)$",
+            message = "허용된 이미지 MIME 타입이 아닙니다. (image/jpeg, image/png, image/webp, image/gif)"
+    )
     private String contentType;
 
     @NotNull

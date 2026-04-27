@@ -56,13 +56,12 @@ public class ProductSearchRequest {
 
     /**
      * Elasticsearch 검색 조건 존재 여부.
-     * sort만 지정한 경우도 ES로 처리한다.
+     * sort 단독은 ES 진입 조건이 아님 — 실제 검색 필터가 있을 때만 ES 사용.
      */
     public boolean hasSearchCondition() {
         return (q != null && !q.isBlank())
                 || minPrice != null
                 || maxPrice != null
-                || (category != null && !category.isBlank())
-                || (sort != null && !sort.isBlank());
+                || (category != null && !category.isBlank());
     }
 }

@@ -15,7 +15,7 @@ CREATE TABLE delivery_addresses (
 
     KEY idx_delivery_address_user (user_id),
     CONSTRAINT fk_delivery_address_user FOREIGN KEY (user_id) REFERENCES users (id)
-);
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 -- orders 테이블에 배송지 FK 컬럼 추가 (nullable — 배송지 선택은 선택 사항)
 -- ON DELETE SET NULL: 배송지 삭제 시 주문의 배송지 정보를 null로 설정 (주문 이력 보존)

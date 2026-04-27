@@ -57,7 +57,7 @@ class AuthControllerTest {
     class Signup {
 
         private static final String VALID_JSON =
-                "{\"username\":\"testuser\",\"password\":\"password123\",\"email\":\"test@example.com\"}";
+                "{\"username\":\"testuser\",\"password\":\"Password1@3\",\"email\":\"test@example.com\"}";
 
         @Test
         @DisplayName("회원가입 성공 (인증 불필요) → 201")
@@ -85,7 +85,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("username 3자 미만 → 400")
         void usernameTooShort() throws Exception {
-            String json = "{\"username\":\"ab\",\"password\":\"password123\",\"email\":\"test@example.com\"}";
+            String json = "{\"username\":\"ab\",\"password\":\"Password1@3\",\"email\":\"test@example.com\"}";
 
             mockMvc.perform(post("/api/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -114,7 +114,7 @@ class AuthControllerTest {
     class Login {
 
         private static final String VALID_JSON =
-                "{\"username\":\"testuser\",\"password\":\"password123\"}";
+                "{\"username\":\"testuser\",\"password\":\"Password1@3\"}";
 
         @Test
         @DisplayName("로그인 성공 (인증 불필요) — JWT + Refresh Token 반환 → 200")

@@ -117,17 +117,17 @@ class UserServiceTest {
         @Test
         @DisplayName("정상 가입 — 비밀번호 인코딩 후 User 저장")
         void savesUserWithEncodedPassword() {
-            SignupRequest request = new SignupRequest("testuser", "password123", "test@example.com");
+            SignupRequest request = new SignupRequest("testuser", "Password1@3", "test@example.com");
 
             given(userRepository.existsByUsername("testuser")).willReturn(false);
             given(userRepository.existsByEmail("test@example.com")).willReturn(false);
-            given(passwordEncoder.encode("password123")).willReturn("encoded-pw");
+            given(passwordEncoder.encode("Password1@3")).willReturn("encoded-pw");
             given(userRepository.save(any(User.class))).willReturn(user);
             given(userPointRepository.save(any(UserPoint.class))).willReturn(null);
 
             UserResponse response = userService.signup(request);
 
-            verify(passwordEncoder).encode("password123");
+            verify(passwordEncoder).encode("Password1@3");
             verify(userRepository).save(any(User.class));
             verify(userPointRepository).save(any(UserPoint.class)); // 포인트 계정 초기화 검증
             assertThat(response.username()).isEqualTo("testuser");
@@ -138,7 +138,7 @@ class UserServiceTest {
         @Test
         @DisplayName("username 중복 시 DUPLICATE_USERNAME 예외 발생, 저장 미수행")
         void throwsWhenUsernameDuplicated() {
-            SignupRequest request = new SignupRequest("testuser", "password123", "test@example.com");
+            SignupRequest request = new SignupRequest("testuser", "Password1@3", "test@example.com");
 
             given(userRepository.existsByUsername("testuser")).willReturn(true);
 
@@ -154,7 +154,7 @@ class UserServiceTest {
         @Test
         @DisplayName("email 중복 시 DUPLICATE_EMAIL 예외 발생, 저장 미수행")
         void throwsWhenEmailDuplicated() {
-            SignupRequest request = new SignupRequest("testuser", "password123", "test@example.com");
+            SignupRequest request = new SignupRequest("testuser", "Password1@3", "test@example.com");
 
             given(userRepository.existsByUsername("testuser")).willReturn(false);
             given(userRepository.existsByEmail("test@example.com")).willReturn(true);
@@ -178,10 +178,10 @@ class UserServiceTest {
         @Test
         @DisplayName("정상 로그인 — Access Token + Refresh Token 반환")
         void returnsJwtTokenOnSuccess() {
-            LoginRequest request = new LoginRequest("testuser", "password123");
+            LoginRequest request = new LoginRequest("testuser", "Password1@3");
 
             given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
-            given(passwordEncoder.matches("password123", "encoded-pw")).willReturn(true);
+            given(passwordEncoder.matches("Password1@3", "encoded-pw")).willReturn(true);
             given(jwtTokenProvider.createToken("testuser", "USER", null)).willReturn("jwt-token");
             given(jwtTokenProvider.getTokenValidityInSeconds()).willReturn(86400L);
             given(refreshTokenStore.issue("testuser")).willReturn("refresh-uuid");
@@ -197,7 +197,7 @@ class UserServiceTest {
         @Test
         @DisplayName("존재하지 않는 username으로 로그인 시 INVALID_CREDENTIALS 예외 발생")
         void throwsWhenUsernameNotFound() {
-            LoginRequest request = new LoginRequest("unknown", "password123");
+            LoginRequest request = new LoginRequest("unknown", "Password1@3");
 
             given(userRepository.findByUsername("unknown")).willReturn(Optional.empty());
 

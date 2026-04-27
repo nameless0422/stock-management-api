@@ -40,7 +40,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("USER — ADMIN 전용 → 403")
         void userCannotGetDashboard() throws Exception {
-            String userToken = signupAndLogin("user1", "password1", "user1@test.com");
+            String userToken = signupAndLogin("user1", "Password1!", "user1@test.com");
 
             mockMvc.perform(get("/api/admin/dashboard")
                             .header("Authorization", "Bearer " + userToken))
@@ -65,8 +65,8 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         @DisplayName("ADMIN — 전체 사용자 목록 조회 → 200, 페이징 응답")
         void adminCanGetUsers() throws Exception {
             String adminToken = createAdminAndLogin("admin2", "adminpass2", "admin2@test.com");
-            signupAndLogin("userA", "password1", "a@test.com");
-            signupAndLogin("userB", "password2", "b@test.com");
+            signupAndLogin("userA", "Password1!", "a@test.com");
+            signupAndLogin("userB", "Password2!", "b@test.com");
 
             mockMvc.perform(get("/api/admin/users")
                             .header("Authorization", "Bearer " + adminToken))
@@ -80,8 +80,8 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         @DisplayName("ADMIN — search 파라미터로 사용자 검색 → 200, 필터 적용")
         void adminCanSearchUsers() throws Exception {
             String adminToken = createAdminAndLogin("admin3", "adminpass3", "admin3@test.com");
-            signupAndLogin("findme", "password1", "findme@test.com");
-            signupAndLogin("other", "password2", "other@test.com");
+            signupAndLogin("findme", "Password1!", "findme@test.com");
+            signupAndLogin("other", "Password2!", "other@test.com");
 
             mockMvc.perform(get("/api/admin/users?search=findme")
                             .header("Authorization", "Bearer " + adminToken))
@@ -101,7 +101,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         @DisplayName("ADMIN — USER → ADMIN 권한 변경 → 200, role=ADMIN")
         void adminCanUpdateRole() throws Exception {
             String adminToken = createAdminAndLogin("admin4", "adminpass4", "admin4@test.com");
-            signupAndLogin("promote_me", "password1", "promote@test.com");
+            signupAndLogin("promote_me", "Password1!", "promote@test.com");
             long userId = userRepository.findByUsername("promote_me").orElseThrow().getId();
 
             mockMvc.perform(patch("/api/admin/users/" + userId + "/role")

@@ -36,7 +36,7 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("USER — ADMIN 전용 → 403")
         void createProduct_user_403() throws Exception {
-            String userToken = signupAndLogin("normaluser", "password123", "user@example.com");
+            String userToken = signupAndLogin("normaluser", "Password1@3", "user@example.com");
 
             mockMvc.perform(post("/api/products")
                             .header("Authorization", "Bearer " + userToken)
@@ -76,7 +76,7 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
         @DisplayName("상품 단건 조회 → 200")
         void getProduct_200() throws Exception {
             String adminToken = createAdminAndLogin("admin3", "adminpass3", "admin3@example.com");
-            String userToken = signupAndLogin("user3", "password123", "user3@example.com");
+            String userToken = signupAndLogin("user3", "Password1@3", "user3@example.com");
 
             String responseBody = mockMvc.perform(post("/api/products")
                             .header("Authorization", "Bearer " + adminToken)
@@ -97,7 +97,7 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("존재하지 않는 상품 → 404")
         void getProduct_notFound_404() throws Exception {
-            String userToken = signupAndLogin("user4", "password123", "user4@example.com");
+            String userToken = signupAndLogin("user4", "Password1@3", "user4@example.com");
 
             mockMvc.perform(get("/api/products/99999")
                             .header("Authorization", "Bearer " + userToken))
