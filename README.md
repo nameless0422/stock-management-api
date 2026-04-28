@@ -19,7 +19,7 @@ Spring Boot 기반 **쇼핑몰 백엔드 포트폴리오 프로젝트**.
 | **ES 검색 + Fallback** | 상품 키워드·가격·카테고리 복합 검색(Elasticsearch), 장애 시 자동 MySQL fallback |
 | **Circuit Breaker** | TossPayments HTTP 호출 실패 누적 시 회로 차단 → 빠른 실패 응답 |
 | **배치 처리** | 쿠폰 만료 비활성화·일별 재고 스냅샷·일별 주문 통계 스케줄러 (`@Scheduled`, `@ConditionalOnProperty`, 멱등성 보장) |
-| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **605개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
+| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **647개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
 
 ---
 
@@ -97,7 +97,7 @@ docker compose -f docker/docker-compose.yml up -d mysql redis elasticsearch
 ./gradlew bootRun
 ```
 
-Flyway가 기동 시 V1~V28 마이그레이션을 자동 실행합니다.
+Flyway가 기동 시 V1~V42 마이그레이션을 자동 실행합니다.
 
 ### 환경 변수
 
@@ -139,7 +139,7 @@ Flyway가 기동 시 V1~V28 마이그레이션을 자동 실행합니다.
 | 통합 | `integration/` | Testcontainers (MySQL + Redis + ES), Flyway 실행, 실제 HTTP 흐름 E2E |
 | 동시성 | `integration/InventoryConcurrencyTest` | 동시 입고 lost update · 재고 예약 overselling 검증 |
 
-현재 총 **605개** 테스트 전체 통과.
+현재 총 **647개** 테스트 전체 통과.
 
 ---
 
@@ -380,7 +380,7 @@ erDiagram
     %% ── REFUND ───────────────────────────────────────────
     refunds {
         bigint id PK
-        bigint payment_id UK "FK, 결제당 1건"
+        bigint payment_id "FK, 부분 취소 다중 허용"
         bigint order_id FK
         bigint user_id "소유권 검증 비정규화"
         decimal amount
@@ -754,6 +754,20 @@ available = onHand - reserved - allocated
 | V26 | `coupons.is_public` 추가 — 공개 프로모 쿠폰 여부 |
 | V27 | `orders.created_at` 인덱스, `point_transactions(user_id, order_id)` 복합 인덱스 |
 | V28 | `refunds.user_id` 추가 — 소유권 검증 비정규화 |
+| V29 | `refunds.user_id` 백필 + FK 제약 추가 |
+| V30 | 전체 테이블 `CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci` 통일 |
+| V31 | 누락 인덱스 2차 추가 (`orders.status`, `products.status` 등) |
+| V32 | 누락 FK 제약 일괄 추가 (`cart_items.user_id` 등) |
+| V33 | `created_at` DEFAULT 없는 6개 테이블 수정 |
+| V34 | `outbox_events.next_retry_at` — 지수 백오프 컬럼 |
+| V35 | `orders.cancel_reason` — 주문 취소 사유 |
+| V36 | `shipments.estimated_delivery_at` — 배송 예상 도착일 |
+| V37 | `cart_items.saved_price` — 장바구니 가격 변동 감지 |
+| V38 | `payments.cancelled_amount` — 부분 취소 누적 금액 |
+| V39 | `refunds.payment_id` UNIQUE 제약 제거 + `idx_refunds_payment_created` 인덱스 추가 |
+| V40 | `DECIMAL` precision 통일 (`DECIMAL(15,2)`) |
+| V41 | `point_transactions(order_id, type)` UNIQUE 제약 — 이중 적립 방지 |
+| V42 | `delivery_addresses` `BEFORE INSERT/UPDATE` 트리거 — 기본 배송지 단일 보장 |
 
 ---
 
@@ -826,9 +840,9 @@ available = onHand - reserved - allocated
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
-| GET | `/api/inventory` | 재고 목록 (`?status=&productId=` 필터) | USER |
-| GET | `/api/inventory/{productId}` | 재고 현황 조회 | USER |
-| GET | `/api/inventory/{productId}/transactions` | 재고 변동 이력 (페이징) | USER |
+| GET | `/api/inventory` | 재고 목록 (`?status=&productId=` 필터) | ADMIN |
+| GET | `/api/inventory/{productId}` | 재고 현황 조회 | ADMIN |
+| GET | `/api/inventory/{productId}/transactions` | 재고 변동 이력 (페이징) | ADMIN |
 | POST | `/api/inventory/{productId}/receive` | 입고 처리 | ADMIN |
 | POST | `/api/inventory/{productId}/adjust` | 재고 조정 | ADMIN |
 
@@ -1015,9 +1029,9 @@ Authorization: Bearer <token>
 | `AdminSecurityConfig` | @Order(1) | `/admin-ui/**`, `/instances/**` | Form Login + 세션 |
 | `SecurityConfig` | @Order(2) | 나머지 전체 | JWT (stateless) |
 
-- 미인증 → 403
+- 미인증 → 401
 - 공개: `/api/auth/**`, `/api/products/**`, `/api/categories/**`, `/actuator/health`, `/actuator/info`, `/api/payments/webhook`, `/swagger-ui/**`
-- ADMIN 전용: `/actuator/**` (health/info 제외), 상품·재고 write, 쿠폰 관리, 배송 상태 변경, 카테고리 write
+- ADMIN 전용: `/actuator/**` (health/info 제외), 상품·재고 read/write, 쿠폰 관리, 배송 상태 변경, 카테고리 write
 
 ### 추가 보안 기능
 
