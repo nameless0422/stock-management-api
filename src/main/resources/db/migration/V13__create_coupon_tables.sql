@@ -18,7 +18,7 @@ CREATE TABLE coupons
     created_at           DATETIME(6)    NOT NULL,
     updated_at           DATETIME(6)    NOT NULL,
     KEY idx_coupons_code (code)
-);
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 -- ===== 쿠폰 사용 이력 테이블 =====
 CREATE TABLE coupon_usages
@@ -33,7 +33,7 @@ CREATE TABLE coupon_usages
     CONSTRAINT fk_coupon_usage_coupon FOREIGN KEY (coupon_id) REFERENCES coupons (id),
     CONSTRAINT fk_coupon_usage_user FOREIGN KEY (user_id) REFERENCES users (id),
     CONSTRAINT fk_coupon_usage_order FOREIGN KEY (order_id) REFERENCES orders (id)
-);
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 -- ===== orders 테이블에 쿠폰 연동 컬럼 추가 =====
 ALTER TABLE orders

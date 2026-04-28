@@ -20,6 +20,7 @@ import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.User;
+import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -90,7 +91,7 @@ public class AdminService {
     /** 전체 사용자 목록 (페이징). search가 있으면 username/email로 필터링 */
     public Page<UserResponse> getUsers(Pageable pageable, String search) {
         if (search != null && !search.isBlank()) {
-            return userRepository.searchByUsernameOrEmail(search, pageable).map(UserResponse::from);
+            return userRepository.searchByUsernameOrEmail(escapeLike(search), pageable).map(UserResponse::from);
         }
         return userRepository.findAll(pageable).map(UserResponse::from);
     }
@@ -100,6 +101,11 @@ public class AdminService {
     public UserResponse updateRole(Long userId, RoleUpdateRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        // 마지막 ADMIN을 USER로 강등 시도 시 차단
+        if (user.getRole() == UserRole.ADMIN && request.role() != UserRole.ADMIN
+                && userRepository.countByRole(UserRole.ADMIN) <= 1) {
+            throw new BusinessException(ErrorCode.LAST_ADMIN);
+        }
         user.changeRole(request.role());
         return UserResponse.from(user);
     }
@@ -128,7 +134,7 @@ public class AdminService {
     /** 전체 상품 목록 (ACTIVE + DISCONTINUED, 관리자 전용). search가 있으면 상품명/SKU로 필터링 */
     public Page<ProductResponse> getAllProducts(Pageable pageable, String search) {
         if (search != null && !search.isBlank()) {
-            return productRepository.searchAll(search, pageable).map(ProductResponse::from);
+            return productRepository.searchAll(escapeLike(search), pageable).map(ProductResponse::from);
         }
         return productRepository.findAll(pageable).map(ProductResponse::from);
     }
@@ -144,5 +150,10 @@ public class AdminService {
     public List<DailyInventorySnapshotResponse> getInventorySnapshot(LocalDate date) {
         return snapshotRepository.findBySnapshotDate(date)
                 .stream().map(DailyInventorySnapshotResponse::from).toList();
+    }
+
+    /** LIKE 패턴 와일드카드(!, %, _)를 이스케이프한다. ESCAPE ! 기준. */
+    private static String escapeLike(String value) {
+        return value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
     }
 }

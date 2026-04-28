@@ -97,7 +97,7 @@ public class PointService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void earn(Long userId, long paidAmount, Long orderId) {
         if (paidAmount <= 0) return; // 쿠폰/포인트 전액 할인 시 적립 없음
-        // 멱등성 보장 — Outbox 재처리 시 이중 적립 방지
+        // 멱등성 보장 — Outbox 재처리 시 이중 적립 방지 (앱 레벨 1차, DB UNIQUE 2차)
         if (pointTransactionRepository.existsByOrderIdAndType(orderId, PointTransactionType.EARN)) {
             return;
         }
@@ -112,6 +112,8 @@ public class PointService {
                 .description("주문 구매 적립 (주문 #" + orderId + ")")
                 .orderId(orderId)
                 .build());
+        // UK(order_id, type) 충돌 시 DataIntegrityViolationException 발생 → REQUIRES_NEW 트랜잭션 롤백
+        // (앱 레벨 existsBy 체크로 정상 흐름에서는 미발생)
     }
 
     /**

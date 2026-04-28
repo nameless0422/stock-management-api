@@ -19,7 +19,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("배송지 등록 → 201, 첫 번째 배송지는 자동 기본")
     void create_firstAddressIsDefault() throws Exception {
-        String token = signupAndLogin("user1", "password1", "u1@test.com");
+        String token = signupAndLogin("user1", "Password1!", "u1@test.com");
 
         mockMvc.perform(post("/api/delivery-addresses")
                         .header("Authorization", "Bearer " + token)
@@ -33,7 +33,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("두 번째 배송지 등록 → isDefault = false")
     void create_secondAddressNotDefault() throws Exception {
-        String token = signupAndLogin("user1", "password1", "u1@test.com");
+        String token = signupAndLogin("user1", "Password1!", "u1@test.com");
 
         mockMvc.perform(post("/api/delivery-addresses")
                         .header("Authorization", "Bearer " + token)
@@ -53,7 +53,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("필수 필드 누락 → 400")
     void create_missingRequired_400() throws Exception {
-        String token = signupAndLogin("user1", "password1", "u1@test.com");
+        String token = signupAndLogin("user1", "Password1!", "u1@test.com");
 
         mockMvc.perform(post("/api/delivery-addresses")
                         .header("Authorization", "Bearer " + token)
@@ -67,7 +67,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("배송지 목록 조회 → 기본 배송지 맨 앞")
     void getList_defaultFirst() throws Exception {
-        String token = signupAndLogin("user1", "password1", "u1@test.com");
+        String token = signupAndLogin("user1", "Password1!", "u1@test.com");
 
         // 첫 번째: 자동으로 기본
         mockMvc.perform(post("/api/delivery-addresses")
@@ -96,7 +96,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("배송지 수정 → 변경된 정보 반환")
     void update_success() throws Exception {
-        String token = signupAndLogin("user1", "password1", "u1@test.com");
+        String token = signupAndLogin("user1", "Password1!", "u1@test.com");
         long id = createAddress(token, "집");
 
         String updateReq = VALID_REQUEST.replace("\"집\"", "\"부모님댁\"");
@@ -113,7 +113,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("기본 배송지 변경 → 기존 기본 해제, 신규 기본 설정")
     void setDefault_switchesDefault() throws Exception {
-        String token = signupAndLogin("user1", "password1", "u1@test.com");
+        String token = signupAndLogin("user1", "Password1!", "u1@test.com");
 
         long id1 = createAddress(token, "집");
         long id2 = createAddress(token, "회사");
@@ -135,7 +135,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("배송지 삭제 → 204, 이후 조회 404")
     void delete_success() throws Exception {
-        String token = signupAndLogin("user1", "password1", "u1@test.com");
+        String token = signupAndLogin("user1", "Password1!", "u1@test.com");
         long id = createAddress(token, "집");
 
         mockMvc.perform(delete("/api/delivery-addresses/" + id)
@@ -150,7 +150,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("기본 배송지 삭제 → 다른 배송지가 자동 기본 승격")
     void delete_defaultPromotesAnother() throws Exception {
-        String token = signupAndLogin("user1", "password1", "u1@test.com");
+        String token = signupAndLogin("user1", "Password1!", "u1@test.com");
         long id1 = createAddress(token, "집");   // 기본 배송지
         long id2 = createAddress(token, "회사"); // 일반 배송지
 
@@ -184,7 +184,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"quantity\":10}"))
                 .andExpect(status().isOk());
 
-        String userToken = signupAndLogin("buyer", "password1", "buyer@test.com");
+        String userToken = signupAndLogin("buyer", "Password1!", "buyer@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
         long addressId = createAddress(userToken, "집");
 

@@ -17,6 +17,7 @@ import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -82,13 +83,19 @@ public class CartService {
         if (existing.isPresent()) {
             existing.get().updateQuantity(request.getQuantity());
         } else {
-            CartItem item = CartItem.builder()
-                    .userId(userId)
-                    .product(product)
-                    .quantity(request.getQuantity())
-                    .savedPrice(product.getPrice())
-                    .build();
-            cartRepository.save(item);
+            try {
+                CartItem item = CartItem.builder()
+                        .userId(userId)
+                        .product(product)
+                        .quantity(request.getQuantity())
+                        .savedPrice(product.getPrice())
+                        .build();
+                cartRepository.saveAndFlush(item);
+            } catch (DataIntegrityViolationException e) {
+                // 동시 요청으로 UK(user_id, product_id) 충돌 — 재조회 후 수량 업데이트
+                cartRepository.findByUserIdAndProductId(userId, product.getId())
+                        .ifPresent(item -> item.updateQuantity(request.getQuantity()));
+            }
         }
 
         return getCart(userId);

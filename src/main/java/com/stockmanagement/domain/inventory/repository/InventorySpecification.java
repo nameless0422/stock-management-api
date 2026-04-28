@@ -23,6 +23,13 @@ public class InventorySpecification {
 
     private InventorySpecification() {}
 
+    /** LIKE 패턴에서 와일드카드 문자(%,_,\)를 이스케이프한다. */
+    private static String escapeLike(String value) {
+        return value.replace("\\", "\\\\")
+                    .replace("%", "\\%")
+                    .replace("_", "\\_");
+    }
+
     /**
      * 검색 요청 객체로부터 Specification을 생성한다.
      * 모든 조건은 선택적이며, null인 경우 해당 조건은 적용되지 않는다.
@@ -57,7 +64,8 @@ public class InventorySpecification {
             if (request.getProductName() != null && !request.getProductName().isBlank()) {
                 predicates.add(cb.like(
                     cb.lower(product.get("name")),
-                    "%" + request.getProductName().toLowerCase() + "%"
+                    "%" + escapeLike(request.getProductName().toLowerCase()) + "%",
+                    '\\'
                 ));
             }
 
@@ -66,7 +74,8 @@ public class InventorySpecification {
                 Join<?, ?> categoryJoin = product.join("category", JoinType.LEFT);
                 predicates.add(cb.like(
                     cb.lower(categoryJoin.get("name")),
-                    "%" + request.getCategory().toLowerCase() + "%"
+                    "%" + escapeLike(request.getCategory().toLowerCase()) + "%",
+                    '\\'
                 ));
             }
 

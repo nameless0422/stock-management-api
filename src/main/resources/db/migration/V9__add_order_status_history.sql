@@ -10,4 +10,4 @@ CREATE TABLE order_status_history (
 
     CONSTRAINT fk_osh_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
     INDEX idx_osh_order_id (order_id)
-);
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;

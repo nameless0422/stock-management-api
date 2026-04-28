@@ -8,4 +8,4 @@ CREATE TABLE user_coupons
     UNIQUE KEY uk_user_coupons (user_id, coupon_id),
     CONSTRAINT fk_user_coupon_user   FOREIGN KEY (user_id)   REFERENCES users (id),
     CONSTRAINT fk_user_coupon_coupon FOREIGN KEY (coupon_id) REFERENCES coupons (id)
-);
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;

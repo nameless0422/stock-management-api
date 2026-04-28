@@ -66,7 +66,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-REV1", 10000, 10);
 
-        String userToken = signupAndLogin("reviewer", "password1", "rev@test.com");
+        String userToken = signupAndLogin("reviewer", "Password1!", "rev@test.com");
         long userId = userRepository.findByUsername("reviewer").orElseThrow().getId();
         placeConfirmedOrder(userToken, userId, productId, 10000);
 
@@ -86,7 +86,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         long productId = createProductAndReceive(adminToken, "SKU-REV2", 10000, 10);
 
         // 구매 이력 없는 사용자
-        String userToken = signupAndLogin("stranger", "password1", "str@test.com");
+        String userToken = signupAndLogin("stranger", "Password1!", "str@test.com");
 
         mockMvc.perform(post("/api/products/" + productId + "/reviews")
                         .header("Authorization", "Bearer " + userToken)
@@ -101,7 +101,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-REV3", 10000, 10);
 
-        String userToken = signupAndLogin("reviewer2", "password1", "rev2@test.com");
+        String userToken = signupAndLogin("reviewer2", "Password1!", "rev2@test.com");
         long userId = userRepository.findByUsername("reviewer2").orElseThrow().getId();
         placeConfirmedOrder(userToken, userId, productId, 10000);
 
@@ -124,7 +124,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-REV4", 10000, 10);
 
-        String userToken = signupAndLogin("reviewer3", "password1", "rev3@test.com");
+        String userToken = signupAndLogin("reviewer3", "Password1!", "rev3@test.com");
         long userId = userRepository.findByUsername("reviewer3").orElseThrow().getId();
         placeConfirmedOrder(userToken, userId, productId, 10000);
 
@@ -148,7 +148,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-REV5", 10000, 10);
 
-        String userToken = signupAndLogin("reviewer4", "password1", "rev4@test.com");
+        String userToken = signupAndLogin("reviewer4", "Password1!", "rev4@test.com");
         long userId = userRepository.findByUsername("reviewer4").orElseThrow().getId();
         placeConfirmedOrder(userToken, userId, productId, 10000);
 
@@ -176,7 +176,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-REV6", 10000, 10);
 
-        String writerToken = signupAndLogin("writer", "password1", "wr@test.com");
+        String writerToken = signupAndLogin("writer", "Password1!", "wr@test.com");
         long writerId = userRepository.findByUsername("writer").orElseThrow().getId();
         placeConfirmedOrder(writerToken, writerId, productId, 10000);
 
@@ -189,7 +189,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         long reviewId = objectMapper.readTree(body).path("data").path("id").asLong();
 
         // 타인이 삭제 시도 → 403
-        String otherToken = signupAndLogin("other", "password1", "ot@test.com");
+        String otherToken = signupAndLogin("other", "Password1!", "ot@test.com");
         mockMvc.perform(delete("/api/products/" + productId + "/reviews/" + reviewId)
                         .header("Authorization", "Bearer " + otherToken))
                 .andExpect(status().isForbidden());

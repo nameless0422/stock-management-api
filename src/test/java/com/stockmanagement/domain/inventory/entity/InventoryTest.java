@@ -187,14 +187,16 @@ class InventoryTest {
         }
 
         @Test
-        @DisplayName("reserved보다 큰 수량 해제 시 0으로 보호된다")
-        void protectsAgainstNegative() {
+        @DisplayName("reserved보다 큰 수량 해제 시 INVENTORY_STATE_INCONSISTENT 예외 발생")
+        void throwsWhenExceedsReserved() {
             Inventory inventory = createInventory();
             inventory.receive(10);
             inventory.reserve(3);
-            inventory.releaseReservation(10);
 
-            assertThat(inventory.getReserved()).isZero();
+            assertThatThrownBy(() -> inventory.releaseReservation(10))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.INVENTORY_STATE_INCONSISTENT));
         }
 
         @Test
@@ -295,15 +297,17 @@ class InventoryTest {
         }
 
         @Test
-        @DisplayName("allocated보다 큰 수량 해제 시 0으로 보호된다")
-        void protectsAgainstNegative() {
+        @DisplayName("allocated보다 큰 수량 해제 시 INVENTORY_STATE_INCONSISTENT 예외 발생")
+        void throwsWhenExceedsAllocated() {
             Inventory inventory = createInventory();
             inventory.receive(10);
             inventory.reserve(5);
             inventory.confirmAllocation(5);
-            inventory.releaseAllocation(100);
 
-            assertThat(inventory.getAllocated()).isZero();
+            assertThatThrownBy(() -> inventory.releaseAllocation(100))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.INVENTORY_STATE_INCONSISTENT));
         }
 
         @Test

@@ -43,11 +43,12 @@ public class CacheConfig {
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
                 .activateDefaultTyping(
                         BasicPolymorphicTypeValidator.builder()
-                                .allowIfBaseType("com.stockmanagement.")
-                                .allowIfBaseType("java.util.")
-                                .allowIfBaseType("java.time.")
-                                .allowIfBaseType("java.lang.")
-                                .allowIfBaseType("org.springframework.data.domain.")
+                                // allowIfSubType: BASE TYPE이 아닌 ACTUAL TYPE 기준으로 허용
+                                // (Redis는 Object로 저장하므로 allowIfBaseType("java.lang.")는 동작하지 않음)
+                                .allowIfSubType("com.stockmanagement.")
+                                .allowIfSubType("java.util.")
+                                .allowIfSubType("java.time.")
+                                .allowIfSubType("org.springframework.data.domain.")
                                 .build(),
                         ObjectMapper.DefaultTyping.NON_FINAL,
                         JsonTypeInfo.As.WRAPPER_ARRAY

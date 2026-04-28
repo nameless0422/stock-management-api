@@ -37,7 +37,7 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
                         .content("{\"quantity\":20}"))
                 .andExpect(status().isOk());
 
-        String userToken = signupAndLogin("rl-buyer", "buyerpass1", "rl-buyer@example.com");
+        String userToken = signupAndLogin("rl-buyer", "Buyerpass1!", "rl-buyer@example.com");
         long buyerId = userRepository.findByUsername("rl-buyer").orElseThrow().getId();
 
         // 한도 이내 요청(10회) — 모두 성공해야 한다
@@ -68,8 +68,8 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("결제 확정 rate limit — 사용자별로 독립 카운터 유지")
     void differentUsers_haveSeparateRateLimitCounters() throws Exception {
         // userA와 userB는 rate limit 카운터를 공유하지 않음을 검증
-        String userAToken = signupAndLogin("rl-userA", "passA12345", "usera@example.com");
-        String userBToken = signupAndLogin("rl-userB", "passB12345", "userb@example.com");
+        String userAToken = signupAndLogin("rl-userA", "PassA1234!", "usera@example.com");
+        String userBToken = signupAndLogin("rl-userB", "PassB1234!", "userb@example.com");
 
         String adminToken = createAdminAndLogin("rl-admin2", "adminpass1", "rl-admin2@example.com");
         String productBody = mockMvc.perform(post("/api/products")

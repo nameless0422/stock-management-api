@@ -679,6 +679,13 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 59 | `application.properties` useSSL=false — 운영 배포 시 평문 전송 위험 | 운영 배포 시 `useSSL=true` 변경 주석 추가 |
 | 57 | `TossWebhookVerifier` Mac 직렬화 위험 | 싱글턴 + `synchronized` → 호출마다 `Mac.getInstance()` |
 | 100 | `RequestIdFilter` 외부 `X-Request-Id` 무검증 — 로그 인젝션 | 길이 64자 상한 + 영숫자/하이픈 패턴 검증, 초과 시 UUID 생성 |
+| 62 | DB 자격증명 하드코딩 (`root`/`root`) — 환경변수 미전환 | `${DB_USERNAME:root}` / `${DB_PASSWORD:root}` 환경변수 전환, 운영 오버라이드 주석 추가 |
+| 47 | `RateLimitAspect` X-Forwarded-For 마지막 IP 추출 오류 — 클라이언트 IP 위조 가능 | `rate-limit.trusted-proxy-count=1` 추가, `ips[len-1-proxyCount]`로 신뢰할 수 없는 IP 제거 |
+| 83 | `LoginRateLimiter` username 단독 키 — Account Lockout DoS | `RequestContextHolder`로 IP 추출, `login:user:{username}:{ip}` 복합 키로 전환 |
+| 28 | `SignupRequest`/`ChangePasswordRequest` 비밀번호 복잡도 미검증 — 사전 공격 취약 | `@Pattern(대문자+숫자+특수문자)` 추가, 테스트 비밀번호 전수 갱신 (`Password1!` 형식) |
+| 24 | Swagger UI 운영 환경 무인증 노출 | `swagger.public=${SWAGGER_PUBLIC:false}` 전환, `false`일 때 ADMIN 권한 또는 IP 제한 |
+| 46 | `PresignedUrlRequest.contentType` MIME 허용 목록 미검증 | `@Pattern(^image/(jpeg\|png\|webp\|gif)$)` 추가 |
+| 50 | `ProductImageSaveRequest.objectKey` 형식 미검증 | `@Pattern(^products/\d+/[a-f0-9-]+\.(jpg\|jpeg\|png\|webp\|gif)$)` 추가 |
 
 ---
 
@@ -697,6 +704,10 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 91 | `PointService.getOrCreate()` 동시 요청 Duplicate Key | `DataIntegrityViolationException` catch 후 재조회 retry 패턴 적용 |
 | 94 | `RefundService.requestRefund()` 동시 요청 Duplicate Key → 500 | `DataIntegrityViolationException` catch 후 재조회 방어 |
 | 102 | `applyConfirmResult()` non-DONE 응답 시 `fail()` 롤백 가능 | `markPaymentFailed()` `REQUIRES_NEW` 트랜잭션으로 분리 |
+| 136 | `RefreshTokenStore.consume()` 탈취 감지 없음 — 재사용 공격 허용 | consumed 마커(TTL 5분) 도입, 재사용 감지 시 `revokeAll()` 전체 폐기 |
+| 137 | `RefreshTokenStore.revokeAll()` 비원자적 — Redis 장애 시 부분 폐기 | Lua 스크립트(`SMEMBERS` → `DEL` × N → `DEL set`)로 원자화 |
+| 135 | `UserService.deactivate()` PENDING 주문·장바구니 미정리 — 재고 예약 누수 | 탈퇴 시 PENDING 주문 강제 취소 + 장바구니/위시리스트/배송지 일괄 삭제 |
+| 78 | `PaymentService.cancel()` Toss 호출 중 서버 재시작 시 CONFIRMED 상태 고착 | `CANCEL_IN_PROGRESS` 중간 상태 도입, 실패 시 `resetCancellationFailed()` REQUIRES_NEW 복원 |
 | 52 | Toss 승인 완료 후 주문 만료 경합 | `PAYMENT_IN_PROGRESS` 상태 도입, `findExpiredPendingOrderIds()` PENDING만 조회 |
 
 ---
@@ -711,6 +722,9 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 98 | `RefreshTokenStore` 역색인 Set TTL 없음 — Redis 메모리 누수 | `issue()` 시 Set에 35일 TTL 설정 |
 | 99 | `AsyncConfig RejectedExecutionHandler` 미설정 — 이벤트 소실 | `CallerRunsPolicy` 적용 |
 | 112 | `RedisConfig RedissonClient` `destroyMethod` 미설정 | `@Bean(destroyMethod = "shutdown")` 명시 |
+| 57 | `CacheConfig` `allowIfBaseType` 오용 — BASE TYPE `Object`이므로 역직렬화 전면 차단 | `allowIfBaseType` → `allowIfSubType` 전환 (ACTUAL TYPE 기준 화이트리스트) |
+| 58 | `RedisConfig` Redisson timeout/pool 미설정 — Redis 장애 시 스레드 9초 블로킹 | `timeout(1000)`, `connectTimeout(1000)`, `retryAttempts(1)`, `connectionPoolSize(32)` 설정 |
+| 59 | `OutboxEventRelayScheduler.relayedCounter` 성공·실패 미구분 — 메트릭 과부풀림 | `processOne()` boolean 반환, relay 성공(`true`)만 `outbox.relayed` 카운팅; `outbox.relay_failed` 별도 카운터 추가 |
 
 ---
 
@@ -751,6 +765,12 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 44 | 일부 테이블 COLLATE 미정의 | V30 charset/collation 통일 |
 | 92 | `CouponCreateRequest` 날짜 교차 검증 없음 + PERCENTAGE 100% 초과 | `validFrom >= validUntil` 검증 + `discountValue <= 100` 제약 추가 |
 | 93 | `WishlistService.getList()` 필터링 후 `totalElements` 불일치 | 필터링 후 content 크기 기반 totalElements 재계산 |
+| 45 | `refunds.payment_id` UNIQUE 제약 — 부분 취소 두 번째 시도 불가 | V39: `uk_refunds_payment_id` DROP + `idx_refunds_payment_created` 추가. `PARTIAL_CANCELLED` 상태 추가 환불 허용 |
+| 60 | LIKE 쿼리 와일드카드 미이스케이프 — DoS 벡터 | `ProductService`/`AdminService.escapeLike()` 유틸리티 추출, JPQL `ESCAPE '!'` 적용 |
+| 61 | Flyway V4/V9~V13/V15/V17/V22 ENGINE/CHARSET 누락 | 해당 SQL 파일에 `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci` 명시 |
+| 52 | `ProductImageService.saveImage()` 개수 제한 없음 — 무제한 이미지 DoS | `countByProductId()` 체크 → 10개 초과 시 `IMAGE_LIMIT_EXCEEDED` 예외 |
+| 54 | `ProductImageService.deleteImage()` S3 먼저 삭제 — S3 성공+DB 실패 시 고아 이미지 | DB 먼저 삭제(롤백 가능) → S3 삭제 순서 변경 |
+| 53 | `ProductSearchRequest.hasSearchCondition()` sort만으로 ES 진입 — 불필요한 `match_all` | sort 파라미터를 진입 조건에서 제외, 검색 조건 없을 시 MySQL fallback |
 
 ---
 
@@ -764,3 +784,5 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 배치 / Elasticsearch / 쿠폰 / 카테고리 추가 | ~580개 |
 | 성능 최적화 (#7/#8/#9) 이후 | 605개 |
 | 코드 리뷰 개선 항목 (#10) + Wave 2/3 프론트엔드 API 개선 | **623개** |
+| 보안·운영 안정성 중요 섹션 개선 (#62/#47/#83/#136/#137/#135/#45/#78 + 15차 16개) | **637개** |
+| 보안·품질 개선 (#57/#58/#59/#13/#28/#24/#46/#50/#60/#61/#52/#53/#54) | **647개** |

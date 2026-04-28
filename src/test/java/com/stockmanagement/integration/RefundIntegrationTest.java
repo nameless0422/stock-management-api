@@ -88,7 +88,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("환불 ID로 조회 → 200, 상태·금액 확인")
     void getById_success() throws Exception {
-        String userToken = signupAndLogin("user1", "password1", "u1@test.com");
+        String userToken = signupAndLogin("user1", "Password1!", "u1@test.com");
         long userId = userRepository.findByUsername("user1").orElseThrow().getId();
 
         long orderId = createConfirmedOrder(userId);
@@ -106,7 +106,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("없는 환불 ID 조회 → 404")
     void getById_notFound() throws Exception {
-        String userToken = signupAndLogin("user2", "password1", "u2@test.com");
+        String userToken = signupAndLogin("user2", "Password1!", "u2@test.com");
 
         mockMvc.perform(get("/api/refunds/99999")
                         .header("Authorization", "Bearer " + userToken))
@@ -116,7 +116,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("결제 ID로 환불 조회 → 200")
     void getByPaymentId_success() throws Exception {
-        String userToken = signupAndLogin("user3", "password1", "u3@test.com");
+        String userToken = signupAndLogin("user3", "Password1!", "u3@test.com");
         long userId = userRepository.findByUsername("user3").orElseThrow().getId();
 
         long orderId = createConfirmedOrder(userId);
@@ -133,7 +133,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("PARTIAL_CANCELLED 결제 — 이미 환불 이력 있어도 REFUND_ALREADY_EXISTS(409) 반환 안 함")
     void requestRefund_partialCancelledAllowsSecond() throws Exception {
-        String userToken = signupAndLogin("user5", "password1", "u5@test.com");
+        String userToken = signupAndLogin("user5", "Password1!", "u5@test.com");
         long userId = userRepository.findByUsername("user5").orElseThrow().getId();
 
         long orderId = createConfirmedOrder(userId);
@@ -155,7 +155,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("이미 환불된 결제에 재요청 → 409 REFUND_ALREADY_EXISTS")
     void requestRefund_duplicate() throws Exception {
-        String userToken = signupAndLogin("user4", "password1", "u4@test.com");
+        String userToken = signupAndLogin("user4", "Password1!", "u4@test.com");
         long userId = userRepository.findByUsername("user4").orElseThrow().getId();
 
         long orderId = createConfirmedOrder(userId);

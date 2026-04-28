@@ -9,9 +9,12 @@ import com.stockmanagement.domain.inventory.dto.InventorySearchRequest;
 import com.stockmanagement.domain.inventory.dto.InventoryTransactionResponse;
 import com.stockmanagement.domain.inventory.service.InventoryService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -38,6 +41,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/inventory")
 @RequiredArgsConstructor
+@Validated
 public class InventoryController {
 
     private final InventoryService inventoryService;
@@ -79,7 +83,7 @@ public class InventoryController {
     public ApiResponse<CursorPage<InventoryTransactionResponse>> getTransactions(
             @PathVariable Long productId,
             @RequestParam(required = false) Long lastId,
-            @RequestParam(defaultValue = "20") int size) {
+            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.ok(inventoryService.getTransactions(productId, lastId, size));
     }
 

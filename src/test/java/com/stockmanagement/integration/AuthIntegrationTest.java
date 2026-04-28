@@ -24,7 +24,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         void signup_success() throws Exception {
             mockMvc.perform(post("/api/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"username\":\"newuser\",\"password\":\"password123\",\"email\":\"new@example.com\"}"))
+                            .content("{\"username\":\"newuser\",\"password\":\"Password1@3\",\"email\":\"new@example.com\"}"))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.username").value("newuser"))
@@ -36,12 +36,12 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         void signup_duplicateUsername_conflict() throws Exception {
             mockMvc.perform(post("/api/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"username\":\"dupuser\",\"password\":\"password123\",\"email\":\"first@example.com\"}"))
+                            .content("{\"username\":\"dupuser\",\"password\":\"Password1@3\",\"email\":\"first@example.com\"}"))
                     .andExpect(status().isCreated());
 
             mockMvc.perform(post("/api/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"username\":\"dupuser\",\"password\":\"password123\",\"email\":\"second@example.com\"}"))
+                            .content("{\"username\":\"dupuser\",\"password\":\"Password1@3\",\"email\":\"second@example.com\"}"))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -51,12 +51,12 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         void signup_duplicateEmail_conflict() throws Exception {
             mockMvc.perform(post("/api/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"username\":\"user1\",\"password\":\"password123\",\"email\":\"dup@example.com\"}"))
+                            .content("{\"username\":\"user1\",\"password\":\"Password1@3\",\"email\":\"dup@example.com\"}"))
                     .andExpect(status().isCreated());
 
             mockMvc.perform(post("/api/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"username\":\"user2\",\"password\":\"password123\",\"email\":\"dup@example.com\"}"))
+                            .content("{\"username\":\"user2\",\"password\":\"Password1@3\",\"email\":\"dup@example.com\"}"))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -66,7 +66,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         void signup_shortUsername_badRequest() throws Exception {
             mockMvc.perform(post("/api/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"username\":\"ab\",\"password\":\"password123\",\"email\":\"ab@example.com\"}"))
+                            .content("{\"username\":\"ab\",\"password\":\"Password1@3\",\"email\":\"ab@example.com\"}"))
                     .andExpect(status().isBadRequest());
         }
 
@@ -75,7 +75,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         void signup_invalidEmail_badRequest() throws Exception {
             mockMvc.perform(post("/api/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"username\":\"validuser\",\"password\":\"password123\",\"email\":\"not-an-email\"}"))
+                            .content("{\"username\":\"validuser\",\"password\":\"Password1@3\",\"email\":\"not-an-email\"}"))
                     .andExpect(status().isBadRequest());
         }
     }
@@ -91,12 +91,12 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         void login_success() throws Exception {
             mockMvc.perform(post("/api/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"username\":\"logintest\",\"password\":\"password123\",\"email\":\"login@example.com\"}"))
+                            .content("{\"username\":\"logintest\",\"password\":\"Password1@3\",\"email\":\"login@example.com\"}"))
                     .andExpect(status().isCreated());
 
             mockMvc.perform(post("/api/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"username\":\"logintest\",\"password\":\"password123\"}"))
+                            .content("{\"username\":\"logintest\",\"password\":\"Password1@3\"}"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
@@ -106,7 +106,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("비밀번호 불일치 → 401")
         void login_wrongPassword_unauthorized() throws Exception {
-            signupAndLogin("testuser2", "correctpass", "test2@example.com");
+            signupAndLogin("testuser2", "Password1!", "test2@example.com");
 
             mockMvc.perform(post("/api/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -120,7 +120,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         void login_unknownUser_unauthorized() throws Exception {
             mockMvc.perform(post("/api/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"username\":\"ghost\",\"password\":\"password123\"}"))
+                            .content("{\"username\":\"ghost\",\"password\":\"Password1@3\"}"))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -135,7 +135,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("유효한 JWT → 200, 내 정보 반환")
         void getMe_withValidToken() throws Exception {
-            String token = signupAndLogin("meuser", "password123", "me@example.com");
+            String token = signupAndLogin("meuser", "Password1@3", "me@example.com");
 
             mockMvc.perform(get("/api/users/me")
                             .header("Authorization", "Bearer " + token))

@@ -2,15 +2,19 @@ package com.stockmanagement.common.exception;
 
 import com.stockmanagement.common.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -60,6 +64,24 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * @Validated 파라미터 제약 위반 처리 (@Min/@Max 등).
+     * 400 Bad Request를 반환한다.
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(ConstraintViolationException e) {
+        List<ApiResponse.FieldErrorDetail> errors = e.getConstraintViolations().stream()
+                .map(cv -> {
+                    String path = cv.getPropertyPath().toString();
+                    String field = path.contains(".") ? path.substring(path.lastIndexOf('.') + 1) : path;
+                    return new ApiResponse.FieldErrorDetail(field, cv.getMessage());
+                })
+                .collect(Collectors.toList());
+        return ResponseEntity
+                .badRequest()
+                .body(ApiResponse.validationError(errors));
+    }
+
+    /**
      * 잘못된 인자 처리 — 도메인 규칙에 맞지 않는 입력값 (예: 입고 수량 0 이하).
      * 400 Bad Request를 반환한다.
      */
@@ -95,6 +117,39 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(ErrorCode.LOCK_ACQUISITION_FAILED.getMessage()));
+    }
+
+    /**
+     * JSON 파싱 실패 처리 — malformed JSON body 등.
+     * 400 Bad Request를 반환한다.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
+        log.warn("HttpMessageNotReadableException: {}", e.getMessage());
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("요청 본문을 읽을 수 없습니다. JSON 형식을 확인해주세요."));
+    }
+
+    /**
+     * 쿼리 파라미터 타입 불일치 처리 (예: Long 파라미터에 문자열 전달).
+     * 400 Bad Request를 반환한다.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.warn("MethodArgumentTypeMismatchException: param={}, value={}", e.getName(), e.getValue());
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("'" + e.getName() + "' 파라미터의 타입이 올바르지 않습니다."));
+    }
+
+    /**
+     * 필수 쿼리 파라미터 누락 처리.
+     * 400 Bad Request를 반환한다.
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParam(MissingServletRequestParameterException e) {
+        log.warn("MissingServletRequestParameterException: param={}", e.getParameterName());
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("필수 파라미터 '" + e.getParameterName() + "'이(가) 누락되었습니다."));
     }
 
     /**

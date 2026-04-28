@@ -52,20 +52,25 @@ class OutboxEventProcessor {
      * <p>이미 발행된 이벤트는 건너뛴다 (멱등성).
      * 발행 성공 시 {@code publishedAt}을 기록하고, 실패 시 {@code retryCount}를 증가시킨다.
      */
+    /**
+     * @return true = 발행 성공 또는 이미 발행됨, false = 발행 실패
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void processOne(Long outboxId) {
+    public boolean processOne(Long outboxId) {
         OutboxEvent outbox = repository.findById(outboxId).orElse(null);
         if (outbox == null || outbox.getPublishedAt() != null) {
-            return; // 삭제됐거나 이미 발행된 경우 (다른 인스턴스가 먼저 처리)
+            return true; // 삭제됐거나 이미 발행된 경우 (다른 인스턴스가 먼저 처리)
         }
 
         try {
             dispatch(outbox);
             outbox.markPublished();
+            return true;
         } catch (Exception e) {
             log.error("[Outbox] 이벤트 발행 실패 id={} type={} retry={} error={}",
                     outbox.getId(), outbox.getEventType(), outbox.getRetryCount(), e.getMessage());
             outbox.recordFailure();
+            return false;
         }
     }
 
@@ -82,8 +87,17 @@ class OutboxEventProcessor {
         switch (outbox.getEventType()) {
             case SHIPMENT_CREATE -> {
                 Long orderId = toLong(p.get("orderId"));
-                shipmentService.createForOrder(orderId);
-                log.info("[Outbox] 배송 레코드 생성 완료: orderId={}", orderId);
+                try {
+                    shipmentService.createForOrder(orderId);
+                    log.info("[Outbox] 배송 레코드 생성 완료: orderId={}", orderId);
+                } catch (com.stockmanagement.common.exception.BusinessException e) {
+                    if (e.getErrorCode() == com.stockmanagement.common.exception.ErrorCode.SHIPMENT_ALREADY_EXISTS) {
+                        // 이미 생성된 배송 — 멱등성 처리 (false dead letter 누적 방지)
+                        log.warn("[Outbox] 배송 레코드 이미 존재, 중복 생성 스킵: orderId={}", orderId);
+                        return;
+                    }
+                    throw e;
+                }
             }
             case POINT_EARN -> {
                 Long userId = toLong(p.get("userId"));

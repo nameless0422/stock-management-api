@@ -108,7 +108,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
                     .andExpect(jsonPath("$.data.available").value(30));
 
             // 주문 생성 → reserve() → @CacheEvict 발동
-            String userToken = signupAndLogin("buyer", "buyerpass1", "buyer@example.com");
+            String userToken = signupAndLogin("buyer", "Buyerpass1!", "buyer@example.com");
             long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
             mockMvc.perform(post("/api/orders")
                             .header("Authorization", "Bearer " + userToken)
@@ -141,7 +141,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
             long productId = createProduct(adminToken, "주문용상품", "CACHE-ORD-1");
             receive(adminToken, productId, 20);
 
-            String userToken = signupAndLogin("buyer", "buyerpass1", "buyer@example.com");
+            String userToken = signupAndLogin("buyer", "Buyerpass1!", "buyer@example.com");
             long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
             // 주문 생성
@@ -178,7 +178,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
             long productId = createProduct(adminToken, "취소캐시상품", "CACHE-ORD-2");
             receive(adminToken, productId, 20);
 
-            String userToken = signupAndLogin("buyer", "buyerpass1", "buyer@example.com");
+            String userToken = signupAndLogin("buyer", "Buyerpass1!", "buyer@example.com");
             long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
             // 주문 생성

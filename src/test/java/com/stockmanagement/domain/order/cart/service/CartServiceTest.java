@@ -99,7 +99,7 @@ class CartServiceTest {
 
             cartService.addOrUpdate(1L, request);
 
-            verify(cartRepository).save(any(CartItem.class));
+            verify(cartRepository).saveAndFlush(any(CartItem.class));
         }
 
         @Test

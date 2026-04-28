@@ -65,6 +65,7 @@ public enum ErrorCode {
 
     // ===== ProductImage =====
     PRODUCT_IMAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "상품 이미지를 찾을 수 없습니다."),
+    PRODUCT_IMAGE_LIMIT_EXCEEDED(HttpStatus.UNPROCESSABLE_ENTITY, "상품 이미지는 최대 10개까지 등록할 수 있습니다."),
 
     // ===== Coupon =====
     COUPON_NOT_FOUND(HttpStatus.NOT_FOUND, "쿠폰을 찾을 수 없습니다."),
@@ -103,6 +104,9 @@ public enum ErrorCode {
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다."),
     SAME_PASSWORD(HttpStatus.BAD_REQUEST, "현재 비밀번호와 동일한 비밀번호로는 변경할 수 없습니다."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 Refresh Token입니다."),
+
+    // ===== Admin =====
+    LAST_ADMIN(HttpStatus.CONFLICT, "마지막 관리자의 권한은 해제할 수 없습니다."),
 
     // ===== Admin Setting =====
     SETTING_NOT_FOUND(HttpStatus.NOT_FOUND, "시스템 설정을 찾을 수 없습니다."),

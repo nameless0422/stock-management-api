@@ -11,6 +11,7 @@ import com.stockmanagement.domain.product.image.entity.ProductImage;
 import com.stockmanagement.domain.product.image.repository.ProductImageRepository;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -48,11 +50,18 @@ public class ProductImageService {
         return new PresignedUrlResponse(presignedUrl, imageUrl, objectKey);
     }
 
+    /** 상품당 최대 이미지 개수 */
+    static final int MAX_IMAGES_PER_PRODUCT = 10;
+
     /** 업로드 완료 후 이미지 메타데이터를 DB에 저장. THUMBNAIL이면 products.thumbnail_url도 갱신. */
     @Transactional
     @CacheEvict(cacheNames = "products", key = "#productId")
     public ProductImageResponse saveImage(Long productId, ProductImageSaveRequest request) {
         Product product = findProduct(productId);
+
+        if (productImageRepository.countByProductId(productId) >= MAX_IMAGES_PER_PRODUCT) {
+            throw new BusinessException(ErrorCode.PRODUCT_IMAGE_LIMIT_EXCEEDED);
+        }
 
         ProductImage image = ProductImage.builder()
                 .product(product)
@@ -112,19 +121,27 @@ public class ProductImageService {
                 .toList();
     }
 
-    /** 이미지 삭제 — 스토리지 오브젝트 + DB 레코드 순으로 제거 */
+    /** 이미지 삭제 — DB 레코드 먼저 삭제 후 S3 오브젝트 제거 */
     @Transactional
     @CacheEvict(cacheNames = "products", key = "#productId")
     public void deleteImage(Long productId, Long imageId) {
         ProductImage image = productImageRepository.findByIdAndProductId(imageId, productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_IMAGE_NOT_FOUND));
 
-        storageService.deleteObject(image.getObjectKey());
+        // DB 먼저 삭제 (트랜잭션으로 보호 — S3 실패 시 롤백 가능)
         productImageRepository.delete(image);
 
         // THUMBNAIL 삭제 시 products.thumbnail_url 초기화
         if (image.getImageType() == ImageType.THUMBNAIL) {
             findProduct(productId).updateThumbnail(null);
+        }
+
+        // S3 삭제: 실패 시 경고 로그만 기록 (S3 고아 객체 가능하나 DB 정합은 유지)
+        try {
+            storageService.deleteObject(image.getObjectKey());
+        } catch (Exception e) {
+            log.warn("[ProductImage] S3 오브젝트 삭제 실패 — 고아 객체 발생 가능: key={} error={}",
+                    image.getObjectKey(), e.getMessage());
         }
     }
 

@@ -44,11 +44,17 @@ public class UserPoint {
 
     /** 포인트를 적립한다. */
     public void earn(long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("적립 포인트는 0보다 커야 합니다.");
+        }
         this.balance += amount;
     }
 
     /** 포인트를 차감한다. 잔액 부족 시 예외를 발생시킨다. */
     public void use(long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("사용 포인트는 0보다 커야 합니다.");
+        }
         if (this.balance < amount) {
             throw new BusinessException(ErrorCode.INSUFFICIENT_POINTS);
         }
@@ -57,6 +63,9 @@ public class UserPoint {
 
     /** 반환된 포인트를 잔액에 더한다 (취소/환불 시). */
     public void refund(long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("환불 포인트는 0보다 커야 합니다.");
+        }
         this.balance += amount;
     }
 }

@@ -47,9 +47,9 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      * countQuery 분리로 페이징 카운트 쿼리의 정확성 보장.
      */
     @Query(value = "SELECT p FROM Product p LEFT JOIN FETCH p.category WHERE p.status = :status AND " +
-                   "(LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')) OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :q, '%')))",
+                   "(LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')) ESCAPE '!' OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :q, '%')) ESCAPE '!')",
            countQuery = "SELECT COUNT(p) FROM Product p WHERE p.status = :status AND " +
-                        "(LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')) OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :q, '%')))")
+                        "(LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')) ESCAPE '!' OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :q, '%')) ESCAPE '!')")
     Page<Product> searchByStatus(@Param("status") ProductStatus status, @Param("q") String query, Pageable pageable);
 
     /**
@@ -57,9 +57,9 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      * countQuery 분리로 페이징 카운트 쿼리의 정확성 보장.
      */
     @Query(value = "SELECT p FROM Product p LEFT JOIN FETCH p.category WHERE " +
-                   "LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')) OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :q, '%'))",
+                   "LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')) ESCAPE '!' OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :q, '%')) ESCAPE '!'",
            countQuery = "SELECT COUNT(p) FROM Product p WHERE " +
-                        "LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')) OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :q, '%'))")
+                        "LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%')) ESCAPE '!' OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :q, '%')) ESCAPE '!'")
     Page<Product> searchAll(@Param("q") String query, Pageable pageable);
 
     /** 카테고리 ID 목록 필터 — ACTIVE 상품 중 해당 카테고리에 속하는 상품만 조회 (하위 카테고리 포함 가능). */

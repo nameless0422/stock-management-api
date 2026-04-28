@@ -17,9 +17,12 @@ import com.stockmanagement.domain.order.service.OrderDetailService;
 import com.stockmanagement.domain.order.service.OrderService;
 import com.stockmanagement.domain.user.service.UserService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -51,6 +54,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
+@Validated
 public class OrderController {
 
     private final OrderService orderService;
@@ -130,7 +134,7 @@ public class OrderController {
             Authentication authentication,
             @RequestParam(required = false) OrderStatus status,
             @RequestParam(required = false) Long lastId,
-            @RequestParam(defaultValue = "20") int size) {
+            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
         Long userId = resolveUserId(authentication, username);
         return ApiResponse.ok(orderService.getOrderScroll(userId, isAdmin, status, lastId, size));

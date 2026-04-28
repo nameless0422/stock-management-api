@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 
 /**
  * 일별 주문·매출 통계 스케줄러.
@@ -36,7 +35,7 @@ public class DailyOrderStatsScheduler {
     public void aggregateDailyStats() {
         LocalDate yesterday = LocalDate.now().minusDays(1);
         LocalDateTime start = yesterday.atStartOfDay();
-        LocalDateTime end   = yesterday.atTime(LocalTime.MAX);
+        LocalDateTime end   = LocalDate.now().atStartOfDay(); // exclusive end: < today 00:00:00
 
         log.info("[DailyOrderStatsScheduler] 일별 통계 집계 시작 — 기준일: {}", yesterday);
 
