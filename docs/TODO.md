@@ -27,7 +27,7 @@ Client
   Elasticsearch — 상품 전문 검색 (MySQL fallback)
   MinIO(S3) — 상품 이미지 Presigned URL
   OutboxEventStore — ORDER_CREATED/CANCELLED · PAYMENT_CONFIRMED · SHIPMENT_CREATE · POINT_EARN
-  Flyway V1~V39 — 스키마 버전 관리
+  Flyway V1~V42 — 스키마 버전 관리
 ```
 
 **주요 데이터 흐름**: 주문 생성 → 재고 예약(분산 락) → PENDING → Toss 결제 승인 → Outbox 이벤트(배송·포인트) → CONFIRMED → 배송 상태 전이 → 완료
@@ -78,15 +78,6 @@ Client
 
 ---
 
-### 42. `delivery_addresses` — 기본 배송지 복수 방지 DB 제약 없음
-
-**위치**: `V12__create_delivery_address_tables.sql`
-
-**문제**: `is_default = 1` 레코드가 사용자별 최대 1개임을 DB가 보장하지 않음. 직접 DB 수정 시 데이터 정합성 깨짐.
-
-**개선**: `BEFORE INSERT/UPDATE` 트리거로 동일 user의 다른 레코드를 0으로 초기화.
-
----
 
 ### 67. `DailyOrderStatsScheduler` — 4개 개별 쿼리 → 단일 GROUP BY 통합 가능
 
@@ -157,15 +148,6 @@ sumRevenueByCreatedAtBetween(start, end)                   // SELECT SUM(total_a
 
 ---
 
-### 79. Outbox `SHIPMENT_CREATE` — nested `REQUIRES_NEW` 실패 시 false dead letter 누적
-
-**위치**: `common/outbox/OutboxEventProcessor.java`, `domain/shipment/service/ShipmentService.java` `createForOrder()`
-
-**문제**: `createForOrder()`가 `REQUIRES_NEW`로 배송 레코드를 독립 커밋한 뒤 `processOne` TX가 롤백되면, 다음 relay 사이클에서 `createForOrder()` 재시도 → `ShipmentAlreadyExists` 예외 → `outbox.recordFailure()`. 이를 5회 반복하면 MAX_RETRY 도달 → **dead letter** 로 분류된다. 실제 배송은 이미 올바르게 생성됐음에도 운영 알림이 오발된다.
-
-**개선**: `createForOrder()` 내부에서 `shipmentRepository.existsByOrderId(orderId)` 선행 체크 → 이미 존재하면 early return (idempotent).
-
----
 
 ### 76. `PaymentTransactionHelper.loadAndValidateForCancel()` — 소유권 체크에 전체 Order 엔티티 로드
 
@@ -197,25 +179,6 @@ sumRevenueByCreatedAtBetween(start, end)                   // SELECT SUM(total_a
 
 ---
 
-### 95. `GlobalExceptionHandler` — `HttpMessageNotReadableException` 등 4xx 에러가 500으로 응답
-
-**위치**: `common/exception/GlobalExceptionHandler.java`
-
-**문제**: JSON 파싱 실패(`HttpMessageNotReadableException`), 쿼리 파라미터 타입 불일치(`MethodArgumentTypeMismatchException`), 필수 파라미터 누락(`MissingServletRequestParameterException`) 등이 전용 핸들러 없이 최하단 `Exception` 핸들러로 빠져 500 응답.
-
-**개선**: 각각에 대해 `@ExceptionHandler` 추가, 400 Bad Request로 응답.
-
----
-
-### 96. `SecurityConfig` — Swagger UI 운영 환경 무인증 노출
-
-**위치**: `common/config/SecurityConfig.java:81`
-
-**문제**: `/swagger-ui/**`, `/v3/api-docs/**`가 `permitAll()`. 프로파일 분기 없이 운영에서도 전체 API 스키마 공개.
-
-**개선**: `springdoc.api-docs.enabled=${SWAGGER_ENABLED:false}` 환경 변수 전환. 또는 ADMIN 권한 필요하도록 변경.
-
----
 
 ### 101. `OutboxEventPurgeScheduler` — 대량 삭제 시 단일 트랜잭션 테이블 잠금
 
@@ -247,15 +210,6 @@ sumRevenueByCreatedAtBetween(start, end)                   // SELECT SUM(total_a
 
 ---
 
-### 105. 비밀번호 정책 부재 — 복잡도 요구사항 없음
-
-**위치**: `domain/user/dto/SignupRequest.java:14-15`, `ChangePasswordRequest.java:17`
-
-**문제**: `@Size(min=8)` 뿐. `aaaaaaaa` 같은 단순 비밀번호 허용. credential stuffing/사전 공격에 취약.
-
-**개선**: 대문자/소문자/숫자/특수문자 중 최소 2~3종 포함 `@Pattern` 또는 커스텀 `ConstraintValidator`.
-
----
 
 ### 106. `CartRepository.deleteByUserId()` — N+1 DELETE 쿼리
 
@@ -327,15 +281,6 @@ sumRevenueByCreatedAtBetween(start, end)                   // SELECT SUM(total_a
 
 ---
 
-### 129. `OrderService.cancel()` — `fromStatus` 하드코딩
-
-**위치**: `domain/order/service/OrderService.java:359,388,448`
-
-**문제**: `recordHistory()`에 `OrderStatus.PENDING`/`CONFIRMED`를 하드코딩. `confirm()`만 `previousStatus = order.getStatus()` 동적 캡처 사용. 현재는 정확하지만, 상태 전이 규칙 변경 시 실수 위험.
-
-**개선**: 모든 상태 전이 메서드에서 `previousStatus` 캡처 패턴으로 통일.
-
----
 
 ### 130. 주문 생성 시 포인트+쿠폰 초과 할인 미검증
 
@@ -453,35 +398,6 @@ sumRevenueByCreatedAtBetween(start, end)                   // SELECT SUM(total_a
 
 ---
 
-### 151. `PresignedUrlRequest` — contentType MIME 검증 + 확장자-MIME 일치 검증 부재
-
-**위치**: `domain/product/image/dto/PresignedUrlRequest.java`
-
-**문제**: `contentType` 필드에 `@NotBlank`만 있고 MIME 타입 형식 검증이 없다. `"application/x-executable"` 등 비이미지 타입도 통과. 또한 `fileExtension="jpg"` + `contentType="image/png"` 불일치 조합도 허용되어, S3에는 PNG로 업로드되지만 파일명은 `.jpg`인 상태가 된다.
-
-**개선**: `@Pattern(regexp="^image/(jpeg|png|webp|gif)$")` 추가. 서비스에서 확장자↔MIME 매핑 테이블로 일치 검증.
-
----
-
-### 152. 상품 이미지 개수 제한 미구현
-
-**위치**: `domain/product/image/service/ProductImageService.java`
-
-**문제**: 상품당 업로드 가능한 이미지 개수에 제한이 없다. 악의적 요청으로 수천 건의 이미지 메타데이터 저장 시 DB 용량·목록 조회 성능 저하. #143(배송지 개수 무제한)과 동일 패턴.
-
-**개선**: `saveImage()` 진입 시 `countByProductId()` 체크 → 상한(50개) 초과 시 예외.
-
----
-
-### 153. `ProductImageSaveRequest.objectKey` — 클라이언트 조작 가능
-
-**위치**: `domain/product/image/dto/ProductImageSaveRequest.java`
-
-**���제**: `objectKey`를 클라이언트가 직접 전달하므로, 다른 상품의 Presigned URL에서 발급된 objectKey를 재사용하거나 임의 값을 주입할 수 있다. 예: productId=1 사용자가 productId=2의 objectKey로 이미지를 등록.
-
-**개선**: Presigned URL 발급 시 Redis에 `presigned:{objectKey}→productId` 임시 저장(TTL=15분). `saveImage()`에서 Redis 확인하여 productId 일치 검증.
-
----
 
 ### 154. `ReviewCreateRequest` / `ReviewUpdateRequest` — `content` `@Size` 누락
 
@@ -493,25 +409,6 @@ sumRevenueByCreatedAtBetween(start, end)                   // SELECT SUM(total_a
 
 ---
 
-### 155. `ProductSearchRequest.hasSearchCondition()` — `sort`만으로 ES 진입
-
-**위치**: `domain/product/dto/ProductSearchRequest.java`
-
-**문제**: `sort` 파라미터만 지정하고 검색 조건(q, minPrice, maxPrice, category)이 없어도 `hasSearchCondition()==true`로 ES에 진입한다. `match_all` 쿼리가 실행되어 전체 상품을 ES에서 정렬·반환. 대량 상품 시 불필요한 ES 부하.
-
-**개선**: `sort`를 `hasSearchCondition()` 판단에서 제외. sort만 지정 시 MySQL `findByStatus(ACTIVE, pageable)` 사용.
-
----
-
-### 156. `ProductImageService.deleteImage()` — S3 삭제 실패 시 DB 불일치
-
-**위치**: `domain/product/image/service/ProductImageService.java`
-
-**문제**: `storageService.deleteObject()` → `productImageRepository.delete()` 순서로 실행. S3 삭제 성공 후 DB 삭제가 실패하면 고아 이미지 잔존. 반대로 S3 삭제 실패 시 DB 레코드만 남아 이미지 URL이 깨진다.
-
-**개선**: DB 먼저 삭제(롤백 가능) → S3 삭제. S3 실패 시 스케줄러로 주기적 정리. 또는 soft delete 후 비동기 S3 정리.
-
----
 
 ### 157. 탈퇴 사용자 리뷰 — username null 노출
 
@@ -531,53 +428,6 @@ sumRevenueByCreatedAtBetween(start, end)                   // SELECT SUM(total_a
 
 **개선**: `@Size(max = 10000)` 추��.
 
-### 159. `CacheConfig` — `BasicPolymorphicTypeValidator` `java.lang.` 허용 범위 과다
-
-**위치**: `common/config/CacheConfig.java:49`
-
-**문제**: `allowIfBaseType("java.lang.")`은 `java.lang.String`, `java.lang.Integer` 등 원시 래퍼뿐 아니라 `java.lang.ProcessBuilder`, `java.lang.Thread`, `java.lang.Runtime` 등 위험한 클래스도 역직렬화를 허용한다. Redis에 접근할 수 있는 공격자가 악의적 JSON 페이로드를 캐시 키에 주입하면 역직렬화 공격(deserialization gadget chain)의 진입점이 될 수 있다.
-
-**개선**: `allowIfBaseType("java.lang.")` → `allowIfBaseType("java.lang.String")`, `allowIfBaseType("java.lang.Number")`, `allowIfBaseType("java.lang.Boolean")` 등 필요한 타입만 명시적으로 허용.
-
----
-
-### 160. `RedisConfig` — Redisson 연결 타임아웃·풀 사이즈 미설정
-
-**위치**: `common/config/RedisConfig.java:28-29`
-
-**문제**: `useSingleServer()`에 `connectionMinimumIdleSize`, `connectionPoolSize`, `timeout`, `connectTimeout` 등이 미설정이다. Redisson 기본값(connectionPoolSize=64, timeout=3000ms)이 적용되지만, Redis 장애 시 기본 timeout 3초 × 재시도 3회 = 9초 동안 스레드가 블로킹된다. 동시 요청이 몰리면 스레드 풀 고갈로 전체 서비스가 응답 불가.
-
-**개선**: `timeout(1000)`, `connectTimeout(1000)`, `retryAttempts(1)` 설정으로 Redis 장애 시 빠른 실패. 연결 풀 크기는 Tomcat 스레드 수 대비 적절히 설정(예: connectionPoolSize=32).
-
----
-
-### 161. `OutboxEventRelayScheduler.relayedCounter` — 성공/실패 미구분
-
-**위치**: `common/outbox/OutboxEventRelayScheduler.java:78`
-
-**문제**: `processor.processOne()` 내부에서 예외를 catch하고 `recordFailure()`를 호출한 뒤 정상 반환한다. 따라서 `relayedCounter.increment()`가 실패한 이벤트에 대해서도 호출되어, Prometheus `outbox.relayed` 메트릭이 실제 성공 수보다 부풀려진다. 운영 모니터링 시 실제 처리량 파악이 부정확.
-
-**개선**: `processOne()`이 boolean을 반환하도록 변경 — true(성공, published) / false(실패, recorded failure). relay에서 true인 경우만 카운팅. 또는 별도 `outbox.relay_failed` 카운터 추가.
-
-### 162. LIKE 와일드카드 미이스케이프 — 다수 JPQL 쿼리에 동일 패턴
-
-**위치**: `UserRepository.searchByUsernameOrEmail()`, `ProductRepository.searchAll()`, `InventorySpecification` (#128)
-
-**문제**: `CONCAT('%', :q, '%')` 패턴이 3개 이상 쿼리에서 반복된다. 사용자 입력의 `%`, `_`가 이스케이프 없이 LIKE 와일드카드로 작동하여 의도치 않은 전체 매칭이 가능하다. #128은 `InventorySpecification`만 언급했지만, `searchByUsernameOrEmail`(ADMIN 전용)과 `searchAll`(ADMIN 전용)에도 동일 취약점 존재.
-
-**개선**: `LikeEscapeUtils.escape(input)` 유틸리티 추출 후 전체 LIKE 쿼리에 일괄 적용. JPQL에서 `ESCAPE '\\'` 구문 추가.
-
----
-
-### 163. Flyway 마이그레이션 — ENGINE/CHARSET 명시 불일치
-
-**위치**: `V4__create_payment_tables.sql`, `V13__create_coupon_tables.sql`, `V15__create_batch_tables.sql`
-
-**문제**: V1, V2, V3, V5, V6 등은 `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`를 명시하지만, V4(payments), V13(coupons/coupon_usages), V15(daily_order_stats) 등은 누락되어 MySQL 서버 기본값에 의존한다. V30에서 charset/collation을 일괄 수정했지만, 새로 추가되는 마이그레이션에서 같은 누락이 반복될 수 있다.
-
-**개선**: 마이그레이션 작성 시 ENGINE/CHARSET 명시 의무화. 기존 누락 테이블은 V30에서 수정 완료됨을 확인.
-
----
 
 ## ⚪ 보류 — 판단 필요 또는 인프라 의존
 
