@@ -90,6 +90,7 @@ public class CategoryService {
     }
 
     /** 단건 조회 — children(하위 카테고리) 목록 포함 */
+    @Cacheable(cacheNames = "categories", key = "'id:' + #id")
     public CategoryResponse getById(Long id) {
         Category category = findByIdWithChildren(id);
         Set<Long> ids = category.getChildren().stream()
