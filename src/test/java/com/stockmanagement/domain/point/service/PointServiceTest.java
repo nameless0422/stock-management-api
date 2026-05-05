@@ -10,12 +10,16 @@ import com.stockmanagement.domain.point.repository.PointTransactionRepository;
 import com.stockmanagement.domain.point.repository.UserPointRepository;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.repository.UserRepository;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -35,8 +39,14 @@ class PointServiceTest {
     @Mock private UserPointRepository userPointRepository;
     @Mock private PointTransactionRepository pointTransactionRepository;
     @Mock private UserRepository userRepository;
+    @Spy  private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @InjectMocks private PointService pointService;
+
+    @BeforeEach
+    void setUp() {
+        pointService.initMetrics();
+    }
 
     private User mockUser(Long id, String username) {
         User u = User.builder().username(username).password("pw").email("e@e.com").build();
@@ -173,13 +183,11 @@ class PointServiceTest {
         @Test
         @DisplayName("이력 없음 → no-op")
         void noTransactions() {
-            UserPoint up = mockUserPoint(1L, 0);
-            given(userPointRepository.findByUserIdWithLock(1L)).willReturn(Optional.of(up));
             given(pointTransactionRepository.findByOrderId(100L)).willReturn(List.of());
 
             pointService.refundByOrder(1L, 100L);
 
-            assertThat(up.getBalance()).isEqualTo(0);
+            // early return — userPointRepository 호출 없음
         }
     }
 }

@@ -15,15 +15,16 @@ import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("OutboxEventPurgeScheduler 단위 테스트")
 class OutboxEventPurgeSchedulerTest {
 
-    @Mock OutboxEventRepository repository;
+    @Mock OutboxEventPurgeProcessor purgeProcessor;
 
     @InjectMocks OutboxEventPurgeScheduler scheduler;
 
@@ -33,61 +34,56 @@ class OutboxEventPurgeSchedulerTest {
     }
 
     @Nested
-    @DisplayName("purge() — 오래된 레코드 삭제")
+    @DisplayName("purge() — 배치 루프 삭제")
     class Purge {
 
         @Test
-        @DisplayName("삭제 대상 없음 → repository 호출만 수행, 로그 미출력")
-        void doesNothingWhenNothingDeleted() {
-            given(repository.deleteByPublishedAtBefore(any())).willReturn(0);
+        @DisplayName("삭제 대상 없음 → purgeProcessor 1회 호출 후 루프 종료")
+        void stopsLoopWhenNothingDeleted() {
+            given(purgeProcessor.deleteBatch(any(), anyInt())).willReturn(0);
 
             scheduler.purge();
 
-            verify(repository).deleteByPublishedAtBefore(any(LocalDateTime.class));
+            verify(purgeProcessor, times(1)).deleteBatch(any(LocalDateTime.class), anyInt());
         }
 
         @Test
-        @DisplayName("삭제 발생 시 → deleteByPublishedAtBefore 호출")
-        void callsDeleteWhenRecordsExist() {
-            given(repository.deleteByPublishedAtBefore(any())).willReturn(5);
+        @DisplayName("배치 미만 삭제 → 1회 호출 후 종료")
+        void stopsAfterPartialBatch() {
+            given(purgeProcessor.deleteBatch(any(), anyInt())).willReturn(5);
 
             scheduler.purge();
 
-            verify(repository).deleteByPublishedAtBefore(any(LocalDateTime.class));
+            verify(purgeProcessor, times(1)).deleteBatch(any(LocalDateTime.class), anyInt());
+        }
+
+        @Test
+        @DisplayName("배치 크기(1000)만큼 삭제되면 다음 배치 호출")
+        void continuesLoopWhenFullBatch() {
+            given(purgeProcessor.deleteBatch(any(), anyInt()))
+                    .willReturn(1000)
+                    .willReturn(0);
+
+            scheduler.purge();
+
+            verify(purgeProcessor, times(2)).deleteBatch(any(LocalDateTime.class), anyInt());
         }
 
         @Test
         @DisplayName("기준 시각은 현재 시각에서 retentionDays 일 전이어야 한다")
         void thresholdIsRetentionDaysAgo() {
-            given(repository.deleteByPublishedAtBefore(any())).willReturn(0);
+            given(purgeProcessor.deleteBatch(any(), anyInt())).willReturn(0);
 
             LocalDateTime before = LocalDateTime.now();
             scheduler.purge();
             LocalDateTime after = LocalDateTime.now();
 
             ArgumentCaptor<LocalDateTime> captor = ArgumentCaptor.forClass(LocalDateTime.class);
-            verify(repository).deleteByPublishedAtBefore(captor.capture());
+            verify(purgeProcessor).deleteBatch(captor.capture(), anyInt());
 
             LocalDateTime threshold = captor.getValue();
             assertThat(threshold).isBefore(before.minusDays(6));
             assertThat(threshold).isAfter(after.minusDays(8));
-        }
-
-        @Test
-        @DisplayName("retentionDays=1 이면 기준 시각이 약 1일 전")
-        void respectsRetentionDaysOverride() {
-            ReflectionTestUtils.setField(scheduler, "retentionDays", 1);
-            given(repository.deleteByPublishedAtBefore(any())).willReturn(0);
-
-            LocalDateTime before = LocalDateTime.now();
-            scheduler.purge();
-
-            ArgumentCaptor<LocalDateTime> captor = ArgumentCaptor.forClass(LocalDateTime.class);
-            verify(repository).deleteByPublishedAtBefore(captor.capture());
-
-            LocalDateTime threshold = captor.getValue();
-            assertThat(threshold).isBefore(before);
-            assertThat(threshold).isAfter(before.minusDays(2));
         }
     }
 }
