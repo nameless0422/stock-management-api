@@ -4,6 +4,7 @@ import com.stockmanagement.domain.order.entity.DailyOrderStats;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.DailyOrderStatsRepository;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.order.repository.OrderStatsProjection;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,6 +16,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,7 +35,7 @@ class DailyOrderStatsSchedulerTest {
     @Test
     @DisplayName("전일 집계 후 레코드 미존재 시 신규 저장")
     void savesNewStatsWhenNotExists() {
-        stubOrderCounts(10, 6, 2, BigDecimal.valueOf(50000));
+        stubOrderStats(10, 6, 2, BigDecimal.valueOf(50000));
         given(statsRepository.findByStatDate(any(LocalDate.class))).willReturn(Optional.empty());
         given(statsRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 
@@ -51,7 +53,7 @@ class DailyOrderStatsSchedulerTest {
     @Test
     @DisplayName("전일 집계 후 레코드 이미 존재 시 update")
     void updatesExistingStats() {
-        stubOrderCounts(5, 3, 1, BigDecimal.valueOf(30000));
+        stubOrderStats(5, 3, 1, BigDecimal.valueOf(30000));
         DailyOrderStats existing = buildStats(LocalDate.now().minusDays(1), 0, 0, 0, BigDecimal.ZERO);
         given(statsRepository.findByStatDate(any(LocalDate.class))).willReturn(Optional.of(existing));
 
@@ -65,13 +67,24 @@ class DailyOrderStatsSchedulerTest {
 
     // ===== 헬퍼 =====
 
-    private void stubOrderCounts(long total, long confirmed, long cancelled, BigDecimal revenue) {
-        given(orderRepository.countByCreatedAtBetween(any(), any())).willReturn(total);
-        given(orderRepository.countByStatusAndCreatedAtBetween(eq(OrderStatus.CONFIRMED), any(), any()))
-                .willReturn(confirmed);
-        given(orderRepository.countByStatusAndCreatedAtBetween(eq(OrderStatus.CANCELLED), any(), any()))
-                .willReturn(cancelled);
-        given(orderRepository.sumRevenueByCreatedAtBetween(any(), any())).willReturn(revenue);
+    /** findOrderStatsBetween() 단일 GROUP BY 쿼리 결과를 스텁한다. */
+    private void stubOrderStats(long total, long confirmed, long cancelled, BigDecimal revenue) {
+        // PENDING = total - confirmed - cancelled
+        long pending = total - confirmed - cancelled;
+        List<OrderStatsProjection> projections = List.of(
+                buildProjection(OrderStatus.PENDING, pending, BigDecimal.ZERO),
+                buildProjection(OrderStatus.CONFIRMED, confirmed, revenue),
+                buildProjection(OrderStatus.CANCELLED, cancelled, BigDecimal.ZERO)
+        );
+        given(orderRepository.findOrderStatsBetween(any(), any())).willReturn(projections);
+    }
+
+    private OrderStatsProjection buildProjection(OrderStatus status, long count, BigDecimal amount) {
+        return new OrderStatsProjection() {
+            @Override public OrderStatus getStatus() { return status; }
+            @Override public long getOrderCount() { return count; }
+            @Override public BigDecimal getTotalAmount() { return amount; }
+        };
     }
 
     private DailyOrderStats buildStats(LocalDate date, int total, int confirmed, int cancelled,

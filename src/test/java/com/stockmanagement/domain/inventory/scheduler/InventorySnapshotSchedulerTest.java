@@ -9,9 +9,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.SliceImpl;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -35,8 +35,8 @@ class InventorySnapshotSchedulerTest {
     @DisplayName("스냅샷 미존재 시 processBatch() 호출")
     void savesSnapshotWhenNotExists() {
         Inventory inv = buildInventory(1L, 100, 10, 5);
-        Page<Inventory> page = new PageImpl<>(List.of(inv));
-        given(inventoryRepository.findAll(any(Pageable.class))).willReturn(page);
+        Slice<Inventory> slice = new SliceImpl<>(List.of(inv));
+        given(inventoryRepository.findAllAsSlice(any(Pageable.class))).willReturn(slice);
         given(snapshotRepository.findInventoryIdsBySnapshotDate(any(LocalDate.class)))
                 .willReturn(Set.of());
         given(snapshotProcessor.processBatch(anyList(), anySet(), any(LocalDate.class)))
@@ -51,8 +51,8 @@ class InventorySnapshotSchedulerTest {
     @DisplayName("스냅샷 이미 존재 시 alreadySnapped에 inventoryId 포함하여 processor에 전달")
     void passesAlreadySnappedToProcessor() {
         Inventory inv = buildInventory(1L, 100, 10, 5);
-        Page<Inventory> page = new PageImpl<>(List.of(inv));
-        given(inventoryRepository.findAll(any(Pageable.class))).willReturn(page);
+        Slice<Inventory> slice = new SliceImpl<>(List.of(inv));
+        given(inventoryRepository.findAllAsSlice(any(Pageable.class))).willReturn(slice);
         given(snapshotRepository.findInventoryIdsBySnapshotDate(any(LocalDate.class)))
                 .willReturn(Set.of(1L));
         given(snapshotProcessor.processBatch(anyList(), anySet(), any(LocalDate.class)))

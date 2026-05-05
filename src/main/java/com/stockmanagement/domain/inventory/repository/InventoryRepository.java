@@ -4,6 +4,7 @@ import com.stockmanagement.domain.inventory.entity.Inventory;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -57,4 +58,13 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long>, Jpa
     @EntityGraph(attributePaths = {"product"})
     @Override
     Page<Inventory> findAll(Specification<Inventory> spec, Pageable pageable);
+
+    /**
+     * 스냅샷 배치용 전체 재고 Slice 조회 — COUNT 쿼리 없이 LIMIT만 실행한다.
+     *
+     * <p>{@code Page}의 매 페이지마다 발생하는 {@code SELECT COUNT(*)} 오버헤드를 제거한다.
+     * 다음 페이지 존재 여부({@code hasNext})만 확인하면 되므로 Slice로 충분하다.
+     */
+    @Query("SELECT i FROM Inventory i")
+    Slice<Inventory> findAllAsSlice(Pageable pageable);
 }

@@ -4,6 +4,7 @@ import com.stockmanagement.domain.order.entity.DailyOrderStats;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.DailyOrderStatsRepository;
 import com.stockmanagement.domain.order.repository.OrderRepository;
+import com.stockmanagement.domain.order.repository.OrderStatsProjection;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -14,12 +15,17 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 일별 주문·매출 통계 스케줄러.
  *
  * <p>매일 자정 1분에 전일 주문을 집계하여 {@code daily_order_stats}에 저장한다.
  * 동일 날짜 레코드가 이미 존재하면 update하여 멱등성을 보장한다.
+ *
+ * <p>기존 4개 개별 쿼리(count×3 + sum×1) → {@code findOrderStatsBetween()} 단일 GROUP BY 쿼리로 대체.
  */
 @Slf4j
 @Component
@@ -40,12 +46,18 @@ public class DailyOrderStatsScheduler {
         log.info("[DailyOrderStatsScheduler] 일별 통계 집계 시작 — 기준일: {}", yesterday);
 
         try {
-            int totalOrders     = (int) orderRepository.countByCreatedAtBetween(start, end);
-            int confirmedOrders = (int) orderRepository.countByStatusAndCreatedAtBetween(
-                    OrderStatus.CONFIRMED, start, end);
-            int cancelledOrders = (int) orderRepository.countByStatusAndCreatedAtBetween(
-                    OrderStatus.CANCELLED, start, end);
-            BigDecimal totalRevenue = orderRepository.sumRevenueByCreatedAtBetween(start, end);
+            // 단일 GROUP BY 쿼리로 상태별 건수·매출액을 한 번에 조회 (기존 4개 쿼리 대체)
+            List<OrderStatsProjection> statsList = orderRepository.findOrderStatsBetween(start, end);
+            Map<OrderStatus, OrderStatsProjection> statsMap = statsList.stream()
+                    .collect(Collectors.toMap(OrderStatsProjection::getStatus, s -> s));
+
+            int totalOrders     = statsList.stream().mapToInt(s -> (int) s.getOrderCount()).sum();
+            int confirmedOrders = statsMap.containsKey(OrderStatus.CONFIRMED)
+                    ? (int) statsMap.get(OrderStatus.CONFIRMED).getOrderCount() : 0;
+            int cancelledOrders = statsMap.containsKey(OrderStatus.CANCELLED)
+                    ? (int) statsMap.get(OrderStatus.CANCELLED).getOrderCount() : 0;
+            BigDecimal totalRevenue = statsMap.containsKey(OrderStatus.CONFIRMED)
+                    ? statsMap.get(OrderStatus.CONFIRMED).getTotalAmount() : BigDecimal.ZERO;
 
             statsRepository.findByStatDate(yesterday)
                     .ifPresentOrElse(
