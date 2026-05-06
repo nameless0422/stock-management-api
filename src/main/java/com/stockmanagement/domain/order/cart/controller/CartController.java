@@ -3,6 +3,7 @@ package com.stockmanagement.domain.order.cart.controller;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.domain.order.cart.dto.CartCheckoutRequest;
 import com.stockmanagement.domain.order.cart.dto.CartItemRequest;
+import com.stockmanagement.domain.order.cart.dto.CartItemResponse;
 import com.stockmanagement.domain.order.cart.dto.CartResponse;
 import com.stockmanagement.domain.order.cart.service.CartService;
 import com.stockmanagement.domain.order.dto.OrderResponse;
@@ -47,7 +48,7 @@ public class CartController {
     @Operation(summary = "상품 추가 또는 수량 변경",
                description = "동일 상품이 이미 있으면 수량을 요청값으로 교체한다.")
     @PostMapping("/items")
-    public ApiResponse<CartResponse> addOrUpdate(
+    public ApiResponse<CartItemResponse> addOrUpdate(
             @AuthenticationPrincipal String username,
             @RequestBody @Valid CartItemRequest request) {
         return ApiResponse.ok(cartService.addOrUpdate(userService.resolveUserId(username), request));

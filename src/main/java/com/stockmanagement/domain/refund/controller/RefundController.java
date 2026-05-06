@@ -43,7 +43,7 @@ public class RefundController {
             @AuthenticationPrincipal String username,
             Authentication authentication,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ApiResponse.ok(refundService.getMyRefunds(resolveUserId(authentication, username), pageable));
+        return ApiResponse.ok(refundService.getMyRefunds(SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), pageable));
     }
 
     @Operation(summary = "환불 단건 조회", description = "ADMIN은 모든 환불 조회 가능. USER는 본인 주문의 환불만 가능.")
@@ -64,18 +64,5 @@ public class RefundController {
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
         return ApiResponse.ok(refundService.getByPaymentId(paymentId, username, isAdmin));
-    }
-
-    /**
-     * JWT claim 또는 DB 조회로 userId를 결정한다.
-     *
-     * <p>JwtAuthenticationFilter가 {@code auth.setDetails(userId)}에 저장한 경우 DB 조회를 건너뛴다.
-     * 구 토큰 또는 테스트 환경처럼 details가 없으면 userService.resolveUserId(username)로 DB 조회.
-     */
-    private Long resolveUserId(Authentication auth, String username) {
-        if (auth != null && auth.getDetails() instanceof Long userId) {
-            return userId;
-        }
-        return userService.resolveUserId(username);
     }
 }

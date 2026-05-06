@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.product.wishlist.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.product.wishlist.dto.WishlistResponse;
 import com.stockmanagement.domain.product.wishlist.service.WishlistService;
 import com.stockmanagement.domain.user.service.UserService;
@@ -32,7 +33,7 @@ public class WishlistController {
             @PathVariable Long productId,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        return ApiResponse.ok(wishlistService.add(productId, resolveUserId(authentication, username)));
+        return ApiResponse.ok(wishlistService.add(productId, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username))));
     }
 
     @Operation(summary = "위시리스트에서 상품 제거")
@@ -42,7 +43,7 @@ public class WishlistController {
             @PathVariable Long productId,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        wishlistService.remove(productId, resolveUserId(authentication, username));
+        wishlistService.remove(productId, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)));
     }
 
     @Operation(summary = "특정 상품의 위시리스트 추가 여부 조회",
@@ -52,7 +53,7 @@ public class WishlistController {
             @PathVariable Long productId,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        boolean wishlisted = wishlistService.isWishlisted(productId, resolveUserId(authentication, username));
+        boolean wishlisted = wishlistService.isWishlisted(productId, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)));
         return ApiResponse.ok(java.util.Map.of("wishlisted", wishlisted));
     }
 
@@ -62,14 +63,6 @@ public class WishlistController {
             @AuthenticationPrincipal String username,
             Authentication authentication,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ApiResponse.ok(wishlistService.getList(resolveUserId(authentication, username), pageable));
-    }
-
-    /** JWT details에서 userId를 추출하고, 없으면 DB fallback. */
-    private Long resolveUserId(Authentication auth, String username) {
-        if (auth != null && auth.getDetails() instanceof Long userId) {
-            return userId;
-        }
-        return userService.resolveUserId(username);
+        return ApiResponse.ok(wishlistService.getList(SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), pageable));
     }
 }

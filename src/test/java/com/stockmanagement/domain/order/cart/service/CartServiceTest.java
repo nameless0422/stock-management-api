@@ -95,7 +95,8 @@ class CartServiceTest {
             CartItemRequest request = mockCartItemRequest(1L, 3);
             given(productRepository.findById(1L)).willReturn(Optional.of(product));
             given(cartRepository.findByUserIdAndProductId(anyLong(), any())).willReturn(Optional.empty());
-            given(cartRepository.findByUserId(1L)).willReturn(List.of(cartItem));
+            given(cartRepository.saveAndFlush(any())).willReturn(cartItem);
+            given(inventoryRepository.findByProductId(any())).willReturn(Optional.empty());
 
             cartService.addOrUpdate(1L, request);
 
@@ -108,7 +109,7 @@ class CartServiceTest {
             CartItemRequest request = mockCartItemRequest(1L, 5);
             given(productRepository.findById(1L)).willReturn(Optional.of(product));
             given(cartRepository.findByUserIdAndProductId(eq(1L), any())).willReturn(Optional.of(cartItem));
-            given(cartRepository.findByUserId(1L)).willReturn(List.of(cartItem));
+            given(inventoryRepository.findByProductId(any())).willReturn(Optional.empty());
 
             cartService.addOrUpdate(1L, request);
 

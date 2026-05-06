@@ -4,6 +4,7 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.cart.dto.CartCheckoutRequest;
 import com.stockmanagement.domain.order.cart.dto.CartItemRequest;
+import com.stockmanagement.domain.order.cart.dto.CartItemResponse;
 import com.stockmanagement.domain.order.cart.dto.CartResponse;
 import com.stockmanagement.domain.order.cart.entity.CartItem;
 import com.stockmanagement.domain.order.cart.repository.CartRepository;
@@ -66,9 +67,10 @@ public class CartService {
      *
      * <p>동일 상품이 이미 담겨 있으면 요청 수량으로 덮어쓴다(교체).
      * 없으면 새 CartItem을 추가한다.
+     * 전체 장바구니 재조회 없이 영향받은 단건만 반환하여 불필요한 쿼리를 최소화한다.
      */
     @Transactional
-    public CartResponse addOrUpdate(Long userId, CartItemRequest request) {
+    public CartItemResponse addOrUpdate(Long userId, CartItemRequest request) {
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
@@ -80,25 +82,31 @@ public class CartService {
         Optional<CartItem> existing =
                 cartRepository.findByUserIdAndProductId(userId, product.getId());
 
+        CartItem cartItem;
         if (existing.isPresent()) {
-            existing.get().updateQuantity(request.getQuantity());
+            cartItem = existing.get();
+            cartItem.updateQuantity(request.getQuantity());
         } else {
             try {
-                CartItem item = CartItem.builder()
+                cartItem = cartRepository.saveAndFlush(CartItem.builder()
                         .userId(userId)
                         .product(product)
                         .quantity(request.getQuantity())
                         .savedPrice(product.getPrice())
-                        .build();
-                cartRepository.saveAndFlush(item);
+                        .build());
             } catch (DataIntegrityViolationException e) {
                 // 동시 요청으로 UK(user_id, product_id) 충돌 — 재조회 후 수량 업데이트
-                cartRepository.findByUserIdAndProductId(userId, product.getId())
-                        .ifPresent(item -> item.updateQuantity(request.getQuantity()));
+                cartItem = cartRepository.findByUserIdAndProductId(userId, product.getId())
+                        .orElseThrow(() -> new BusinessException(ErrorCode.CART_ITEM_NOT_FOUND));
+                cartItem.updateQuantity(request.getQuantity());
             }
         }
 
-        return getCart(userId);
+        // 단건 재고 조회 (전체 장바구니 리로드 불필요)
+        Integer available = inventoryRepository.findByProductId(product.getId())
+                .map(Inventory::getAvailable)
+                .orElse(null);
+        return CartItemResponse.from(cartItem, available);
     }
 
     /**

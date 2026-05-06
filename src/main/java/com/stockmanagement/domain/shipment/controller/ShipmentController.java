@@ -46,7 +46,7 @@ public class ShipmentController {
             @AuthenticationPrincipal String username,
             Authentication authentication,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        Long userId = resolveUserId(authentication, username);
+        Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
         return ApiResponse.ok(shipmentService.getMyShipments(userId, pageable));
     }
 
@@ -79,12 +79,5 @@ public class ShipmentController {
     @PatchMapping("/orders/{orderId}/return")
     public ApiResponse<ShipmentResponse> processReturn(@PathVariable Long orderId) {
         return ApiResponse.ok(shipmentService.processReturn(orderId));
-    }
-
-    private Long resolveUserId(Authentication auth, String username) {
-        if (auth != null && auth.getDetails() instanceof Long userId) {
-            return userId;
-        }
-        return userService.resolveUserId(username);
     }
 }
