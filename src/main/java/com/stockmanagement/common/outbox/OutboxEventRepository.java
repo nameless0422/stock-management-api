@@ -34,14 +34,24 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
                                         Pageable pageable);
 
     /**
-     * 발행 완료된 레코드 중 기준 시각 이전 것을 일괄 삭제한다 (purge용).
+     * 발행 완료된 레코드 중 기준 시각 이전 것을 배치 단위로 삭제한다 (purge용).
+     *
+     * <p>단일 트랜잭션 전량 삭제 대신 {@code limit}건씩 나눠 삭제하여
+     * 장시간 테이블 잠금(relay·INSERT 블로킹)을 방지한다.
      *
      * @param before 삭제 기준 시각 (publishedAt < before)
+     * @param limit  한 번에 삭제할 최대 건수
      * @return 삭제된 레코드 수
      */
     @Modifying
-    @Query("DELETE FROM OutboxEvent e WHERE e.publishedAt IS NOT NULL AND e.publishedAt < :before")
-    int deleteByPublishedAtBefore(@Param("before") LocalDateTime before);
+    @Query(value = """
+            DELETE FROM outbox_events
+            WHERE published_at IS NOT NULL
+              AND published_at < :before
+            LIMIT :limit
+            """, nativeQuery = true)
+    int deleteBatchByPublishedAtBefore(@Param("before") LocalDateTime before,
+                                       @Param("limit") int limit);
 
     /**
      * MAX_RETRY 초과로 영구 발행 실패된 레코드 수를 반환한다 (Prometheus 게이지용).
