@@ -18,6 +18,7 @@ import com.stockmanagement.domain.coupon.repository.CouponRepository;
 import com.stockmanagement.domain.coupon.repository.CouponUsageRepository;
 import com.stockmanagement.domain.coupon.repository.UserCouponRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -38,6 +39,7 @@ import java.util.stream.Collectors;
  * <p>applyCoupon() — 쓰기, 비관적 락으로 usageCount 동시성 제어.
  * <p>releaseCoupon() — 주문 취소 시 usageCount 복원.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -192,6 +194,7 @@ public class CouponService {
             throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
         }
 
+        log.info("[Coupon] 등록: userId={}, couponCode={}, couponId={}", userId, request.getCouponCode(), coupon.getId());
         int usedCount = couponUsageRepository.countByCoupon_IdAndUserId(coupon.getId(), userId);
         return MyCouponResponse.from(userCoupon, isUsable(coupon, usedCount, LocalDateTime.now()));
     }
@@ -243,6 +246,7 @@ public class CouponService {
                 .discountAmount(discountAmount)
                 .build());
 
+        log.info("[Coupon] 적용: userId={}, couponCode={}, orderId={}, discountAmount={}", userId, couponCode, orderId, discountAmount);
         return buildValidateResponse(coupon, orderAmount, discountAmount);
     }
 
@@ -263,6 +267,7 @@ public class CouponService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
         coupon.decreaseUsage();
         couponUsageRepository.delete(usage);
+        log.info("[Coupon] 반환: orderId={}, couponId={}", orderId, coupon.getId());
     }
 
     // ===== 내부 검증 헬퍼 =====

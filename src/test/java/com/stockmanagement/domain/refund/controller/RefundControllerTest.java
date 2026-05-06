@@ -25,7 +25,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -60,7 +60,7 @@ class RefundControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 환불 요청 → 201")
         void requestsRefund() throws Exception {
-            given(refundService.requestRefund(any(), anyString())).willReturn(mock(RefundResponse.class));
+            given(refundService.requestRefund(any(), anyLong())).willReturn(mock(RefundResponse.class));
 
             mockMvc.perform(post("/api/refunds")
                             .with(authentication(USER_AUTH))
@@ -82,7 +82,7 @@ class RefundControllerTest {
         @Test
         @DisplayName("이미 환불된 결제 → 409")
         void duplicateRefund() throws Exception {
-            given(refundService.requestRefund(any(), anyString()))
+            given(refundService.requestRefund(any(), anyLong()))
                     .willThrow(new BusinessException(ErrorCode.REFUND_ALREADY_EXISTS));
 
             mockMvc.perform(post("/api/refunds")
@@ -103,7 +103,7 @@ class RefundControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 환불 조회 → 200")
         void returnsRefund() throws Exception {
-            given(refundService.getById(1L, "user1", false)).willReturn(mock(RefundResponse.class));
+            given(refundService.getById(eq(1L), any(), eq(false))).willReturn(mock(RefundResponse.class));
 
             mockMvc.perform(get("/api/refunds/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())
@@ -120,7 +120,7 @@ class RefundControllerTest {
         @Test
         @DisplayName("존재하지 않는 환불 → 404")
         void notFound() throws Exception {
-            given(refundService.getById(999L, "user1", false))
+            given(refundService.getById(eq(999L), any(), eq(false)))
                     .willThrow(new BusinessException(ErrorCode.REFUND_NOT_FOUND));
 
             mockMvc.perform(get("/api/refunds/999").with(authentication(USER_AUTH)))
@@ -131,7 +131,7 @@ class RefundControllerTest {
         @Test
         @DisplayName("타인의 환불 조회 → 403")
         void accessDenied() throws Exception {
-            given(refundService.getById(1L, "user1", false))
+            given(refundService.getById(eq(1L), any(), eq(false)))
                     .willThrow(new BusinessException(ErrorCode.REFUND_ACCESS_DENIED));
 
             mockMvc.perform(get("/api/refunds/1").with(authentication(USER_AUTH)))
@@ -149,7 +149,7 @@ class RefundControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 결제 ID로 환불 조회 → 200")
         void returnsRefundByPaymentId() throws Exception {
-            given(refundService.getByPaymentId(1L, "user1", false)).willReturn(mock(RefundResponse.class));
+            given(refundService.getByPaymentId(eq(1L), any(), eq(false))).willReturn(mock(RefundResponse.class));
 
             mockMvc.perform(get("/api/refunds/payments/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())

@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.product.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
 import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.dto.ProductSearchRequest;
@@ -44,7 +45,7 @@ public class ProductController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         if (isAuthenticated(authentication)) {
-            Long userId = resolveUserId(authentication, username);
+            Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
             return ApiResponse.ok(productService.getByIdForUser(id, userId));
         }
         return ApiResponse.ok(productService.getById(id));
@@ -63,7 +64,7 @@ public class ProductController {
             @PageableDefault(size = 20, sort = "id") Pageable pageable,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        Long userId = isAuthenticated(authentication) ? resolveUserId(authentication, username) : null;
+        Long userId = isAuthenticated(authentication) ? SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)) : null;
         return ApiResponse.ok(productService.getList(pageable, request, userId));
     }
 
@@ -94,13 +95,5 @@ public class ProductController {
     private boolean isAuthenticated(Authentication auth) {
         return auth != null && auth.isAuthenticated()
                 && !(auth instanceof AnonymousAuthenticationToken);
-    }
-
-    /** JWT claim details에서 userId 추출. 구 토큰이면 DB fallback. */
-    private Long resolveUserId(Authentication auth, String username) {
-        if (auth != null && auth.getDetails() instanceof Long userId) {
-            return userId;
-        }
-        return userService.resolveUserId(username);
     }
 }

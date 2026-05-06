@@ -329,9 +329,11 @@ public class OrderService {
      * <p>ADMIN은 모든 주문 이력에 접근 가능하고, USER는 본인 주문 이력만 조회할 수 있다.
      */
     public List<OrderStatusHistoryResponse> getHistory(Long orderId, Long userId, boolean isAdmin) {
-        Order order = orderRepository.findById(orderId)
+        Long orderUserId = orderRepository.findUserIdById(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        validateOrderOwnership(order, userId, isAdmin);
+        if (!isAdmin && !orderUserId.equals(userId)) {
+            throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
+        }
         return historyRepository.findByOrderIdOrderByCreatedAtAsc(orderId)
                 .stream().map(OrderStatusHistoryResponse::from).toList();
     }

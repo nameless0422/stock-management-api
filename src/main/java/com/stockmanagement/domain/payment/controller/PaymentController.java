@@ -54,7 +54,7 @@ public class PaymentController {
             @RequestBody @Valid PaymentPrepareRequest request,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        return ApiResponse.ok(paymentService.prepare(request, resolveUserId(authentication, username)));
+        return ApiResponse.ok(paymentService.prepare(request, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username))));
     }
 
     @Operation(summary = "결제 승인", description = "결제창 완료 후 paymentKey로 호출. Order → CONFIRMED, reserved→allocated. 본인 주문만 가능.")
@@ -64,7 +64,7 @@ public class PaymentController {
             @RequestBody @Valid PaymentConfirmRequest request,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        return ApiResponse.ok(paymentService.confirm(request, resolveUserId(authentication, username)));
+        return ApiResponse.ok(paymentService.confirm(request, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username))));
     }
 
     @Operation(summary = "결제 취소/환불", description = "본인 결제만 취소 가능. ADMIN은 전체 취소 가능. Order → CANCELLED, allocated 해제.")
@@ -75,7 +75,7 @@ public class PaymentController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(paymentService.cancel(paymentKey, request, resolveUserId(authentication, username), isAdmin));
+        return ApiResponse.ok(paymentService.cancel(paymentKey, request, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), isAdmin));
     }
 
     @Operation(summary = "TossPayments 웹훅 수신", description = "공개 엔드포인트. Toss-Signature 헤더로 HMAC-SHA256 서명 검증 후 처리.")
@@ -100,7 +100,7 @@ public class PaymentController {
             @AuthenticationPrincipal String username,
             Authentication authentication,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ApiResponse.ok(paymentService.getMyPayments(resolveUserId(authentication, username), pageable));
+        return ApiResponse.ok(paymentService.getMyPayments(SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), pageable));
     }
 
     @Operation(summary = "결제 조회", description = "paymentKey로 결제 상세 조회. 본인 결제만 가능 (ADMIN은 전체 조회).")
@@ -110,7 +110,7 @@ public class PaymentController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(paymentService.getByPaymentKey(paymentKey, resolveUserId(authentication, username), isAdmin));
+        return ApiResponse.ok(paymentService.getByPaymentKey(paymentKey, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), isAdmin));
     }
 
     @Operation(summary = "주문별 결제 조회", description = "주문 ID로 결제 정보 조회. 결제 전이면 data: null 반환. 본인 주문만 가능.")
@@ -120,19 +120,6 @@ public class PaymentController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(paymentService.getByOrderId(orderId, resolveUserId(authentication, username), isAdmin).orElse(null));
-    }
-
-    /**
-     * JWT claim 또는 DB 조회로 userId를 결정한다.
-     *
-     * <p>JwtAuthenticationFilter가 {@code auth.setDetails(userId)}에 저장한 경우 DB 조회를 건너뛴다.
-     * 구 토큰 또는 테스트 환경처럼 details가 없으면 userService.resolveUserId(username)으로 DB 조회.
-     */
-    private Long resolveUserId(Authentication auth, String username) {
-        if (auth != null && auth.getDetails() instanceof Long userId) {
-            return userId;
-        }
-        return userService.resolveUserId(username);
+        return ApiResponse.ok(paymentService.getByOrderId(orderId, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), isAdmin).orElse(null));
     }
 }

@@ -2,7 +2,6 @@ package com.stockmanagement.domain.refund.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
-import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.payment.dto.PaymentCancelRequest;
 import com.stockmanagement.domain.payment.entity.Payment;
@@ -15,8 +14,6 @@ import com.stockmanagement.domain.refund.dto.RefundResponse;
 import com.stockmanagement.domain.refund.entity.Refund;
 import com.stockmanagement.domain.refund.entity.RefundStatus;
 import com.stockmanagement.domain.refund.repository.RefundRepository;
-import com.stockmanagement.domain.user.entity.User;
-import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -41,7 +38,6 @@ public class RefundService {
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
     private final PaymentService paymentService;
-    private final UserRepository userRepository;
 
     /**
      * 환불을 요청한다.
@@ -60,17 +56,14 @@ public class RefundService {
      * Error 계열(OOM 등)은 여기서 잡히지 않으므로 여전히 롤백된다.
      */
     @Transactional(noRollbackFor = Exception.class)
-    public RefundResponse requestRefund(RefundRequest request, String username) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-
+    public RefundResponse requestRefund(RefundRequest request, Long userId) {
         Payment payment = paymentRepository.findById(request.getPaymentId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
-        // 요청자가 해당 주문의 소유자인지 검증
-        Order paymentOrder = orderRepository.findById(payment.getOrderId())
+        // 요청자가 해당 주문의 소유자인지 검증 — 스칼라 프로젝션으로 전체 엔티티 로드 불필요
+        Long orderUserId = orderRepository.findUserIdById(payment.getOrderId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        if (!paymentOrder.getUserId().equals(user.getId())) {
+        if (!orderUserId.equals(userId)) {
             throw new BusinessException(ErrorCode.REFUND_ACCESS_DENIED);
         }
 
@@ -101,7 +94,7 @@ public class RefundService {
                         Refund newRefund = refundRepository.save(Refund.builder()
                                 .paymentId(payment.getId())
                                 .orderId(payment.getOrderId())
-                                .userId(user.getId())
+                                .userId(userId)
                                 .amount(payment.getAmount())
                                 .reason(request.getReason())
                                 .build());
@@ -117,7 +110,7 @@ public class RefundService {
         try {
             // 소유권은 이미 위에서 검증했으므로 userId 전달 (isAdmin=false)
             paymentService.cancel(payment.getPaymentKey(),
-                    PaymentCancelRequest.of(request.getReason()), user.getId(), false);
+                    PaymentCancelRequest.of(request.getReason()), userId, false);
             refund.complete();
             log.info("[Refund] 환불 완료: refundId={}, paymentId={}", refund.getId(), payment.getId());
         } catch (Exception e) {
@@ -130,12 +123,10 @@ public class RefundService {
     }
 
     /** 환불 ID로 단건 조회한다. 본인 또는 ADMIN만 가능. */
-    public RefundResponse getById(Long refundId, String username, boolean isAdmin) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    public RefundResponse getById(Long refundId, Long userId, boolean isAdmin) {
         Refund refund = refundRepository.findById(refundId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REFUND_NOT_FOUND));
-        validateOwnership(refund, user, isAdmin);
+        validateOwnership(refund, userId, isAdmin);
         return RefundResponse.from(refund);
     }
 
@@ -146,12 +137,10 @@ public class RefundService {
     }
 
     /** 결제 ID로 환불 정보를 조회한다. 본인 또는 ADMIN만 가능. */
-    public RefundResponse getByPaymentId(Long paymentId, String username, boolean isAdmin) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    public RefundResponse getByPaymentId(Long paymentId, Long userId, boolean isAdmin) {
         Refund refund = refundRepository.findByPaymentId(paymentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REFUND_NOT_FOUND));
-        validateOwnership(refund, user, isAdmin);
+        validateOwnership(refund, userId, isAdmin);
         return RefundResponse.from(refund);
     }
 
@@ -161,9 +150,9 @@ public class RefundService {
      *
      * <p>Refund.userId(비정규화)를 사용하여 orders 테이블 추가 조회를 제거한다.
      */
-    private void validateOwnership(Refund refund, User user, boolean isAdmin) {
+    private void validateOwnership(Refund refund, Long userId, boolean isAdmin) {
         if (isAdmin) return;
-        if (!refund.getUserId().equals(user.getId())) {
+        if (!refund.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.REFUND_ACCESS_DENIED);
         }
     }

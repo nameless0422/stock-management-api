@@ -11,6 +11,9 @@ import com.stockmanagement.domain.point.repository.PointTransactionRepository;
 import com.stockmanagement.domain.point.repository.UserPointRepository;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.repository.UserRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -44,6 +47,17 @@ public class PointService {
     private final UserPointRepository userPointRepository;
     private final PointTransactionRepository pointTransactionRepository;
     private final UserRepository userRepository;
+    private final MeterRegistry meterRegistry;
+
+    /** 적립금 부분 회수 발생 횟수 카운터 — 잔액 부족으로 전액 회수 불가 시 증가 */
+    private Counter pointPartialReclaimCounter;
+
+    @PostConstruct
+    public void initMetrics() {
+        pointPartialReclaimCounter = Counter.builder("point.partial_reclaim")
+                .description("포인트 주문 취소 시 잔액 부족으로 적립금이 부분 회수된 횟수")
+                .register(meterRegistry);
+    }
 
     // ===== 조회 =====
 
@@ -146,16 +160,22 @@ public class PointService {
      * 주문 취소/환불 시 포인트를 원상복구한다.
      *
      * <p>사용된 포인트 반환 + 결제 완료로 적립된 포인트 회수를 모두 처리한다.
+     * 포인트 트랜잭션이 없는 주문(포인트 미사용·미적립)은 early return하여
+     * 불필요한 {@code SELECT FOR UPDATE}(getOrCreate) 호출을 방지한다.
      *
      * @param userId  사용자 ID
      * @param orderId 취소된 주문 ID
      */
     @Transactional
     public void refundByOrder(Long userId, Long orderId) {
+        // 포인트 트랜잭션이 없으면 early return — getOrCreate(SELECT FOR UPDATE + 잠재적 INSERT) 불필요
+        List<PointTransaction> orderTxns = pointTransactionRepository.findByOrderId(orderId);
+        if (orderTxns.isEmpty()) return;
+
         UserPoint userPoint = getOrCreate(userId);
         List<PointTransaction> newTxns = new ArrayList<>();
 
-        pointTransactionRepository.findByOrderId(orderId).forEach(tx -> {
+        orderTxns.forEach(tx -> {
             if (tx.getType() == PointTransactionType.USE) {
                 // 사용 포인트 반환
                 long refundAmount = Math.abs(tx.getAmount());
@@ -185,6 +205,7 @@ public class PointService {
                 if (actualReclaim < reclaimAmount) {
                     log.warn("[Point] 적립금 전액 회수 불가: userId={}, orderId={}, 요청={}, 실제={}",
                             userId, orderId, reclaimAmount, actualReclaim);
+                    pointPartialReclaimCounter.increment();
                 }
             }
         });

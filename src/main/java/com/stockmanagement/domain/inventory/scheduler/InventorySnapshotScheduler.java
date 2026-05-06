@@ -7,8 +7,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -44,19 +44,16 @@ public class InventorySnapshotScheduler {
 
         int pageNum = 0;
         int totalSaved = 0;
-        long totalElements = 0;
+
+        log.info("[InventorySnapshotScheduler] 재고 스냅샷 시작 — 기준일: {}", today);
 
         while (true) {
-            Page<Inventory> inventoryPage = inventoryRepository.findAll(PageRequest.of(pageNum, PAGE_SIZE));
-            if (inventoryPage.isEmpty()) break;
-
-            if (pageNum == 0) {
-                totalElements = inventoryPage.getTotalElements();
-                log.info("[InventorySnapshotScheduler] 재고 스냅샷 시작 — 전체: {}건, 기준일: {}", totalElements, today);
-            }
+            // Slice: COUNT 쿼리 없이 LIMIT만 실행하여 매 페이지 SELECT COUNT(*) 오버헤드 제거
+            Slice<Inventory> inventorySlice = inventoryRepository.findAllAsSlice(PageRequest.of(pageNum, PAGE_SIZE));
+            if (inventorySlice.isEmpty()) break;
 
             try {
-                totalSaved += snapshotProcessor.processBatch(inventoryPage.getContent(), alreadySnapped, today);
+                totalSaved += snapshotProcessor.processBatch(inventorySlice.getContent(), alreadySnapped, today);
             } catch (DataIntegrityViolationException e) {
                 // 레이스 컨디션: alreadySnapped 조회 후 INSERT 사이에 다른 인스턴스가 먼저 저장한 경우
                 log.debug("[InventorySnapshotScheduler] 중복 스냅샷 감지 (동시 실행 경합) — date={}, page={}", today, pageNum);
@@ -65,11 +62,10 @@ public class InventorySnapshotScheduler {
                 throw new RuntimeException("재고 스냅샷 저장 실패: " + today, e);
             }
 
-            if (inventoryPage.isLast()) break;
+            if (!inventorySlice.hasNext()) break;
             pageNum++;
         }
 
-        log.info("[InventorySnapshotScheduler] 완료 — 저장: {}건 / 스킵: {}건",
-                totalSaved, totalElements - totalSaved);
+        log.info("[InventorySnapshotScheduler] 완료 — 저장: {}건", totalSaved);
     }
 }

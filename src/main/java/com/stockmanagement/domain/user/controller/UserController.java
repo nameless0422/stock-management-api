@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.user.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.product.review.dto.ReviewResponse;
 import com.stockmanagement.domain.product.review.service.ReviewService;
@@ -92,15 +93,7 @@ public class UserController {
             @RequestParam(required = false) Integer rating,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        Long userId = resolveUserId(authentication, username);
+        Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
         return ApiResponse.ok(reviewService.getMyReviews(userId, pageable, rating));
-    }
-
-    /** JWT claim details에서 userId 추출. 구 토큰이면 DB fallback. */
-    private Long resolveUserId(Authentication auth, String username) {
-        if (auth != null && auth.getDetails() instanceof Long userId) {
-            return userId;
-        }
-        return userService.resolveUserId(username);
     }
 }

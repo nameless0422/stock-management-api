@@ -173,4 +173,19 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
            "AND o.createdAt >= :start AND o.createdAt < :end")
     BigDecimal sumRevenueByCreatedAtBetween(@Param("start") LocalDateTime start,
                                             @Param("end") LocalDateTime end);
+
+    /**
+     * 기간 내 주문을 상태별로 GROUP BY하여 건수·금액을 단일 쿼리로 집계한다 (일별 통계 최적화).
+     *
+     * <p>기존 4개 개별 쿼리(count×3 + sum×1)를 1개로 대체한다.
+     * 결과를 status 키로 매핑하면 CONFIRMED/CANCELLED 건수와 매출액을 한 번에 얻을 수 있다.
+     */
+    @Query("SELECT o.status AS status, COUNT(o) AS orderCount, " +
+           "COALESCE(SUM(CASE WHEN o.status = com.stockmanagement.domain.order.entity.OrderStatus.CONFIRMED " +
+           "THEN o.totalAmount - o.discountAmount - o.usedPoints ELSE 0 END), 0) AS totalAmount " +
+           "FROM Order o " +
+           "WHERE o.createdAt >= :start AND o.createdAt < :end " +
+           "GROUP BY o.status")
+    List<OrderStatsProjection> findOrderStatsBetween(@Param("start") LocalDateTime start,
+                                                     @Param("end") LocalDateTime end);
 }

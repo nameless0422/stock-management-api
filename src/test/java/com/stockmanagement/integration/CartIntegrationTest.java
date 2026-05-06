@@ -43,8 +43,8 @@ class CartIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"productId\":" + productId + ",\"quantity\":3}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].quantity").value(3))
-                .andExpect(jsonPath("$.data.totalAmount").value(6000));
+                .andExpect(jsonPath("$.data.quantity").value(3))
+                .andExpect(jsonPath("$.data.subtotal").value(6000));
 
         // 조회
         mockMvc.perform(get("/api/cart")
@@ -73,8 +73,8 @@ class CartIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"productId\":" + productId + ",\"quantity\":5}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].quantity").value(5))
-                .andExpect(jsonPath("$.data.totalAmount").value(5000));
+                .andExpect(jsonPath("$.data.quantity").value(5))
+                .andExpect(jsonPath("$.data.subtotal").value(5000));
     }
 
     @Test
