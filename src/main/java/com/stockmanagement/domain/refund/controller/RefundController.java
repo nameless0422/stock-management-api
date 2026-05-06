@@ -33,8 +33,9 @@ public class RefundController {
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<RefundResponse> requestRefund(
             @Valid @RequestBody RefundRequest request,
-            @AuthenticationPrincipal String username) {
-        return ApiResponse.ok(refundService.requestRefund(request, username));
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        return ApiResponse.ok(refundService.requestRefund(request, resolveUserId(authentication, username)));
     }
 
     @Operation(summary = "내 환불 목록", description = "현재 로그인 사용자의 환불 내역을 최신순으로 페이징 조회한다.")
@@ -53,7 +54,7 @@ public class RefundController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(refundService.getById(refundId, username, isAdmin));
+        return ApiResponse.ok(refundService.getById(refundId, resolveUserId(authentication, username), isAdmin));
     }
 
     @Operation(summary = "결제 ID로 환불 조회", description = "ADMIN은 모든 환불 조회 가능. USER는 본인 주문의 환불만 가능.")
@@ -63,6 +64,6 @@ public class RefundController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(refundService.getByPaymentId(paymentId, username, isAdmin));
+        return ApiResponse.ok(refundService.getByPaymentId(paymentId, resolveUserId(authentication, username), isAdmin));
     }
 }
