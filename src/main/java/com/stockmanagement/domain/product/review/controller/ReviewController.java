@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.product.review.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.product.review.dto.RatingStatsResponse;
 import com.stockmanagement.domain.product.review.dto.ReviewCreateRequest;
 import com.stockmanagement.domain.product.review.dto.ReviewResponse;
@@ -37,7 +38,7 @@ public class ReviewController {
             @AuthenticationPrincipal String username,
             Authentication authentication,
             @Valid @RequestBody ReviewCreateRequest request) {
-        return ApiResponse.ok(reviewService.create(productId, resolveUserId(authentication, username), request));
+        return ApiResponse.ok(reviewService.create(productId, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), request));
     }
 
     @Operation(summary = "상품 리뷰 목록 조회",
@@ -66,7 +67,7 @@ public class ReviewController {
             @AuthenticationPrincipal String username,
             Authentication authentication,
             @Valid @RequestBody ReviewUpdateRequest request) {
-        return ApiResponse.ok(reviewService.update(productId, reviewId, resolveUserId(authentication, username), request));
+        return ApiResponse.ok(reviewService.update(productId, reviewId, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), request));
     }
 
     @Operation(summary = "리뷰 삭제 (작성자 본인)")
@@ -77,14 +78,6 @@ public class ReviewController {
             @PathVariable Long reviewId,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        reviewService.delete(productId, reviewId, resolveUserId(authentication, username));
-    }
-
-    /** JWT claim details에서 userId 추출. 구 토큰이면 DB fallback. */
-    private Long resolveUserId(Authentication auth, String username) {
-        if (auth != null && auth.getDetails() instanceof Long userId) {
-            return userId;
-        }
-        return userService.resolveUserId(username);
+        reviewService.delete(productId, reviewId, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)));
     }
 }

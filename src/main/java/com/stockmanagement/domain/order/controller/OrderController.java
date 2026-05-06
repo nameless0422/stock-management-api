@@ -67,7 +67,7 @@ public class OrderController {
             @RequestBody @Valid OrderPreviewRequest request,
             @AuthenticationPrincipal String username,
             Authentication authentication) {
-        return ApiResponse.ok(orderService.preview(request, resolveUserId(authentication, username)));
+        return ApiResponse.ok(orderService.preview(request, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username))));
     }
 
     @Operation(summary = "주문 생성", description = "재고 예약(reserved++) 후 PENDING 주문 생성. 동일 idempotencyKey 재요청 시 기존 주문 반환.")
@@ -88,7 +88,7 @@ public class OrderController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderService.getByIdForUser(id, resolveUserId(authentication, username), isAdmin));
+        return ApiResponse.ok(orderService.getByIdForUser(id, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), isAdmin));
     }
 
     @Operation(summary = "주문 상세 통합 조회",
@@ -99,7 +99,7 @@ public class OrderController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderDetailService.getDetail(id, resolveUserId(authentication, username), isAdmin));
+        return ApiResponse.ok(orderDetailService.getDetail(id, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), isAdmin));
     }
 
     @Operation(summary = "주문 목록 조회 (필터 + 페이징)",
@@ -113,7 +113,7 @@ public class OrderController {
             Pageable pageable) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
         // ADMIN은 request.userId 파라미터로 필터링하므로 userId 해결 불필요
-        Long userId = isAdmin ? null : resolveUserId(authentication, username);
+        Long userId = isAdmin ? null : SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
         return ApiResponse.ok(orderService.getList(userId, isAdmin, request, pageable));
     }
 
@@ -136,7 +136,7 @@ public class OrderController {
             @RequestParam(required = false) Long lastId,
             @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        Long userId = resolveUserId(authentication, username);
+        Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
         return ApiResponse.ok(orderService.getOrderScroll(userId, isAdmin, status, lastId, size));
     }
 
@@ -149,7 +149,7 @@ public class OrderController {
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
         String reason = request != null ? request.reason() : null;
-        return ApiResponse.ok(orderService.cancel(id, resolveUserId(authentication, username), isAdmin, reason));
+        return ApiResponse.ok(orderService.cancel(id, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), isAdmin, reason));
     }
 
     @Operation(summary = "주문 상태 변경 이력 조회", description = "생성·취소·확정·환불 등 모든 상태 전이를 시간순으로 반환. ADMIN은 모든 주문, USER는 본인 주문만 가능.")
@@ -159,19 +159,6 @@ public class OrderController {
             @AuthenticationPrincipal String username,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderService.getHistory(id, resolveUserId(authentication, username), isAdmin));
-    }
-
-    /**
-     * JWT claim 또는 DB 조회로 userId를 결정한다.
-     *
-     * <p>JwtAuthenticationFilter가 {@code auth.setDetails(userId)}에 저장한 경우 DB 조회를 건너뛴다.
-     * 구 토큰 또는 테스트 환경처럼 details가 없으면 userService.resolveUserId(username)로 DB 조회.
-     */
-    private Long resolveUserId(Authentication auth, String username) {
-        if (auth != null && auth.getDetails() instanceof Long userId) {
-            return userId;
-        }
-        return userService.resolveUserId(username);
+        return ApiResponse.ok(orderService.getHistory(id, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), isAdmin));
     }
 }

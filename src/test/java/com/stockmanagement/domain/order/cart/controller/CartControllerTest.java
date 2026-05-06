@@ -2,6 +2,7 @@ package com.stockmanagement.domain.order.cart.controller;
 
 import com.stockmanagement.common.config.SecurityConfig;
 import com.stockmanagement.common.security.JwtBlacklist;
+import com.stockmanagement.domain.order.cart.dto.CartItemResponse;
 import com.stockmanagement.domain.order.cart.dto.CartResponse;
 import com.stockmanagement.domain.order.cart.service.CartService;
 import com.stockmanagement.domain.order.dto.OrderResponse;
@@ -87,7 +88,7 @@ class CartControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 상품 추가 → 200")
         void addsItem() throws Exception {
-            given(cartService.addOrUpdate(anyLong(), any())).willReturn(mock(CartResponse.class));
+            given(cartService.addOrUpdate(anyLong(), any())).willReturn(mock(CartItemResponse.class));
 
             mockMvc.perform(post("/api/cart/items")
                             .with(authentication(USER_AUTH))
