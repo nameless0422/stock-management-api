@@ -43,8 +43,8 @@ public class SecurityConfig {
     @Value("${cors.allowed-origins:http://localhost:3000}")
     private String allowedOrigins;
 
-    /** true(기본값)이면 Swagger UI를 공개 접근 허용. 운영 배포 시 false로 설정할 것. */
-    @Value("${swagger.public:true}")
+    /** true이면 Swagger UI 공개 접근 허용. 기본값 false — 운영 환경 보호. 개발 시 SWAGGER_PUBLIC=true 환경변수로 오버라이드. */
+    @Value("${swagger.public:false}")
     private boolean swaggerPublic;
 
     @Bean

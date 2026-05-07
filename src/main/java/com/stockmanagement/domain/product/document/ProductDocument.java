@@ -54,6 +54,9 @@ public class ProductDocument {
     @Field(type = FieldType.Keyword)
     private String status;
 
+    @Field(type = FieldType.Keyword, index = false)
+    private String thumbnailUrl;
+
     @Field(type = FieldType.Date, format = {}, pattern = "uuuu-MM-dd'T'HH:mm:ss.SSSSSS||uuuu-MM-dd'T'HH:mm:ss.SSS||uuuu-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
 
@@ -67,6 +70,7 @@ public class ProductDocument {
                 .sku(product.getSku())
                 .category(product.getCategoryName())
                 .status(product.getStatus() != null ? product.getStatus().name() : null)
+                .thumbnailUrl(product.getThumbnailUrl())
                 .createdAt(product.getCreatedAt())
                 .build();
     }
@@ -84,6 +88,7 @@ public class ProductDocument {
                 .price(getPriceAsBigDecimal())
                 .sku(sku)
                 .category(category)
+                .thumbnailUrl(thumbnailUrl)
                 .status(status != null ? ProductStatus.valueOf(status) : null)
                 .createdAt(createdAt)
                 .build();

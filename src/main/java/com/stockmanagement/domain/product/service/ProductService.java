@@ -27,6 +27,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -125,7 +126,8 @@ public class ProductService {
     public Page<ProductResponse> getList(Pageable pageable, ProductSearchRequest request, Long userId) {
         if (request != null && request.hasSearchCondition()) {
             try {
-                return productSearchService.search(request, pageable);
+                Page<ProductResponse> esResult = productSearchService.search(request, pageable);
+                return enrichSearchResult(esResult, userId);
             } catch (Exception e) {
                 log.warn("Elasticsearch 검색 실패, MySQL fallback 사용. query={}", request.getQ(), e);
             }
@@ -288,6 +290,51 @@ public class ProductService {
                     null,
                     userId != null ? wishlistedIds.contains(p.getId()) : null);
         });
+    }
+
+    /**
+     * ES 검색 결과(Page&lt;ProductResponse&gt;)에 재고·리뷰·위시리스트 통계를 보강한다.
+     * ES에는 동적 데이터(재고/리뷰)가 없으므로 DB 배치 조회로 채운다.
+     */
+    private Page<ProductResponse> enrichSearchResult(Page<ProductResponse> esPage, Long userId) {
+        if (esPage.isEmpty()) return esPage;
+
+        List<Long> ids = esPage.getContent().stream().map(ProductResponse::getId).toList();
+
+        Map<Long, Integer> availableMap = inventoryRepository.findAllByProductIdIn(ids).stream()
+                .collect(Collectors.toMap(i -> i.getProduct().getId(), Inventory::getAvailable));
+
+        Map<Long, ReviewStatsProjection> statsMap = reviewRepository
+                .findReviewStatsByProductIdIn(ids).stream()
+                .collect(Collectors.toMap(ReviewStatsProjection::getProductId, s -> s));
+
+        Set<Long> wishlistedIds = (userId != null)
+                ? wishlistRepository.findWishlistedProductIds(userId, ids)
+                : Set.of();
+
+        List<ProductResponse> enriched = esPage.getContent().stream().map(r -> {
+            ReviewStatsProjection stats = statsMap.get(r.getId());
+            return ProductResponse.builder()
+                    .id(r.getId())
+                    .name(r.getName())
+                    .description(r.getDescription())
+                    .price(r.getPrice())
+                    .sku(r.getSku())
+                    .categoryId(r.getCategoryId())
+                    .category(r.getCategory())
+                    .thumbnailUrl(r.getThumbnailUrl())
+                    .status(r.getStatus())
+                    .createdAt(r.getCreatedAt())
+                    .updatedAt(r.getUpdatedAt())
+                    .availableQuantity(availableMap.getOrDefault(r.getId(), 0))
+                    .avgRating(stats != null && stats.getAvgRating() != null
+                            ? Math.round(stats.getAvgRating() * 10.0) / 10.0 : null)
+                    .reviewCount(stats != null ? stats.getReviewCount() : 0L)
+                    .wishlisted(userId != null ? wishlistedIds.contains(r.getId()) : null)
+                    .build();
+        }).toList();
+
+        return new PageImpl<>(enriched, esPage.getPageable(), esPage.getTotalElements());
     }
 
     /** 공통 조회 헬퍼 — 없으면 PRODUCT_NOT_FOUND 예외 발생 */
