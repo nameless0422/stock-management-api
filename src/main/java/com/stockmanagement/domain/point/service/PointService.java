@@ -168,6 +168,10 @@ public class PointService {
      */
     @Transactional
     public void refundByOrder(Long userId, Long orderId) {
+        // 멱등성: 이미 REFUND 처리된 주문이면 중복 실행 방지
+        if (pointTransactionRepository.existsByOrderIdAndType(orderId, PointTransactionType.REFUND)) {
+            return;
+        }
         // 포인트 트랜잭션이 없으면 early return — getOrCreate(SELECT FOR UPDATE + 잠재적 INSERT) 불필요
         List<PointTransaction> orderTxns = pointTransactionRepository.findByOrderId(orderId);
         if (orderTxns.isEmpty()) return;
