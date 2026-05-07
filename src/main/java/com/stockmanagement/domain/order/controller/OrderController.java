@@ -76,8 +76,9 @@ public class OrderController {
     @RateLimit(limit = 10, windowSeconds = 60)
     public ApiResponse<OrderResponse> create(
             @RequestBody @Valid OrderCreateRequest request,
-            @AuthenticationPrincipal String username) {
-        Long userId = userService.resolveUserId(username);
+            @AuthenticationPrincipal String username,
+            Authentication authentication) {
+        Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
         return ApiResponse.ok(orderService.create(request, userId));
     }
 

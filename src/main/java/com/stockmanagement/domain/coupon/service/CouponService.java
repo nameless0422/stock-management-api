@@ -76,7 +76,9 @@ public class CouponService {
                 .validUntil(request.getValidUntil())
                 .isPublic(request.isPublic())
                 .build();
-        return CouponResponse.from(couponRepository.save(coupon));
+        Coupon saved = couponRepository.save(coupon);
+        log.info("[ADMIN] 쿠폰 생성 — code={}, type={}, value={}", saved.getCode(), saved.getDiscountType(), saved.getDiscountValue());
+        return CouponResponse.from(saved);
     }
 
     public Page<CouponResponse> getList(Pageable pageable) {
@@ -91,6 +93,7 @@ public class CouponService {
     public CouponResponse deactivate(Long id) {
         Coupon coupon = findById(id);
         coupon.deactivate();
+        log.info("[ADMIN] 쿠폰 비활성화 — id={}, code={}", coupon.getId(), coupon.getCode());
         return CouponResponse.from(coupon);
     }
 
@@ -110,6 +113,7 @@ public class CouponService {
                     .coupon(coupon)
                     .build());
             userCouponRepository.flush();
+            log.info("[ADMIN] 쿠폰 발급 — couponId={}, userId={}, code={}", couponId, userId, coupon.getCode());
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
         }

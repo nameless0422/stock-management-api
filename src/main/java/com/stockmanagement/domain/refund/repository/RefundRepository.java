@@ -5,11 +5,14 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface RefundRepository extends JpaRepository<Refund, Long> {
 
     Optional<Refund> findByPaymentId(Long paymentId);
+
+    List<Refund> findAllByPaymentIdOrderByCreatedAtDesc(Long paymentId);
 
     /** 결제별 가장 최근 환불 조회 (부분 취소 여러 건 허용 후 requestRefund에서 사용). */
     Optional<Refund> findFirstByPaymentIdOrderByCreatedAtDesc(Long paymentId);

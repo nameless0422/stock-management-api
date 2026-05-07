@@ -9,6 +9,7 @@ import com.stockmanagement.domain.payment.repository.PaymentRepository;
 import com.stockmanagement.domain.payment.service.PaymentService;
 import com.stockmanagement.domain.refund.dto.RefundRequest;
 import com.stockmanagement.domain.refund.dto.RefundResponse;
+import java.util.List;
 import com.stockmanagement.domain.refund.entity.Refund;
 import com.stockmanagement.domain.refund.entity.RefundStatus;
 import com.stockmanagement.domain.refund.repository.RefundRepository;
@@ -151,25 +152,25 @@ class RefundServiceTest {
     class GetByPaymentId {
 
         @Test
-        @DisplayName("존재하면 반환")
+        @DisplayName("존재하면 목록 반환")
         void found() {
             Refund refund = Refund.builder()
                     .paymentId(10L).orderId(100L).userId(1L)
                     .amount(BigDecimal.valueOf(50000)).reason("변심")
                     .build();
             ReflectionTestUtils.setField(refund, "id", 5L);
-            given(refundRepository.findByPaymentId(10L)).willReturn(Optional.of(refund));
+            given(refundRepository.findAllByPaymentIdOrderByCreatedAtDesc(10L)).willReturn(List.of(refund));
 
-            RefundResponse response = refundService.getByPaymentId(10L, 1L, false);
+            List<RefundResponse> responses = refundService.getByPaymentId(10L, 1L, false);
 
-            assertThat(response.getId()).isEqualTo(5L);
-            verify(orderRepository, never()).findById(any());
+            assertThat(responses).hasSize(1);
+            assertThat(responses.get(0).getId()).isEqualTo(5L);
         }
 
         @Test
         @DisplayName("없으면 REFUND_NOT_FOUND")
         void notFound() {
-            given(refundRepository.findByPaymentId(10L)).willReturn(Optional.empty());
+            given(refundRepository.findAllByPaymentIdOrderByCreatedAtDesc(10L)).willReturn(List.of());
 
             assertThatThrownBy(() -> refundService.getByPaymentId(10L, 1L, false))
                     .isInstanceOf(BusinessException.class)
@@ -184,12 +185,12 @@ class RefundServiceTest {
                     .amount(BigDecimal.valueOf(50000)).reason("변심")
                     .build();
             ReflectionTestUtils.setField(refund, "id", 5L);
-            given(refundRepository.findByPaymentId(10L)).willReturn(Optional.of(refund));
+            given(refundRepository.findAllByPaymentIdOrderByCreatedAtDesc(10L)).willReturn(List.of(refund));
 
-            RefundResponse response = refundService.getByPaymentId(10L, 99L, true);
+            List<RefundResponse> responses = refundService.getByPaymentId(10L, 99L, true);
 
-            assertThat(response.getId()).isEqualTo(5L);
-            verify(orderRepository, never()).findById(any());
+            assertThat(responses).hasSize(1);
+            assertThat(responses.get(0).getId()).isEqualTo(5L);
         }
     }
 }

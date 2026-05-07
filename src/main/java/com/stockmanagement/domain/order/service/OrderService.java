@@ -38,6 +38,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.dao.DataIntegrityViolationException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -66,6 +67,7 @@ import java.util.stream.Collectors;
  * </ul>
  * 모두 하나의 트랜잭션 내에서 처리되므로, 재고 부족 예외 시 주문과 모든 예약이 함께 롤백된다.
  */
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -422,8 +424,13 @@ public class OrderService {
      * @param userId 탈퇴 대상 사용자 ID
      */
     public void cancelPendingOrdersByUser(Long userId) {
-        orderRepository.findPendingIdsByUserId(userId)
-                .forEach(this::cancelBySystem);
+        orderRepository.findPendingIdsByUserId(userId).forEach(orderId -> {
+            try {
+                cancelBySystem(orderId);
+            } catch (Exception e) {
+                log.warn("[탈퇴] 주문 취소 실패 — orderId={}, reason={}", orderId, e.getMessage());
+            }
+        });
     }
 
     /**

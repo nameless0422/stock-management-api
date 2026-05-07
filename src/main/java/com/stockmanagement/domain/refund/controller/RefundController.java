@@ -19,6 +19,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @Tag(name = "Refund", description = "환불 API")
 @RestController
 @RequestMapping("/api/refunds")
@@ -57,9 +59,9 @@ public class RefundController {
         return ApiResponse.ok(refundService.getById(refundId, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), isAdmin));
     }
 
-    @Operation(summary = "결제 ID로 환불 조회", description = "ADMIN은 모든 환불 조회 가능. USER는 본인 주문의 환불만 가능.")
+    @Operation(summary = "결제 ID로 환불 목록 조회", description = "부분 취소 시 다건 반환. ADMIN은 모든 환불 조회 가능. USER는 본인 주문의 환불만 가능.")
     @GetMapping("/payments/{paymentId}")
-    public ApiResponse<RefundResponse> getByPaymentId(
+    public ApiResponse<List<RefundResponse>> getByPaymentId(
             @PathVariable Long paymentId,
             @AuthenticationPrincipal String username,
             Authentication authentication) {

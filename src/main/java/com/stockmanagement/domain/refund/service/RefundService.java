@@ -6,6 +6,7 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.payment.dto.PaymentCancelRequest;
 import com.stockmanagement.domain.payment.entity.Payment;
 import com.stockmanagement.domain.payment.entity.PaymentStatus;
+import java.util.List;
 import java.util.Optional;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
 import com.stockmanagement.domain.payment.service.PaymentService;
@@ -136,12 +137,14 @@ public class RefundService {
                 .map(RefundResponse::from);
     }
 
-    /** 결제 ID로 환불 정보를 조회한다. 본인 또는 ADMIN만 가능. */
-    public RefundResponse getByPaymentId(Long paymentId, Long userId, boolean isAdmin) {
-        Refund refund = refundRepository.findByPaymentId(paymentId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.REFUND_NOT_FOUND));
-        validateOwnership(refund, userId, isAdmin);
-        return RefundResponse.from(refund);
+    /** 결제 ID로 환불 목록을 조회한다. 부분 취소 시 다건 반환. 본인 또는 ADMIN만 가능. */
+    public List<RefundResponse> getByPaymentId(Long paymentId, Long userId, boolean isAdmin) {
+        List<Refund> refunds = refundRepository.findAllByPaymentIdOrderByCreatedAtDesc(paymentId);
+        if (refunds.isEmpty()) {
+            throw new BusinessException(ErrorCode.REFUND_NOT_FOUND);
+        }
+        validateOwnership(refunds.get(0), userId, isAdmin);
+        return refunds.stream().map(RefundResponse::from).toList();
     }
 
     /**
