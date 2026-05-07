@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 public class ProductUpdateRequest {
 
     @NotBlank(message = "상품명은 필수입니다.")
+    @Size(max = 255, message = "상품명은 255자를 초과할 수 없습니다.")
     private String name;
 
     /** 선택 입력 — null 전달 시 기존 설명이 null로 갱신됨 */
