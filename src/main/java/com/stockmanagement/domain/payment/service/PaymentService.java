@@ -347,10 +347,9 @@ public class PaymentService {
 
     public Optional<PaymentResponse> getByOrderId(Long orderId, Long userId, boolean isAdmin) {
         if (!isAdmin) {
-            // JWT claim에서 추출한 userId로 소유권 검증 — DB 조회 불필요
-            Order order = orderRepository.findById(orderId)
+            Long ownerUserId = orderRepository.findUserIdById(orderId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-            if (!order.getUserId().equals(userId)) {
+            if (!ownerUserId.equals(userId)) {
                 throw new BusinessException(ErrorCode.ORDER_ACCESS_DENIED);
             }
         }

@@ -588,7 +588,7 @@ class PaymentServiceTest {
         @Test
         @DisplayName("본인 주문이면 결제 정보를 반환한다")
         void returnsPaymentForOwner() {
-            given(orderRepository.findById(10L)).willReturn(Optional.of(confirmedOrder(10L, 1L)));
+            given(orderRepository.findUserIdById(10L)).willReturn(Optional.of(1L));
             given(paymentRepository.findByOrderId(10L)).willReturn(Optional.of(pendingPayment));
 
             Optional<PaymentResponse> result = paymentService.getByOrderId(10L, 1L, false);
@@ -599,7 +599,7 @@ class PaymentServiceTest {
         @Test
         @DisplayName("타인 주문 접근 시 ORDER_ACCESS_DENIED 예외 발생")
         void throwsForNonOwner() {
-            given(orderRepository.findById(10L)).willReturn(Optional.of(confirmedOrder(10L, 99L)));
+            given(orderRepository.findUserIdById(10L)).willReturn(Optional.of(99L));
 
             assertThatThrownBy(() -> paymentService.getByOrderId(10L, 1L, false))
                     .isInstanceOf(BusinessException.class)
