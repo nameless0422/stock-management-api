@@ -647,6 +647,7 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 115 | 매출 통계 `usedPoints` 미차감 — 매출액 과대 집계 | `sumRevenueByCreatedAtBetween()` JPQL `SUM(totalAmount - discountAmount - usedPoints)`로 수정 |
 | 116 | `OrderCreateRequest.usePoints` 음수 허용 — 결제 금액 왜곡 | `@Min(0)` 추가, 음수 전송 시 `getPayableAmount()` 과다 계산 차단 |
 | 117 | `Inventory.confirmAllocation()` reserved 클램핑 — 재고 불변식 위반 | `quantity > reserved` 시 `INVENTORY_STATE_INCONSISTENT` 예외 throw (기존 `Math.max(0, ...)` 클램핑 제거) |
+| 89 | `RefundService.getByPaymentId()` 단건 반환 — 부분 취소 다건 환불 시 500 에러 | `findByPaymentId()` → `findAllByPaymentIdOrderByCreatedAtDesc()` + `List<RefundResponse>` 반환으로 변경 |
 
 ---
 
@@ -686,6 +687,9 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 24 | Swagger UI 운영 환경 무인증 노출 | `swagger.public=${SWAGGER_PUBLIC:false}` 전환, `false`일 때 ADMIN 권한 또는 IP 제한 |
 | 46 | `PresignedUrlRequest.contentType` MIME 허용 목록 미검증 | `@Pattern(^image/(jpeg\|png\|webp\|gif)$)` 추가 |
 | 50 | `ProductImageSaveRequest.objectKey` 형식 미검증 | `@Pattern(^products/\d+/[a-f0-9-]+\.(jpg\|jpeg\|png\|webp\|gif)$)` 추가 |
+| 92 | `AdminSecurityConfig` AND 조건 — 한쪽만 변경해도 검증 통과 | `&&` → `\|\|` OR 조건으로 전환, 둘 중 하나라도 기본값이면 시작 실패 |
+| 94 | `/actuator/prometheus` permitAll — 메트릭 정보 무인증 노출 | `hasRole("ADMIN")` 전용으로 변경 |
+| 93 | `swagger.public` 기본값 `true` — 운영 배포 시 API 명세 무인증 노출 | 기본값 `false` 전환, `application.properties`에 명시, 개발 시 `SWAGGER_PUBLIC=true` 환경변수 오버라이드 |
 
 ---
 
@@ -709,6 +713,8 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 135 | `UserService.deactivate()` PENDING 주문·장바구니 미정리 — 재고 예약 누수 | 탈퇴 시 PENDING 주문 강제 취소 + 장바구니/위시리스트/배송지 일괄 삭제 |
 | 78 | `PaymentService.cancel()` Toss 호출 중 서버 재시작 시 CONFIRMED 상태 고착 | `CANCEL_IN_PROGRESS` 중간 상태 도입, 실패 시 `resetCancellationFailed()` REQUIRES_NEW 복원 |
 | 52 | Toss 승인 완료 후 주문 만료 경합 | `PAYMENT_IN_PROGRESS` 상태 도입, `findExpiredPendingOrderIds()` PENDING만 조회 |
+| 90 | `cancelPendingOrdersByUser()` 개별 주문 취소 실패 시 전체 롤백 — 탈퇴 불가 | `try-catch`로 개별 실패 격리, 실패 건만 WARN 로그 후 계속 진행 |
+| 91 | `PointService.refundByOrder()` 멱등성 미보장 — 중복 호출 시 이중 환수 | `existsByOrderIdAndType(orderId, REFUND)` 선검사 추가, 이미 처리됐으면 즉시 return |
 
 ---
 
@@ -739,6 +745,10 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 49 | `ShipmentService` userId 프로젝션 | `orderRepository.findUserIdById()` 스칼라 쿼리 |
 | 50 | `CouponService` 검증 중복 | `applyCoupon()` → `validateConditions()` 통합 |
 | 48 | `CartService` N+1 | `CartRepository.findByUserId()` `@EntityGraph(product)` 확인 완료 |
+| 97 | `PaymentService.getByOrderId()` 전체 엔티티 로드 — 소유권 검증에 불필요한 풀 로드 | `orderRepository.findById()` → `findUserIdById()` 스칼라 프로젝션 전환 |
+| 98 | Pageable size 무제한 — `?size=10000` DoS 가능 | `spring.data.web.pageable.max-page-size=100` 전역 설정 |
+| 99 | 4개 컨트롤러 `resolveUserId()` 미적용 — 매 요청 DB round-trip | `CartController`, `DeliveryAddressController`, `CouponController`, `OrderController.create()`에 `SecurityUtils.resolveUserId()` 패턴 적용 |
+| 47 | ES 검색 결과에 재고·리뷰·위시리스트 통계 null — MySQL 응답과 불일치 | `ProductService.enrichSearchResult()` 추가 (ES 결과 ID 기반 DB 배치 보강), `ProductDocument`에 `thumbnailUrl` 필드 추가 |
 
 ---
 
@@ -771,6 +781,9 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 52 | `ProductImageService.saveImage()` 개수 제한 없음 — 무제한 이미지 DoS | `countByProductId()` 체크 → 10개 초과 시 `IMAGE_LIMIT_EXCEEDED` 예외 |
 | 54 | `ProductImageService.deleteImage()` S3 먼저 삭제 — S3 성공+DB 실패 시 고아 이미지 | DB 먼저 삭제(롤백 가능) → S3 삭제 순서 변경 |
 | 53 | `ProductSearchRequest.hasSearchCondition()` sort만으로 ES 진입 — 불필요한 `match_all` | sort 파라미터를 진입 조건에서 제외, 검색 조건 없을 시 MySQL fallback |
+| 95 | `ProductCreateRequest`/`ProductUpdateRequest` name 길이 미검증 — DB VARCHAR(255) 초과 시 500 | `@Size(max=255)` 추가 |
+| 100 | `CouponCreateRequest` PERCENTAGE 타입 100% 초과 DTO 미검증 — DB 저장 후 로직 오류 | `@AssertTrue` 메서드로 discountType=PERCENTAGE 시 discountValue ≤ 100 검증 |
+| 101 | `CouponService` ADMIN 변경 행위 감사 로그 없음 | `create()`/`deactivate()`/`issueToUser()`에 `log.info("[ADMIN] ...")` 감사 로그 추가 |
 
 ---
 
@@ -786,3 +799,4 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 코드 리뷰 개선 항목 (#10) + Wave 2/3 프론트엔드 API 개선 | **623개** |
 | 보안·운영 안정성 중요 섹션 개선 (#62/#47/#83/#136/#137/#135/#45/#78 + 15차 16개) | **637개** |
 | 보안·품질 개선 (#57/#58/#59/#13/#28/#24/#46/#50/#60/#61/#52/#53/#54) | **647개** |
+| 버그·보안·성능 수정 (#89~#101) | **647개** |
