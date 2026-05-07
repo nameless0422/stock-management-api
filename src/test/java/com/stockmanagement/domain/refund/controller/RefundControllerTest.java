@@ -149,7 +149,7 @@ class RefundControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 결제 ID로 환불 조회 → 200")
         void returnsRefundByPaymentId() throws Exception {
-            given(refundService.getByPaymentId(eq(1L), any(), eq(false))).willReturn(mock(RefundResponse.class));
+            given(refundService.getByPaymentId(eq(1L), any(), eq(false))).willReturn(List.of(mock(RefundResponse.class)));
 
             mockMvc.perform(get("/api/refunds/payments/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())

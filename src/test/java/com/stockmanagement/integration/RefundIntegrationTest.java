@@ -126,8 +126,8 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/refunds/payments/" + payment.getId())
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.paymentId").value(payment.getId()))
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+                .andExpect(jsonPath("$.data[0].paymentId").value(payment.getId()))
+                .andExpect(jsonPath("$.data[0].status").value("COMPLETED"));
     }
 
     @Test
