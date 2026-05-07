@@ -47,9 +47,9 @@ public class AdminSecurityConfig {
      */
     @PostConstruct
     public void validateCredentials() {
-        if ("admin".equals(adminUsername) && "changeme".equals(adminPassword)) {
+        if ("admin".equals(adminUsername) || "changeme".equals(adminPassword)) {
             throw new IllegalStateException(
-                    "[SECURITY] ADMIN_USERNAME / ADMIN_PASSWORD가 기본값(admin/changeme)입니다. " +
+                    "[SECURITY] ADMIN_USERNAME 또는 ADMIN_PASSWORD가 기본값(admin/changeme)입니다. " +
                     "운영 환경에서는 환경변수를 반드시 설정하세요.");
         }
     }
