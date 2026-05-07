@@ -40,6 +40,15 @@ public class CouponCreateRequest {
     @DecimalMax("999999999")
     private BigDecimal discountValue;
 
+    @AssertTrue(message = "PERCENTAGE 할인율은 100을 초과할 수 없습니다.")
+    private boolean isDiscountValueValid() {
+        if (discountType == null || discountValue == null) return true;
+        if (discountType == DiscountType.PERCENTAGE) {
+            return discountValue.compareTo(BigDecimal.valueOf(100)) <= 0;
+        }
+        return true;
+    }
+
     /** null 허용 — 최소 주문 금액 제한 없음. */
     @DecimalMin("0")
     private BigDecimal minimumOrderAmount;
