@@ -14,13 +14,10 @@ import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderItem;
 import com.stockmanagement.domain.order.entity.OrderStatus;
-import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
-import com.stockmanagement.domain.shipment.entity.ShipmentStatus;
-import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.common.outbox.OutboxEventStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,16 +27,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -48,8 +40,8 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("OrderService 단위 테스트")
-class OrderServiceTest {
+@DisplayName("OrderCommandService 단위 테스트")
+class OrderCommandServiceTest {
 
     @Mock
     private OrderRepository orderRepository;
@@ -75,11 +67,8 @@ class OrderServiceTest {
     @Mock
     private DeliveryAddressService deliveryAddressService;
 
-    @Mock
-    private ShipmentRepository shipmentRepository;
-
     @InjectMocks
-    private OrderService orderService;
+    private OrderCommandService orderCommandService;
 
     private Product product;
     private Order order;
@@ -106,8 +95,6 @@ class OrderServiceTest {
                 .unitPrice(new BigDecimal("10000"))
                 .build();
         order.addItem(orderItem);
-
-        lenient().when(shipmentRepository.findStatusMapByOrderIds(any())).thenReturn(new java.util.HashMap<>());
     }
 
     // ===== create() =====
@@ -133,7 +120,7 @@ class OrderServiceTest {
             given(productRepository.findAllById(anyIterable())).willReturn(List.of(product));
             given(orderRepository.save(any(Order.class))).willReturn(order);
 
-            OrderResponse response = orderService.create(request);
+            OrderResponse response = orderCommandService.create(request);
 
             verify(orderRepository).save(any(Order.class));
             verify(inventoryService).reserve(any(), eq(1));
@@ -162,7 +149,7 @@ class OrderServiceTest {
             given(orderRepository.save(any(Order.class)))
                     .willThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate"));
 
-            OrderResponse response = orderService.create(request);
+            OrderResponse response = orderCommandService.create(request);
 
             assertThat(response.getIdempotencyKey()).isEqualTo("idem-key-001");
             verifyNoInteractions(inventoryService);
@@ -175,7 +162,7 @@ class OrderServiceTest {
             given(request.getIdempotencyKey()).willReturn("idem-key-001");
             given(orderRepository.findByIdempotencyKey("idem-key-001")).willReturn(Optional.of(order));
 
-            OrderResponse response = orderService.create(request);
+            OrderResponse response = orderCommandService.create(request);
 
             verify(orderRepository, never()).save(any());
             verifyNoInteractions(inventoryService);
@@ -196,7 +183,7 @@ class OrderServiceTest {
             given(orderRepository.findByIdempotencyKey("idem-key-001")).willReturn(Optional.empty());
             given(productRepository.findAllById(anyIterable())).willReturn(List.of()); // 존재하지 않는 상품
 
-            assertThatThrownBy(() -> orderService.create(request))
+            assertThatThrownBy(() -> orderCommandService.create(request))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND));
@@ -220,7 +207,7 @@ class OrderServiceTest {
             given(orderRepository.findByIdempotencyKey("idem-key-001")).willReturn(Optional.empty());
             given(productRepository.findAllById(anyIterable())).willReturn(List.of(product)); // price=10000
 
-            assertThatThrownBy(() -> orderService.create(request))
+            assertThatThrownBy(() -> orderCommandService.create(request))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_INPUT));
@@ -242,7 +229,7 @@ class OrderServiceTest {
 
             given(orderRepository.findByIdempotencyKey("idem-key-dup")).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> orderService.create(request))
+            assertThatThrownBy(() -> orderCommandService.create(request))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_INPUT));
@@ -277,7 +264,7 @@ class OrderServiceTest {
             given(couponService.applyCoupon(eq("FIXED2000"), eq(1L), any(), any()))
                     .willReturn(couponResult);
 
-            OrderResponse response = orderService.create(request);
+            OrderResponse response = orderCommandService.create(request);
 
             verify(couponService).applyCoupon(eq("FIXED2000"), eq(1L), any(), any());
             // Order.applyDiscount()가 호출되어 discountAmount가 설정됨
@@ -303,69 +290,8 @@ class OrderServiceTest {
             doThrow(new InsufficientStockException(100, 5))
                     .when(inventoryService).reserve(any(), anyInt());
 
-            assertThatThrownBy(() -> orderService.create(request))
+            assertThatThrownBy(() -> orderCommandService.create(request))
                     .isInstanceOf(InsufficientStockException.class);
-        }
-    }
-
-    // ===== getById() =====
-
-    @Nested
-    @DisplayName("getById()")
-    class GetById {
-
-        @Test
-        @DisplayName("주문이 존재하면 OrderResponse를 반환한다")
-        void returnsOrderResponse() {
-            given(orderRepository.findByIdWithItems(1L)).willReturn(Optional.of(order));
-
-            OrderResponse response = orderService.getById(1L);
-
-            assertThat(response.getTotalAmount()).isEqualByComparingTo("10000");
-            assertThat(response.getStatus()).isEqualTo(OrderStatus.PENDING);
-        }
-
-        @Test
-        @DisplayName("주문이 존재하지 않으면 ORDER_NOT_FOUND 예외를 발생시킨다")
-        void throwsWhenNotFound() {
-            given(orderRepository.findByIdWithItems(99L)).willReturn(Optional.empty());
-
-            assertThatThrownBy(() -> orderService.getById(99L))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                            .isEqualTo(ErrorCode.ORDER_NOT_FOUND));
-        }
-    }
-
-    // ===== getList() =====
-
-    @Nested
-    @DisplayName("getList()")
-    class GetList {
-
-        @Test
-        @DisplayName("ADMIN — 필터 없이 전체 주문 반환")
-        void admin_returnsAllOrders() {
-            Pageable pageable = PageRequest.of(0, 10);
-            given(orderRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of(order), pageable, 1));
-
-            Page<OrderResponse> result = orderService.getList(null, true, new OrderSearchRequest(), pageable);
-
-            assertThat(result.getTotalElements()).isEqualTo(1);
-            assertThat(result.getContent().get(0).getIdempotencyKey()).isEqualTo("idem-key-001");
-        }
-
-        @Test
-        @DisplayName("USER — 컨트롤러에서 전달된 userId로 강제 필터링")
-        void user_filtersOwnOrdersOnly() {
-            Pageable pageable = PageRequest.of(0, 10);
-            given(orderRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of(order), pageable, 1));
-
-            Page<OrderResponse> result = orderService.getList(1L, false, new OrderSearchRequest(), pageable);
-
-            assertThat(result.getTotalElements()).isEqualTo(1);
         }
     }
 
@@ -380,7 +306,7 @@ class OrderServiceTest {
         void cancelsPendingOrder() {
             given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
-            OrderResponse response = orderService.cancel(1L, 1L, false, null); // userId=1L, order.userId=1L
+            OrderResponse response = orderCommandService.cancel(1L, 1L, false, null); // userId=1L, order.userId=1L
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
             verify(inventoryService).releaseReservation(any(), eq(1));
@@ -393,7 +319,7 @@ class OrderServiceTest {
             order.confirm(); // PENDING → CONFIRMED
             given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
-            assertThatThrownBy(() -> orderService.cancel(1L, 1L, false, null))
+            assertThatThrownBy(() -> orderCommandService.cancel(1L, 1L, false, null))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_ORDER_STATUS));
@@ -406,92 +332,7 @@ class OrderServiceTest {
         void throwsWhenNotFound() {
             given(orderRepository.findByIdWithItemsForUpdate(99L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> orderService.cancel(99L, 1L, false, null))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                            .isEqualTo(ErrorCode.ORDER_NOT_FOUND));
-        }
-    }
-
-    // ===== confirm() =====
-
-    @Nested
-    @DisplayName("confirm()")
-    class Confirm {
-
-        @Test
-        @DisplayName("PENDING 주문 확정 — CONFIRMED 전환 및 재고 confirmAllocation 호출")
-        void confirmsPendingOrder() {
-            given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
-
-            orderService.confirm(1L);
-
-            assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
-            verify(inventoryService).confirmAllocation(any(), eq(1));
-        }
-
-        @Test
-        @DisplayName("PAYMENT_IN_PROGRESS 주문 확정 — 일반 Toss 결제 경로 (CONFIRMED 전환)")
-        void confirmsPaymentInProgressOrder() {
-            order.startPayment(); // PENDING → PAYMENT_IN_PROGRESS
-            given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
-
-            orderService.confirm(1L);
-
-            assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
-            verify(inventoryService).confirmAllocation(any(), eq(1));
-        }
-
-        @Test
-        @DisplayName("주문이 존재하지 않으면 ORDER_NOT_FOUND 예외를 발생시킨다")
-        void throwsWhenNotFound() {
-            given(orderRepository.findByIdWithItemsForUpdate(99L)).willReturn(Optional.empty());
-
-            assertThatThrownBy(() -> orderService.confirm(99L))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                            .isEqualTo(ErrorCode.ORDER_NOT_FOUND));
-        }
-    }
-
-    // ===== refund() =====
-
-    @Nested
-    @DisplayName("refund()")
-    class Refund {
-
-        @Test
-        @DisplayName("CONFIRMED 주문 환불 — CANCELLED 전환 및 재고 releaseAllocation 호출")
-        void refundsConfirmedOrder() {
-            order.confirm(); // PENDING → CONFIRMED
-            given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
-
-            orderService.refund(1L);
-
-            assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-            verify(inventoryService).releaseAllocation(any(), eq(1));
-        }
-
-        @Test
-        @DisplayName("PENDING 주문 환불 시도 — INVALID_ORDER_STATUS 예외 발생")
-        void throwsWhenRefundingPendingOrder() {
-            // order는 기본 PENDING 상태
-            given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
-
-            assertThatThrownBy(() -> orderService.refund(1L))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                            .isEqualTo(ErrorCode.INVALID_ORDER_STATUS));
-
-            verifyNoInteractions(inventoryService);
-        }
-
-        @Test
-        @DisplayName("주문이 존재하지 않으면 ORDER_NOT_FOUND 예외를 발생시킨다")
-        void throwsWhenNotFound() {
-            given(orderRepository.findByIdWithItemsForUpdate(99L)).willReturn(Optional.empty());
-
-            assertThatThrownBy(() -> orderService.refund(99L))
+            assertThatThrownBy(() -> orderCommandService.cancel(99L, 1L, false, null))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.ORDER_NOT_FOUND));

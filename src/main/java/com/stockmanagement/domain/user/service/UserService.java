@@ -6,7 +6,7 @@ import com.stockmanagement.domain.order.cart.repository.CartRepository;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.repository.OrderRepository;
-import com.stockmanagement.domain.order.service.OrderService;
+import com.stockmanagement.domain.order.service.OrderCommandService;
 import com.stockmanagement.domain.point.entity.UserPoint;
 import com.stockmanagement.domain.point.repository.UserPointRepository;
 import com.stockmanagement.domain.product.review.repository.ReviewRepository;
@@ -52,7 +52,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
-    private final OrderService orderService;
+    private final OrderCommandService orderCommandService;
     private final CartRepository cartRepository;
     private final WishlistRepository wishlistRepository;
     private final DeliveryAddressRepository deliveryAddressRepository;
@@ -155,7 +155,7 @@ public class UserService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         // PENDING 주문 강제 취소 — 재고 예약 해제 + 쿠폰 반환 + 포인트 환불
-        orderService.cancelPendingOrdersByUser(user.getId());
+        orderCommandService.cancelPendingOrdersByUser(user.getId());
         // 장바구니, 위시리스트, 배송지 일괄 삭제
         cartRepository.deleteByUserId(user.getId());
         wishlistRepository.deleteByUserId(user.getId());

@@ -29,7 +29,8 @@ import java.util.List;
 public class OrderExpiryScheduler {
 
     private final OrderRepository orderRepository;
-    private final OrderService orderService;
+    private final OrderCommandService orderCommandService;
+    private final OrderPaymentService orderPaymentService;
 
     @Value("${order.expiry.minutes:30}")
     private int expiryMinutes;
@@ -65,7 +66,7 @@ public class OrderExpiryScheduler {
         int failed = 0;
         for (Long orderId : stuckIds) {
             try {
-                orderService.resetPaymentInProgressBySystem(orderId);
+                orderPaymentService.resetPaymentInProgressBySystem(orderId);
                 reset++;
                 log.info("주문 {} PAYMENT_IN_PROGRESS → PENDING 복원 완료", orderId);
             } catch (Exception e) {
@@ -93,7 +94,7 @@ public class OrderExpiryScheduler {
         int failed = 0;
         for (Long orderId : expiredIds) {
             try {
-                orderService.cancelBySystem(orderId);
+                orderCommandService.cancelBySystem(orderId);
                 cancelled++;
                 log.debug("주문 {} 자동 취소 완료", orderId);
             } catch (Exception e) {
