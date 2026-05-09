@@ -9,7 +9,7 @@ import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.OrderRepository;
-import com.stockmanagement.domain.order.service.OrderService;
+import com.stockmanagement.domain.order.service.OrderPaymentService;
 import com.stockmanagement.domain.payment.dto.PaymentResponse;
 import com.stockmanagement.domain.payment.entity.Payment;
 import com.stockmanagement.domain.payment.entity.PaymentStatus;
@@ -41,7 +41,7 @@ class PaymentTransactionHelper {
 
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
-    private final OrderService orderService;
+    private final OrderPaymentService orderPaymentService;
     private final OutboxEventStore outboxEventStore;
 
     // ===== confirm 흐름 =====
@@ -222,7 +222,7 @@ class PaymentTransactionHelper {
         // → 주문이 이미 CANCELLED인 케이스를 방어
         Order confirmedOrder;
         try {
-            confirmedOrder = orderService.confirm(payment.getOrderId());
+            confirmedOrder = orderPaymentService.confirm(payment.getOrderId());
         } catch (BusinessException e) {
             if (e.getErrorCode() == ErrorCode.INVALID_ORDER_STATUS) {
                 log.error("[Payment] CRITICAL: Toss 승인 완료됐으나 주문이 이미 취소됨 — " +
@@ -347,7 +347,7 @@ class PaymentTransactionHelper {
 
         // 전액 취소(CANCELLED)일 때만 주문 환불 (재고 복구, 쿠폰 반환, 포인트 환불)
         if (payment.getStatus() == PaymentStatus.CANCELLED) {
-            orderService.refund(payment.getOrderId());
+            orderPaymentService.refund(payment.getOrderId());
         }
 
         log.info("[Payment] 결제 {} 완료: paymentKey={}, orderId={}, cancelAmount={}, reason={}",

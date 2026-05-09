@@ -11,7 +11,7 @@ import com.stockmanagement.domain.order.cart.repository.CartRepository;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
-import com.stockmanagement.domain.order.service.OrderService;
+import com.stockmanagement.domain.order.service.OrderCommandService;
 import com.stockmanagement.domain.inventory.entity.Inventory;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
  *   <li>쓰기 메서드: {@code @Transactional} 로 개별 오버라이드
  * </ul>
  *
- * <p>주문 전환({@link #checkout}) 시 {@link OrderService#create}를 호출하여
+ * <p>주문 전환({@link #checkout}) 시 {@link OrderCommandService#create}를 호출하여
  * 재고 예약과 주문 생성을 함께 처리한다.
  */
 @Service
@@ -48,7 +48,7 @@ public class CartService {
     private final CartRepository cartRepository;
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
-    private final OrderService orderService;
+    private final OrderCommandService orderCommandService;
 
     /** 사용자의 장바구니 전체를 재고 상태 포함하여 조회한다. */
     public CartResponse getCart(Long userId) {
@@ -134,7 +134,7 @@ public class CartService {
      * <ol>
      *   <li>장바구니가 비어 있으면 예외
      *   <li>현재 상품 가격 기준으로 {@link OrderCreateRequest} 구성
-     *   <li>{@link OrderService#create} 호출 → 재고 예약 + 주문 생성
+     *   <li>{@link OrderCommandService#create} 호출 → 재고 예약 + 주문 생성
      *   <li>주문 생성 성공 시 장바구니 비우기
      * </ol>
      *
@@ -173,7 +173,7 @@ public class CartService {
                 checkoutRequest.getCouponCode(), checkoutRequest.getUsePoints(),
                 checkoutRequest.getDeliveryAddressId());
 
-        OrderResponse orderResponse = orderService.create(orderRequest, userId);
+        OrderResponse orderResponse = orderCommandService.create(orderRequest, userId);
 
         // 결제한 상품만 장바구니에서 제거 (선택 결제 시 나머지 유지)
         Set<Long> checkedOutProductIds = items.stream()
