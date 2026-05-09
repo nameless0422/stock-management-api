@@ -9,7 +9,7 @@ import com.stockmanagement.domain.order.cart.entity.CartItem;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.order.cart.repository.CartRepository;
 import com.stockmanagement.domain.order.dto.OrderResponse;
-import com.stockmanagement.domain.order.service.OrderService;
+import com.stockmanagement.domain.order.service.OrderCommandService;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,7 +39,7 @@ class CartServiceTest {
     @Mock CartRepository cartRepository;
     @Mock ProductRepository productRepository;
     @Mock InventoryRepository inventoryRepository;
-    @Mock OrderService orderService;
+    @Mock OrderCommandService orderCommandService;
 
     @InjectMocks CartService cartService;
 
@@ -162,12 +162,12 @@ class CartServiceTest {
         @DisplayName("주문 전환 성공 → 장바구니 비워짐")
         void checkoutClearsCart() {
             given(cartRepository.findByUserId(1L)).willReturn(List.of(cartItem));
-            given(orderService.create(any(), anyLong())).willReturn(mock(OrderResponse.class));
+            given(orderCommandService.create(any(), anyLong())).willReturn(mock(OrderResponse.class));
 
             CartCheckoutRequest request = mockCheckoutRequest("key-1");
             cartService.checkout(1L, request);
 
-            verify(orderService).create(any(), anyLong());
+            verify(orderCommandService).create(any(), anyLong());
             verify(cartRepository).deleteByUserIdAndProductIdIn(eq(1L), any());
         }
 

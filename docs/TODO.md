@@ -37,35 +37,11 @@ Client
 
 ## Open Issues
 
-### 🔴 긴급 — 금전 손실·데이터 정합성
-
-| Issue | 항목 |
-|-------|------|
-| [#89](https://github.com/nameless0422/stock-management-api/issues/89) | RefundService.getByPaymentId() 부분 취소 다건 환불 시 500 에러 |
-| [#90](https://github.com/nameless0422/stock-management-api/issues/90) | cancelPendingOrdersByUser() 탈퇴 시 주문 취소 실패로 전체 롤백 |
-| [#91](https://github.com/nameless0422/stock-management-api/issues/91) | PointService.refundByOrder() uk_point_txn_order_type 충돌 미처리 |
-
-### 🟠 중요 — 보안·운영 안정성
-
-| Issue | 항목 |
-|-------|------|
-| [#92](https://github.com/nameless0422/stock-management-api/issues/92) | AdminSecurityConfig 기본값 검증 AND 조건 취약 |
-| [#93](https://github.com/nameless0422/stock-management-api/issues/93) | swagger.public 기본값 true — 운영 시 API 명세 공개 |
-| [#94](https://github.com/nameless0422/stock-management-api/issues/94) | /actuator/prometheus 인증 없이 공개 |
-| [#95](https://github.com/nameless0422/stock-management-api/issues/95) | ProductCreateRequest/ProductUpdateRequest name @Size 누락 |
-| [#96](https://github.com/nameless0422/stock-management-api/issues/96) | ChangePasswordRequest 현재/신규 비밀번호 동일 허용 |
-
 ### 🟡 중장기 개선
 
 | Issue | 항목 |
 |-------|------|
 | [#14](https://github.com/nameless0422/stock-management-api/issues/14) | OrderService God Object 분리 |
-| [#97](https://github.com/nameless0422/stock-management-api/issues/97) | PaymentService.getByOrderId() 스칼라 프로젝션 미전환 |
-| [#98](https://github.com/nameless0422/stock-management-api/issues/98) | Pageable max-page-size 전역 설정 부재 |
-| [#99](https://github.com/nameless0422/stock-management-api/issues/99) | resolveUserId() 4개 컨트롤러 JWT details 미활용 |
-| [#100](https://github.com/nameless0422/stock-management-api/issues/100) | CouponCreateRequest PERCENTAGE DTO 레벨 검증 부재 |
-| [#101](https://github.com/nameless0422/stock-management-api/issues/101) | CouponService ADMIN 연산 감사 로깅 부재 |
-| [#47](https://github.com/nameless0422/stock-management-api/issues/47) | ES 검색 결과에 재고·리뷰 통계 누락 |
 | [#15](https://github.com/nameless0422/stock-management-api/issues/15) | 오프셋 페이지네이션 → 커서 기반 전환 |
 | [#22](https://github.com/nameless0422/stock-management-api/issues/22) | API 버전 관리 부재 — /api/v1/ prefix 도입 |
 

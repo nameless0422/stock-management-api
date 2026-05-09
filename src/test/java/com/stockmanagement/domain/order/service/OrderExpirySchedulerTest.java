@@ -30,7 +30,10 @@ class OrderExpirySchedulerTest {
     private OrderRepository orderRepository;
 
     @Mock
-    private OrderService orderService;
+    private OrderCommandService orderCommandService;
+
+    @Mock
+    private OrderPaymentService orderPaymentService;
 
     @InjectMocks
     private OrderExpiryScheduler scheduler;
@@ -48,7 +51,7 @@ class OrderExpirySchedulerTest {
 
         scheduler.cancelExpiredOrders();
 
-        verifyNoInteractions(orderService);
+        verifyNoInteractions(orderCommandService);
     }
 
     @Test
@@ -59,10 +62,10 @@ class OrderExpirySchedulerTest {
 
         scheduler.cancelExpiredOrders();
 
-        verify(orderService).cancelBySystem(1L);
-        verify(orderService).cancelBySystem(2L);
-        verify(orderService).cancelBySystem(3L);
-        verifyNoMoreInteractions(orderService);
+        verify(orderCommandService).cancelBySystem(1L);
+        verify(orderCommandService).cancelBySystem(2L);
+        verify(orderCommandService).cancelBySystem(3L);
+        verifyNoMoreInteractions(orderCommandService);
     }
 
     @Test
@@ -70,13 +73,13 @@ class OrderExpirySchedulerTest {
     void partialFailure_continuesWithOthers() {
         given(orderRepository.findExpiredPendingOrderIds(any(LocalDateTime.class)))
                 .willReturn(List.of(1L, 2L, 3L));
-        doThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND)).when(orderService).cancelBySystem(2L);
+        doThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND)).when(orderCommandService).cancelBySystem(2L);
 
         scheduler.cancelExpiredOrders();
 
-        verify(orderService).cancelBySystem(1L);
-        verify(orderService).cancelBySystem(2L);
-        verify(orderService).cancelBySystem(3L);
+        verify(orderCommandService).cancelBySystem(1L);
+        verify(orderCommandService).cancelBySystem(2L);
+        verify(orderCommandService).cancelBySystem(3L);
     }
 
     @Test

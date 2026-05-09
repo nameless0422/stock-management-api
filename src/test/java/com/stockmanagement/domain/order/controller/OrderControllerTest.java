@@ -6,7 +6,8 @@ import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
 import com.stockmanagement.domain.order.service.OrderDetailService;
-import com.stockmanagement.domain.order.service.OrderService;
+import com.stockmanagement.domain.order.service.OrderCommandService;
+import com.stockmanagement.domain.order.service.OrderQueryService;
 import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.JwtTokenProvider;
@@ -42,7 +43,10 @@ class OrderControllerTest {
     private MockMvc mockMvc;
 
     @MockBean
-    private OrderService orderService;
+    private OrderQueryService orderQueryService;
+
+    @MockBean
+    private OrderCommandService orderCommandService;
 
     @MockBean
     private OrderDetailService orderDetailService;
@@ -75,7 +79,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 주문 생성 성공 → 201")
         void createsOrder() throws Exception {
-            given(orderService.create(any(), anyLong())).willReturn(mock(OrderResponse.class));
+            given(orderCommandService.create(any(), anyLong())).willReturn(mock(OrderResponse.class));
 
             mockMvc.perform(post("/api/orders")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -107,7 +111,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("재고 부족 → 409")
         void insufficientStock() throws Exception {
-            given(orderService.create(any(), anyLong()))
+            given(orderCommandService.create(any(), anyLong()))
                     .willThrow(new BusinessException(ErrorCode.INSUFFICIENT_STOCK));
 
             mockMvc.perform(post("/api/orders")
@@ -128,7 +132,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 주문 단건 조회 → 200")
         void returnsOrder() throws Exception {
-            given(orderService.getByIdForUser(anyLong(), any(), anyBoolean())).willReturn(mock(OrderResponse.class));
+            given(orderQueryService.getByIdForUser(anyLong(), any(), anyBoolean())).willReturn(mock(OrderResponse.class));
 
             mockMvc.perform(get("/api/orders/1"))
                     .andExpect(status().isOk())
@@ -146,7 +150,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("존재하지 않는 주문 → 404")
         void returnsNotFound() throws Exception {
-            given(orderService.getByIdForUser(eq(999L), any(), anyBoolean()))
+            given(orderQueryService.getByIdForUser(eq(999L), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
             mockMvc.perform(get("/api/orders/999"))
@@ -158,7 +162,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("다른 사용자의 주문 조회 → 403")
         void accessDeniedForOtherUserOrder() throws Exception {
-            given(orderService.getByIdForUser(eq(1L), any(), anyBoolean()))
+            given(orderQueryService.getByIdForUser(eq(1L), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.ORDER_ACCESS_DENIED));
 
             mockMvc.perform(get("/api/orders/1"))
@@ -177,7 +181,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 주문 목록 페이징 조회 → 200")
         void returnsList() throws Exception {
-            given(orderService.getList(any(), anyBoolean(), any(), any(Pageable.class)))
+            given(orderQueryService.getList(any(), anyBoolean(), any(), any(Pageable.class)))
                     .willReturn(new PageImpl<>(List.of()));
 
             mockMvc.perform(get("/api/orders"))
@@ -196,7 +200,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 주문 취소 성공 → 200")
         void cancelsOrder() throws Exception {
-            given(orderService.cancel(anyLong(), any(), anyBoolean(), any())).willReturn(mock(OrderResponse.class));
+            given(orderCommandService.cancel(anyLong(), any(), anyBoolean(), any())).willReturn(mock(OrderResponse.class));
 
             mockMvc.perform(post("/api/orders/1/cancel"))
                     .andExpect(status().isOk())
@@ -214,7 +218,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("취소 불가 상태의 주문 → 409")
         void invalidStatus() throws Exception {
-            given(orderService.cancel(anyLong(), any(), anyBoolean(), any()))
+            given(orderCommandService.cancel(anyLong(), any(), anyBoolean(), any()))
                     .willThrow(new BusinessException(ErrorCode.INVALID_ORDER_STATUS));
 
             mockMvc.perform(post("/api/orders/1/cancel"))
@@ -233,7 +237,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 주문 상태 이력 조회 → 200")
         void returnsHistory() throws Exception {
-            given(orderService.getHistory(anyLong(), any(), anyBoolean()))
+            given(orderQueryService.getHistory(anyLong(), any(), anyBoolean()))
                     .willReturn(List.of(mock(OrderStatusHistoryResponse.class)));
 
             mockMvc.perform(get("/api/orders/1/history"))
@@ -252,7 +256,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("존재하지 않는 주문 → 404")
         void returnsNotFound() throws Exception {
-            given(orderService.getHistory(eq(999L), any(), anyBoolean()))
+            given(orderQueryService.getHistory(eq(999L), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
             mockMvc.perform(get("/api/orders/999/history"))
@@ -263,7 +267,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("다른 사용자의 주문 이력 조회 → 403")
         void accessDeniedForOtherUserHistory() throws Exception {
-            given(orderService.getHistory(eq(1L), any(), anyBoolean()))
+            given(orderQueryService.getHistory(eq(1L), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.ORDER_ACCESS_DENIED));
 
             mockMvc.perform(get("/api/orders/1/history"))

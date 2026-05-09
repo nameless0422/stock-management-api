@@ -5,7 +5,7 @@ import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.cart.repository.CartRepository;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.repository.OrderRepository;
-import com.stockmanagement.domain.order.service.OrderService;
+import com.stockmanagement.domain.order.service.OrderCommandService;
 import com.stockmanagement.domain.product.wishlist.repository.WishlistRepository;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.domain.user.address.repository.DeliveryAddressRepository;
@@ -59,7 +59,7 @@ class UserServiceTest {
     private OrderRepository orderRepository;
 
     @Mock
-    private OrderService orderService;
+    private OrderCommandService orderCommandService;
 
     @Mock
     private CartRepository cartRepository;
@@ -406,7 +406,7 @@ class UserServiceTest {
 
             userService.deactivate("testuser", "test-access-token");
 
-            verify(orderService).cancelPendingOrdersByUser(user.getId());
+            verify(orderCommandService).cancelPendingOrdersByUser(user.getId());
             verify(cartRepository).deleteByUserId(user.getId());
             verify(wishlistRepository).deleteByUserId(user.getId());
             verify(deliveryAddressRepository).deleteByUserId(user.getId());
