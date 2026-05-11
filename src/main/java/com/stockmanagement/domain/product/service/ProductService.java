@@ -217,7 +217,7 @@ public class ProductService {
 
     /** LIKE 패턴 와일드카드(!, %, _)를 이스케이프한다. ESCAPE ! 기준. */
     private static String escapeLike(String value) {
-        return value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+        return com.stockmanagement.common.util.SqlUtils.escapeLike(value);
     }
 
     /**

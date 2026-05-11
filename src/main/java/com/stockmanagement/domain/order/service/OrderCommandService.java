@@ -239,6 +239,7 @@ public class OrderCommandService {
     /**
      * 회원 탈퇴 시 사용자의 모든 PENDING 주문을 강제 취소한다.
      */
+    @Transactional
     public void cancelPendingOrdersByUser(Long userId) {
         orderRepository.findPendingIdsByUserId(userId).forEach(orderId -> {
             try {

@@ -8,6 +8,8 @@ public record DashboardResponse(
         long pendingOrders,
         long confirmedOrders,
         long cancelledOrders,
+        long paymentInProgressOrders,
+        long cancelInProgressOrders,
         BigDecimal totalRevenue,
         long totalUsers,
         List<LowStockItem> lowStockItems
