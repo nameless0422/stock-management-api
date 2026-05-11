@@ -104,6 +104,8 @@ class AdminServiceTest {
             assertThat(response.pendingOrders()).isEqualTo(10L);
             assertThat(response.confirmedOrders()).isEqualTo(80L);
             assertThat(response.cancelledOrders()).isEqualTo(10L);
+            assertThat(response.paymentInProgressOrders()).isEqualTo(0L);
+            assertThat(response.cancelInProgressOrders()).isEqualTo(0L);
             assertThat(response.totalRevenue()).isEqualByComparingTo(BigDecimal.valueOf(500_000));
             assertThat(response.totalUsers()).isEqualTo(200L);
             assertThat(response.lowStockItems()).hasSize(1);

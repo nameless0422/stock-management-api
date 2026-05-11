@@ -1,7 +1,10 @@
 package com.stockmanagement.common.config;
 
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
@@ -14,9 +17,10 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
  *
  * <p>두 빈 모두 Micrometer가 자동 계측하여 executor.* 메트릭으로 노출된다.
  */
+@Slf4j
 @EnableAsync
 @Configuration
-public class AsyncConfig {
+public class AsyncConfig implements AsyncConfigurer {
 
     /**
      * 도메인 이벤트 처리 전용 스레드 풀.
@@ -35,6 +39,13 @@ public class AsyncConfig {
         executor.setAwaitTerminationSeconds(30);
         executor.initialize();
         return executor;
+    }
+
+    @Override
+    public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
+        return (ex, method, params) ->
+                log.error("[Async] 비동기 이벤트 처리 실패 — method={}, error={}",
+                        method.getName(), ex.getMessage(), ex);
     }
 
     /**

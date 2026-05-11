@@ -175,10 +175,16 @@ public class OrderQueryService {
             couponDiscount = couponService.validate(userId, validateReq).getDiscountAmount();
         }
 
-        // 포인트 잔액 검증 (차감은 하지 않음)
+        // 포인트 잔액 + 한도 검증 (차감은 하지 않음)
         long usePoints = request.getUsePoints();
         if (usePoints > 0) {
             pointService.validateBalance(userId, usePoints);
+            BigDecimal maxUsablePoints = originalAmount.subtract(couponDiscount);
+            if (BigDecimal.valueOf(usePoints).compareTo(maxUsablePoints) > 0) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT,
+                        "포인트 사용 금액이 결제 가능 금액을 초과합니다. 최대 사용 가능 포인트: "
+                                + maxUsablePoints.longValue() + "P");
+            }
         }
         BigDecimal pointDiscount = BigDecimal.valueOf(usePoints);
 
