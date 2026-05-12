@@ -146,6 +146,7 @@ public class ReviewService {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
 
+        // 분포 조회
         List<Object[]> rows = reviewRepository.findRatingDistributionByProductId(productId);
         Map<Integer, Long> distribution = new HashMap<>();
         for (int i = 1; i <= 5; i++) distribution.put(i, 0L);
@@ -153,11 +154,10 @@ public class ReviewService {
             distribution.put(((Number) row[0]).intValue(), ((Number) row[1]).longValue());
         }
 
-        long total = distribution.values().stream().mapToLong(Long::longValue).sum();
-        double avg = total == 0 ? 0.0
-                : distribution.entrySet().stream()
-                        .mapToDouble(e -> e.getKey() * e.getValue())
-                        .sum() / total;
+        // DB AVG() 사용 — 앱 레벨 재계산과의 정밀도 불일치 방지
+        var stats = reviewRepository.findReviewStatsByProductId(productId);
+        double avg = stats.map(s -> s.getAvgRating()).orElse(0.0);
+        long total = stats.map(s -> s.getReviewCount()).orElse(0L);
 
         return RatingStatsResponse.builder()
                 .avgRating(Math.round(avg * 10) / 10.0)

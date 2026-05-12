@@ -64,6 +64,8 @@ public class AdminService {
         long pendingOrders   = countFromMap(statsMap, OrderStatus.PENDING);
         long confirmedOrders = countFromMap(statsMap, OrderStatus.CONFIRMED);
         long cancelledOrders = countFromMap(statsMap, OrderStatus.CANCELLED);
+        long paymentInProgressOrders = countFromMap(statsMap, OrderStatus.PAYMENT_IN_PROGRESS);
+        long cancelInProgressOrders  = countFromMap(statsMap, OrderStatus.CANCEL_IN_PROGRESS);
         var  totalRevenue    = statsMap.containsKey(OrderStatus.CONFIRMED)
                 ? statsMap.get(OrderStatus.CONFIRMED).getTotalAmount()
                 : java.math.BigDecimal.ZERO;
@@ -79,6 +81,7 @@ public class AdminService {
 
         return new DashboardResponse(
                 totalOrders, pendingOrders, confirmedOrders, cancelledOrders,
+                paymentInProgressOrders, cancelInProgressOrders,
                 totalRevenue, totalUsers, lowStockItems
         );
     }
@@ -154,6 +157,6 @@ public class AdminService {
 
     /** LIKE 패턴 와일드카드(!, %, _)를 이스케이프한다. ESCAPE ! 기준. */
     private static String escapeLike(String value) {
-        return value.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+        return com.stockmanagement.common.util.SqlUtils.escapeLike(value);
     }
 }

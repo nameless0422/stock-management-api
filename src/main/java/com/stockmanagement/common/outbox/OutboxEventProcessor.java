@@ -51,8 +51,7 @@ class OutboxEventProcessor {
      *
      * <p>이미 발행된 이벤트는 건너뛴다 (멱등성).
      * 발행 성공 시 {@code publishedAt}을 기록하고, 실패 시 {@code retryCount}를 증가시킨다.
-     */
-    /**
+     *
      * @return true = 발행 성공 또는 이미 발행됨, false = 발행 실패
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)

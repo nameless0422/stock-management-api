@@ -25,9 +25,7 @@ public class InventorySpecification {
 
     /** LIKE 패턴에서 와일드카드 문자(%,_,\)를 이스케이프한다. */
     private static String escapeLike(String value) {
-        return value.replace("\\", "\\\\")
-                    .replace("%", "\\%")
-                    .replace("_", "\\_");
+        return com.stockmanagement.common.util.SqlUtils.escapeLike(value, '\\');
     }
 
     /**
