@@ -120,7 +120,7 @@ class WishlistServiceTest {
             WishlistItem item = mockItem(5L, 1L, 10L);
             Product product = mockProduct(10L);
             Pageable pageable = PageRequest.of(0, 20);
-            given(wishlistRepository.findByUserIdOrderByCreatedAtDesc(1L, pageable))
+            given(wishlistRepository.findByUserIdWithExistingProduct(1L, pageable))
                     .willReturn(new PageImpl<>(List.of(item)));
             given(productRepository.findAllById(List.of(10L))).willReturn(List.of(product));
             given(inventoryRepository.findAllByProductIdIn(List.of(10L))).willReturn(List.of());

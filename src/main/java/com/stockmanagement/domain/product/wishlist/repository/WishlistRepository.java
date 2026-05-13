@@ -30,6 +30,16 @@ public interface WishlistRepository extends JpaRepository<WishlistItem, Long> {
     Set<Long> findWishlistedProductIds(@Param("userId") Long userId,
                                        @Param("productIds") Collection<Long> productIds);
 
+    /**
+     * 상품이 존재하는 위시리스트 아이템만 페이징 조회한다.
+     * 물리 삭제된 상품의 위시리스트 아이템을 제외하여 totalElements 정확도를 보장한다.
+     */
+    @Query(value = "SELECT w FROM WishlistItem w WHERE w.userId = :userId AND EXISTS " +
+            "(SELECT 1 FROM Product p WHERE p.id = w.productId) ORDER BY w.createdAt DESC",
+            countQuery = "SELECT COUNT(w) FROM WishlistItem w WHERE w.userId = :userId AND EXISTS " +
+                    "(SELECT 1 FROM Product p WHERE p.id = w.productId)")
+    Page<WishlistItem> findByUserIdWithExistingProduct(@Param("userId") Long userId, Pageable pageable);
+
     /** 회원 탈퇴 시 사용자의 위시리스트 전체를 일괄 삭제한다. */
     @Modifying
     @Query("DELETE FROM WishlistItem w WHERE w.userId = :userId")

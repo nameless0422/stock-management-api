@@ -64,7 +64,9 @@ public class OrderQueryService {
     public OrderResponse getById(Long id) {
         Order order = orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        return OrderResponse.from(order);
+        ShipmentStatus shipmentStatus = shipmentRepository.findByOrderId(id)
+                .map(s -> s.getStatus()).orElse(null);
+        return OrderResponse.from(order, null, shipmentStatus);
     }
 
     /**

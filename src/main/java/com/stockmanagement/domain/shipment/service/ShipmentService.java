@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.shipment.service;
 
 import com.stockmanagement.common.event.ShipmentDeliveredEvent;
+import com.stockmanagement.common.event.ShipmentReturnedEvent;
 import com.stockmanagement.common.event.ShipmentShippedEvent;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
@@ -138,6 +139,7 @@ public class ShipmentService {
     public ShipmentResponse processReturn(Long orderId) {
         Shipment shipment = findByOrderIdOrThrow(orderId);
         shipment.processReturn();
+        outboxEventStore.save(new ShipmentReturnedEvent(orderId));
         return ShipmentResponse.from(shipment);
     }
 

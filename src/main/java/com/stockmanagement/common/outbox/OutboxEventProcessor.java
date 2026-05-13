@@ -6,6 +6,7 @@ import com.stockmanagement.common.event.OrderCancelledEvent;
 import com.stockmanagement.common.event.OrderCreatedEvent;
 import com.stockmanagement.common.event.PaymentConfirmedEvent;
 import com.stockmanagement.common.event.ShipmentDeliveredEvent;
+import com.stockmanagement.common.event.ShipmentReturnedEvent;
 import com.stockmanagement.common.event.ShipmentShippedEvent;
 import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
@@ -120,6 +121,7 @@ class OutboxEventProcessor {
             case SHIPMENT_SHIPPED -> new ShipmentShippedEvent(
                     toLong(p.get("orderId")), (String) p.get("carrier"), (String) p.get("trackingNumber"));
             case SHIPMENT_DELIVERED -> new ShipmentDeliveredEvent(toLong(p.get("orderId")));
+            case SHIPMENT_RETURNED -> new ShipmentReturnedEvent(toLong(p.get("orderId")));
             default -> throw new IllegalStateException("buildEvent에서 처리되지 않은 타입: " + outbox.getEventType());
         };
     }

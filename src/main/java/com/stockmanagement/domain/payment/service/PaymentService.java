@@ -96,6 +96,9 @@ public class PaymentService {
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
         }
 
+        // Toss 결제창에 표시할 사용자 정보 조회 (prepare 내 1회만 조회)
+        User user = userRepository.findById(userId).orElse(null);
+
         // 이번 결제 시도용 고유 tossOrderId 생성
         String tossOrderId = buildTossOrderId(order.getId());
 
@@ -104,12 +107,12 @@ public class PaymentService {
         if (existing.isPresent()) {
             Payment p = existing.get();
             if (p.getStatus() == PaymentStatus.PENDING) {
-                return buildPrepareResponse(p, order);
+                return buildPrepareResponse(p, order, user);
             }
             if (p.getStatus() == PaymentStatus.FAILED) {
                 // FAILED 결제를 새 tossOrderId로 초기화하여 재사용
                 p.resetForRetry(tossOrderId);
-                return buildPrepareResponse(p, order);
+                return buildPrepareResponse(p, order, user);
             }
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
         }
@@ -128,10 +131,10 @@ public class PaymentService {
             paymentRepository.flush();
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             return paymentRepository.findByOrderId(order.getId())
-                    .map(p -> buildPrepareResponse(p, order))
+                    .map(p -> buildPrepareResponse(p, order, user))
                     .orElseThrow(() -> e);
         }
-        return buildPrepareResponse(saved, order);
+        return buildPrepareResponse(saved, order, user);
     }
 
     /**
@@ -372,8 +375,7 @@ public class PaymentService {
      * 결제 위젯용 주문명을 생성한다.
      * 예시: "MacBook Pro 외 2건"
      */
-    private PaymentPrepareResponse buildPrepareResponse(Payment payment, Order order) {
-        User user = userRepository.findById(order.getUserId()).orElse(null);
+    private PaymentPrepareResponse buildPrepareResponse(Payment payment, Order order, User user) {
         return new PaymentPrepareResponse(
                 payment.getTossOrderId(),
                 payment.getAmount(),
