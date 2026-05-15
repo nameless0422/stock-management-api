@@ -54,6 +54,10 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
      */
     Page<Order> findByUserId(Long userId, Pageable pageable);
 
+    /** 여러 주문을 항목+상품 포함하여 한 번에 조회한다 (결제 목록 주문 요약용). */
+    @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.items i LEFT JOIN FETCH i.product WHERE o.id IN :ids")
+    List<Order> findByIdsWithItems(@Param("ids") List<Long> ids);
+
     /** 주문 목록 전체 페이징 조회 (관리자용) */
     Page<Order> findByStatus(OrderStatus status, Pageable pageable);
 

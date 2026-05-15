@@ -25,8 +25,10 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -343,9 +345,22 @@ public class PaymentService {
      * @param isAdmin  ADMIN 여부
      * @return 결제 정보 (없으면 Optional.empty())
      */
-    /** 현재 인증 사용자의 결제 목록을 최신순으로 페이징 조회한다. */
+    /** 현재 인증 사용자의 결제 목록을 최신순으로 페이징 조회한다. 주문 요약 정보 포함. */
     public Page<PaymentResponse> getMyPayments(Long userId, Pageable pageable) {
-        return paymentRepository.findByUserId(userId, pageable).map(PaymentResponse::from);
+        Page<Payment> payments = paymentRepository.findByUserId(userId, pageable);
+        if (payments.isEmpty()) {
+            return payments.map(PaymentResponse::from);
+        }
+
+        List<Long> orderIds = payments.getContent().stream()
+                .map(Payment::getOrderId).toList();
+        Map<Long, Order> orderMap = orderRepository.findByIdsWithItems(orderIds).stream()
+                .collect(Collectors.toMap(Order::getId, o -> o));
+
+        return payments.map(p -> {
+            Order order = orderMap.get(p.getOrderId());
+            return PaymentResponse.from(p, buildOrderSummary(order));
+        });
     }
 
     public Optional<PaymentResponse> getByOrderId(Long orderId, Long userId, boolean isAdmin) {
@@ -391,6 +406,13 @@ public class PaymentService {
         String firstName = items.get(0).getProduct().getName();
         if (items.size() == 1) return firstName;
         return firstName + " 외 " + (items.size() - 1) + "건";
+    }
+
+    private PaymentResponse.OrderSummary buildOrderSummary(Order order) {
+        if (order == null) return null;
+        List<OrderItem> items = order.getItems();
+        String thumbnailUrl = items.isEmpty() ? null : items.get(0).getProduct().getThumbnailUrl();
+        return new PaymentResponse.OrderSummary(buildOrderName(order), items.size(), thumbnailUrl);
     }
 
 }
