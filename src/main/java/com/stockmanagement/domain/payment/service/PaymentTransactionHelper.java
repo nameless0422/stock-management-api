@@ -33,6 +33,19 @@ import java.util.Optional;
  * {@code @Transactional} 메서드 안에서 외부 HTTP를 호출하면 HTTP 응답 대기 중에도 DB 커넥션을 점유하여
  * 커넥션 풀 고갈로 이어질 수 있다.
  * 이 클래스는 HTTP 호출 이전/이후의 DB 연산을 각각 짧은 트랜잭션으로 캡슐화하여 그 위험을 제거한다.
+ *
+ * <h3>OrderRepository 직접 접근 설계 의도</h3>
+ * <p>이 클래스는 {@link OrderRepository}에 직접 접근하여 Order 상태를 변경한다.
+ * 결제-주문 도메인 경계를 넘는 접근이지만, 다음과 같은 이유로 의도적으로 선택한 설계이다:
+ * <ul>
+ *   <li><b>순환 참조 방지</b>: PaymentService ↔ OrderService 간 순환 의존을 차단한다.
+ *       주문 비즈니스 로직은 {@link OrderPaymentService}로 위임하고,
+ *       이 헬퍼는 중간 상태 전이(PENDING↔PAYMENT_IN_PROGRESS, CONFIRMED↔CANCEL_IN_PROGRESS)만 담당한다.</li>
+ *   <li><b>트랜잭션 경계 제어</b>: 각 메서드가 독립적인 짧은 트랜잭션({@code REQUIRES_NEW})으로 동작해야 하므로,
+ *       OrderService의 트랜잭션과 격리되어야 한다.</li>
+ *   <li><b>경량 검증</b>: 주문 소유권 확인 및 중간 상태 전이만 수행하므로
+ *       OrderService의 전체 비즈니스 로직이 불필요하다.</li>
+ * </ul>
  */
 @Slf4j
 @Service
@@ -258,6 +271,49 @@ class PaymentTransactionHelper {
         log.info("[Payment] 결제 확정 완료: paymentKey={}, orderId={}, amount={}",
                 payment.getPaymentKey(), payment.getOrderId(), payment.getAmount());
         return PaymentResponse.from(payment);
+    }
+
+    // ===== webhook cancel 흐름 =====
+
+    /**
+     * Toss Webhook CANCELED 이벤트에 의한 결제 취소 트랜잭션.
+     *
+     * <p>가상계좌 미입금 만료 등 Toss 측에서 자동 취소된 경우 호출된다.
+     * PENDING 결제는 {@code cancelByWebhook()}으로 취소하고, 주문의 재고 예약을 즉시 해제한다.
+     * DONE 결제는 기존 {@link #applyCancelResult}와 동일한 흐름(전액 취소 + 환불)을 수행한다.
+     * 이미 CANCELLED이면 아무 작업 없이 현재 상태를 반환한다 (멱등성).
+     *
+     * @param tossOrderId Toss 주문 ID (webhook data.orderId)
+     */
+    @Transactional
+    void applyWebhookCancelResult(String tossOrderId) {
+        Payment payment = paymentRepository.findByTossOrderIdWithLock(tossOrderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        if (payment.getStatus() == PaymentStatus.CANCELLED) {
+            log.info("[Webhook] 이미 취소된 결제 — 스킵: tossOrderId={}", tossOrderId);
+            return;
+        }
+
+        if (payment.getStatus() == PaymentStatus.PENDING) {
+            // 가상계좌 미입금 만료: PENDING → CANCELLED, 주문 취소 + 재고 예약 해제
+            payment.cancelByWebhook();
+            orderPaymentService.cancelPendingByWebhook(payment.getOrderId());
+
+            log.info("[Webhook] 가상계좌 미입금 만료 취소 완료: tossOrderId={}, orderId={}",
+                    tossOrderId, payment.getOrderId());
+        } else if (payment.getStatus() == PaymentStatus.DONE
+                || payment.getStatus() == PaymentStatus.PARTIAL_CANCELLED) {
+            // 결제 완료 후 외부 취소: DONE → CANCELLED, 환불 처리
+            payment.cancel("Toss Webhook CANCELED", null);
+            orderPaymentService.refund(payment.getOrderId());
+
+            log.info("[Webhook] 결제 완료 후 외부 취소 처리 완료: tossOrderId={}, orderId={}",
+                    tossOrderId, payment.getOrderId());
+        } else {
+            log.warn("[Webhook] CANCELED 이벤트 미처리 — 예상 외 상태: status={}, tossOrderId={}",
+                    payment.getStatus(), tossOrderId);
+        }
     }
 
     // ===== cancel 흐름 =====
