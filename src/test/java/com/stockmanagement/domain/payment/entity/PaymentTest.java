@@ -105,4 +105,33 @@ class PaymentTest {
                             .isEqualTo(ErrorCode.INVALID_PAYMENT_STATUS));
         }
     }
+
+    @Nested
+    @DisplayName("cancelByWebhook()")
+    class CancelByWebhook {
+
+        @Test
+        @DisplayName("PENDING 결제를 CANCELLED로 전환한다")
+        void cancelsPendingPayment() {
+            Payment pending = Payment.builder()
+                    .orderId(1L)
+                    .tossOrderId("toss-pending")
+                    .amount(new BigDecimal("5000"))
+                    .build();
+
+            pending.cancelByWebhook();
+
+            assertThat(pending.getStatus()).isEqualTo(PaymentStatus.CANCELLED);
+            assertThat(pending.getCancelReason()).isEqualTo("Toss Webhook CANCELED");
+        }
+
+        @Test
+        @DisplayName("DONE 상태에서 호출하면 INVALID_PAYMENT_STATUS 예외")
+        void throwsWhenDone() {
+            assertThatThrownBy(() -> donePayment.cancelByWebhook())
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.INVALID_PAYMENT_STATUS));
+        }
+    }
 }

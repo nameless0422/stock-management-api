@@ -89,6 +89,39 @@ public class OrderPaymentService {
     }
 
     /**
+     * Toss Webhook CANCELED에 의한 미결제 주문 취소 — Payment 도메인에서 호출.
+     *
+     * <p>가상계좌 미입금 만료 등으로 Toss가 CANCELED Webhook을 전송한 경우,
+     * PENDING/PAYMENT_IN_PROGRESS 주문을 즉시 취소하고 재고 예약을 해제한다.
+     * 이미 CANCELLED이면 아무 작업 없이 반환한다 (멱등성).
+     *
+     * @param id 취소할 주문 ID
+     */
+    @Transactional
+    @CacheEvict(cacheNames = "orders", key = "#id")
+    public void cancelPendingByWebhook(Long id) {
+        Order order = orderRepository.findByIdWithItemsForUpdate(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            return;
+        }
+
+        OrderStatus previousStatus = order.getStatus();
+        order.cancel("Toss Webhook CANCELED");
+
+        for (OrderItem item : order.getItems()) {
+            inventoryService.releaseReservation(item.getProduct().getId(), item.getQuantity());
+        }
+
+        couponService.releaseCoupon(order.getId());
+        pointService.refundByOrder(order.getUserId(), order.getId());
+
+        recordHistory(order.getId(), previousStatus, OrderStatus.CANCELLED, "system:webhook-cancel");
+        outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "WEBHOOK_CANCELLED"));
+    }
+
+    /**
      * 결제 오류로 묶인 PAYMENT_IN_PROGRESS 주문을 PENDING으로 복원한다 (스케줄러 전용).
      *
      * @param id 복원할 주문 ID

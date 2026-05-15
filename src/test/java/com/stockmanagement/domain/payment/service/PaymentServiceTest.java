@@ -680,5 +680,23 @@ class PaymentServiceTest {
             assertThatCode(() -> paymentService.handleWebhook(event)).doesNotThrowAnyException();
             verify(transactionHelper).applyWebhookConfirmResult("toss-order-001", "pk-webhook-001");
         }
+
+        @Test
+        @DisplayName("PAYMENT_STATUS_CHANGED + CANCELED → 결제 취소 처리")
+        void cancelsPaymentOnCanceledWebhook() {
+            TossWebhookEvent.Data data = mock(TossWebhookEvent.Data.class);
+            given(data.getOrderId()).willReturn("toss-order-cancel");
+            given(data.getStatus()).willReturn("CANCELED");
+
+            TossWebhookEvent event = mock(TossWebhookEvent.class);
+            given(event.getEventType()).willReturn("PAYMENT_STATUS_CHANGED");
+            given(event.getData()).willReturn(data);
+
+            given(paymentRepository.findByTossOrderId("toss-order-cancel"))
+                    .willReturn(Optional.of(pendingPayment));
+
+            assertThatCode(() -> paymentService.handleWebhook(event)).doesNotThrowAnyException();
+            verify(transactionHelper).applyWebhookCancelResult("toss-order-cancel");
+        }
     }
 }

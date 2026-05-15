@@ -301,8 +301,11 @@ public class PaymentService {
                                 data.getOrderId(), data.getPaymentKey());
                     }
                 }
-                case "CANCELED" ->
-                    log.info("[Webhook] CANCELED: tossOrderId={}", data.getOrderId());
+                case "CANCELED" -> {
+                    log.info("[Webhook] CANCELED 이벤트 수신 — 취소 처리 시작: tossOrderId={}",
+                            data.getOrderId());
+                    transactionHelper.applyWebhookCancelResult(data.getOrderId());
+                }
                 default ->
                     log.debug("[Webhook] 미처리 status={}: tossOrderId={}", data.getStatus(), data.getOrderId());
             }
