@@ -2,6 +2,7 @@ package com.stockmanagement.domain.coupon.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.stockmanagement.domain.coupon.entity.Coupon;
+import com.stockmanagement.domain.coupon.entity.CouponUsage;
 import com.stockmanagement.domain.coupon.entity.DiscountType;
 import com.stockmanagement.domain.coupon.entity.UserCoupon;
 import lombok.Builder;
@@ -34,7 +35,15 @@ public class MyCouponResponse {
     @JsonProperty("isPublic")
     private final boolean isPublic;
 
-    public static MyCouponResponse from(UserCoupon userCoupon, boolean isUsable) {
+    /** 쿠폰 사용 일시 (미사용 시 null) */
+    private final LocalDateTime usedAt;
+    /** 쿠폰이 사용된 주문 ID (미사용 시 null) */
+    private final Long usedOrderId;
+    /** 실제 할인 금액 (미사용 시 null) */
+    private final BigDecimal actualDiscountAmount;
+
+    public static MyCouponResponse from(UserCoupon userCoupon, boolean isUsable,
+                                         CouponUsage usage) {
         Coupon c = userCoupon.getCoupon();
         return MyCouponResponse.builder()
                 .id(c.getId())
@@ -50,6 +59,9 @@ public class MyCouponResponse {
                 .issuedAt(userCoupon.getIssuedAt())
                 .isUsable(isUsable)
                 .isPublic(userCoupon.getCoupon().isPublic())
+                .usedAt(usage != null ? usage.getUsedAt() : null)
+                .usedOrderId(usage != null ? usage.getOrderId() : null)
+                .actualDiscountAmount(usage != null ? usage.getDiscountAmount() : null)
                 .build();
     }
 }
