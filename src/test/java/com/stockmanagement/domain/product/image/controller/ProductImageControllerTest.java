@@ -3,6 +3,7 @@ package com.stockmanagement.domain.product.image.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockmanagement.common.config.SecurityConfig;
 import com.stockmanagement.common.security.JwtBlacklist;
+import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.domain.product.image.dto.*;
 import com.stockmanagement.domain.product.image.entity.ImageType;
 import com.stockmanagement.domain.product.image.service.ProductImageService;
@@ -39,6 +40,7 @@ class ProductImageControllerTest {
     @MockBean private ProductImageService productImageService;
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtBlacklist jwtBlacklist;
+    @MockBean private UserService userService;
 
     private static final String BASE_URL = "/api/products/1/images";
 

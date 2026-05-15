@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockmanagement.common.config.SecurityConfig;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.RefreshTokenStore;
+import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.domain.product.category.dto.CategoryResponse;
 import com.stockmanagement.domain.product.category.service.CategoryService;
 import com.stockmanagement.common.security.JwtTokenProvider;
@@ -48,6 +49,9 @@ class CategoryControllerTest {
 
     @MockBean
     private RefreshTokenStore refreshTokenStore;
+
+    @MockBean
+    private UserService userService;
 
     private static final String VALID_CREATE_JSON = "{\"name\":\"전자\"}";
 
