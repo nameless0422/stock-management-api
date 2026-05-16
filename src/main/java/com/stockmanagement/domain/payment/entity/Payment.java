@@ -87,6 +87,17 @@ public class Payment {
     @Column(length = 200)
     private String failureMessage;
 
+    /** 가상계좌 은행명 (가상계좌 결제 시에만 값이 있음). */
+    @Column(length = 20)
+    private String virtualAccountBank;
+
+    /** 가상계좌 계좌번호 (가상계좌 결제 시에만 값이 있음). */
+    @Column(length = 30)
+    private String virtualAccountNumber;
+
+    /** 가상계좌 입금 기한 (가상계좌 결제 시에만 값이 있음). */
+    private LocalDateTime virtualAccountDueDate;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -188,5 +199,18 @@ public class Payment {
         this.failureCode = null;
         this.failureMessage = null;
         this.status = PaymentStatus.PENDING;
+    }
+
+    /**
+     * 가상계좌 입금 정보를 저장한다 — prepare 단계에서 Toss 응답 수신 후 호출.
+     *
+     * @param bank       은행명 (예: "우리은행")
+     * @param accountNumber 가상계좌 번호
+     * @param dueDate    입금 기한
+     */
+    public void setVirtualAccountInfo(String bank, String accountNumber, LocalDateTime dueDate) {
+        this.virtualAccountBank = bank;
+        this.virtualAccountNumber = accountNumber;
+        this.virtualAccountDueDate = dueDate;
     }
 }
