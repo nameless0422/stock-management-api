@@ -8,10 +8,28 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface CouponRepository extends JpaRepository<Coupon, Long> {
+
+    /**
+     * 공개 쿠폰 목록 조회 — isPublic=true, active=true, 기간 유효, 수량 여유.
+     */
+    @Query("""
+            SELECT c FROM Coupon c
+            WHERE c.isPublic = true
+              AND c.active = true
+              AND c.validFrom <= :now
+              AND c.validUntil > :now
+              AND (c.maxUsageCount IS NULL OR c.usageCount < c.maxUsageCount)
+            ORDER BY c.validUntil ASC
+            """)
+    Page<Coupon> findAvailablePublicCoupons(@Param("now") LocalDateTime now, Pageable pageable);
+
 
     /**
      * 만료된 활성 쿠폰을 단일 벌크 UPDATE로 비활성화한다.
