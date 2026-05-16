@@ -3,11 +3,14 @@ package com.stockmanagement.domain.user.controller;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.domain.order.dto.OrderResponse;
+import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.review.dto.ReviewResponse;
 import com.stockmanagement.domain.product.review.service.ReviewService;
 import com.stockmanagement.domain.user.dto.ChangePasswordRequest;
+import com.stockmanagement.domain.user.dto.RecentlyViewedRequest;
 import com.stockmanagement.domain.user.dto.UpdateProfileRequest;
 import com.stockmanagement.domain.user.dto.UserResponse;
+import com.stockmanagement.domain.user.service.RecentlyViewedService;
 import com.stockmanagement.domain.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,6 +22,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -38,6 +42,7 @@ public class UserController {
 
     private final UserService userService;
     private final ReviewService reviewService;
+    private final RecentlyViewedService recentlyViewedService;
 
     @Operation(summary = "내 정보 조회", description = "포인트 잔액(pointBalance) 포함.")
     @GetMapping("/me")
@@ -92,5 +97,22 @@ public class UserController {
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
         return ApiResponse.ok(reviewService.getMyReviews(userId, pageable, rating));
+    }
+
+    @Operation(summary = "최근 본 상품 기록", description = "상품 조회 시 자동 호출. Redis ZSet에 저장.")
+    @PostMapping("/me/recently-viewed")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void recordRecentlyViewed(
+            @CurrentUserId Long userId,
+            @Valid @RequestBody RecentlyViewedRequest request) {
+        recentlyViewedService.record(userId, request.getProductId());
+    }
+
+    @Operation(summary = "최근 본 상품 목록", description = "최신순 반환. 기본 10개, 최대 50개.")
+    @GetMapping("/me/recently-viewed")
+    public ApiResponse<List<ProductResponse>> getRecentlyViewed(
+            @CurrentUserId Long userId,
+            @RequestParam(defaultValue = "10") int size) {
+        return ApiResponse.ok(recentlyViewedService.getRecentlyViewed(userId, size));
     }
 }
