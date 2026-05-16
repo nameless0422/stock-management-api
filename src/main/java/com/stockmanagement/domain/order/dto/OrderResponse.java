@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.order.dto;
 
 import com.stockmanagement.domain.order.entity.Order;
+import com.stockmanagement.domain.order.entity.OrderDeliverySnapshot;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.shipment.entity.ShipmentStatus;
 import lombok.Builder;
@@ -56,22 +57,54 @@ public class OrderResponse {
     /** 취소 사유 — CANCELLED 상태가 아니거나 사유 미입력 시 null */
     private final String cancelReason;
 
+    /** 주문 시점 배송지 스냅샷 — 배송지 미지정 또는 스냅샷 미생성 시 null */
+    private final SnapshotAddress snapshotAddress;
+
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
 
+    /** 주문 시점 배송지 스냅샷 DTO. */
+    @Getter
+    @Builder
+    @Jacksonized
+    public static class SnapshotAddress {
+        private final String recipient;
+        private final String phone;
+        private final String zipCode;
+        private final String address1;
+        private final String address2;
+
+        public static SnapshotAddress from(OrderDeliverySnapshot snapshot) {
+            if (snapshot == null) return null;
+            return SnapshotAddress.builder()
+                    .recipient(snapshot.getRecipient())
+                    .phone(snapshot.getPhone())
+                    .zipCode(snapshot.getZipCode())
+                    .address1(snapshot.getAddress1())
+                    .address2(snapshot.getAddress2())
+                    .build();
+        }
+    }
+
     /** Order 엔티티를 응답 DTO로 변환하는 정적 팩토리 메서드 */
     public static OrderResponse from(Order order) {
-        return from(order, null, null);
+        return from(order, null, null, null);
     }
 
     /**
-     * Order 엔티티를 hasReview + shipmentStatus 포함 응답 DTO로 변환한다.
+     * Order 엔티티를 hasReview + shipmentStatus + 배송지 스냅샷 포함 응답 DTO로 변환한다.
      *
      * @param reviewedProductIds 현재 사용자가 리뷰를 작성한 상품 ID 집합 (null이면 hasReview=null)
      * @param shipmentStatus     배송 상태 (null이면 배송 미생성)
      */
     public static OrderResponse from(Order order, java.util.Set<Long> reviewedProductIds,
                                      ShipmentStatus shipmentStatus) {
+        return from(order, reviewedProductIds, shipmentStatus, null);
+    }
+
+    public static OrderResponse from(Order order, java.util.Set<Long> reviewedProductIds,
+                                     ShipmentStatus shipmentStatus,
+                                     OrderDeliverySnapshot snapshot) {
         String orderNumber = order.getCreatedAt() != null
                 ? order.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
                         + "-" + String.format("%07d", order.getId())
@@ -96,6 +129,7 @@ public class OrderResponse {
                         .toList())
                 .shipmentStatus(shipmentStatus)
                 .cancelReason(order.getCancelReason())
+                .snapshotAddress(SnapshotAddress.from(snapshot))
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .build();

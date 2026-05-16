@@ -5,7 +5,9 @@ import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.dto.OrderDetailResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.entity.Order;
+import com.stockmanagement.domain.order.entity.OrderDeliverySnapshot;
 import com.stockmanagement.domain.order.entity.OrderItem;
+import com.stockmanagement.domain.order.repository.OrderDeliverySnapshotRepository;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.payment.dto.PaymentResponse;
 import com.stockmanagement.domain.payment.repository.PaymentRepository;
@@ -38,6 +40,7 @@ public class OrderDetailService {
     private final ShipmentRepository shipmentRepository;
     private final RefundRepository refundRepository;
     private final ReviewRepository reviewRepository;
+    private final OrderDeliverySnapshotRepository deliverySnapshotRepository;
 
     /**
      * 주문 + 결제 + 배송 정보를 단일 응답으로 반환한다 (프론트 상세 페이지용).
@@ -59,11 +62,12 @@ public class OrderDetailService {
                 .map(RefundResponse::from)
                 .orElse(null);
         Set<Long> reviewedIds = reviewedProductIds(order.getUserId(), order.getItems());
+        OrderDeliverySnapshot snapshot = deliverySnapshotRepository.findByOrderId(id).orElse(null);
 
         com.stockmanagement.domain.shipment.entity.ShipmentStatus shipmentStatus =
                 shipment != null ? shipment.getStatus() : null;
         return OrderDetailResponse.builder()
-                .order(OrderResponse.from(order, reviewedIds, shipmentStatus))
+                .order(OrderResponse.from(order, reviewedIds, shipmentStatus, snapshot))
                 .payment(payment)
                 .shipment(shipment)
                 .refund(refund)
