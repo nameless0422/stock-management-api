@@ -1,7 +1,7 @@
 package com.stockmanagement.domain.coupon.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
-import com.stockmanagement.common.security.SecurityUtils;
+import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.domain.coupon.dto.CouponClaimRequest;
 import com.stockmanagement.domain.coupon.dto.CouponCreateRequest;
 import com.stockmanagement.domain.coupon.dto.CouponIssueRequest;
@@ -10,7 +10,6 @@ import com.stockmanagement.domain.coupon.dto.CouponValidateRequest;
 import com.stockmanagement.domain.coupon.dto.CouponValidateResponse;
 import com.stockmanagement.domain.coupon.dto.MyCouponResponse;
 import com.stockmanagement.domain.coupon.service.CouponService;
-import com.stockmanagement.domain.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -21,8 +20,6 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 
 import java.util.List;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Coupon", description = "쿠폰 관리 API")
@@ -32,7 +29,6 @@ import org.springframework.web.bind.annotation.*;
 public class CouponController {
 
     private final CouponService couponService;
-    private final UserService userService;
 
     @Operation(summary = "쿠폰 생성 [ADMIN]")
     @PostMapping
@@ -73,9 +69,8 @@ public class CouponController {
                description = "usable=true: 사용 가능한 쿠폰만, usable=false: 만료/소진된 쿠폰만, 미지정: 전체.")
     @GetMapping("/my")
     public ApiResponse<List<MyCouponResponse>> getMyCoupons(
-            @AuthenticationPrincipal String username, Authentication authentication,
+            @CurrentUserId Long userId,
             @RequestParam(required = false) Boolean usable) {
-        Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
         return ApiResponse.ok(couponService.getMyCoupons(userId, usable));
     }
 
@@ -83,18 +78,16 @@ public class CouponController {
     @PostMapping("/claim")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<MyCouponResponse> claim(
-            @AuthenticationPrincipal String username, Authentication authentication,
+            @CurrentUserId Long userId,
             @Valid @RequestBody CouponClaimRequest request) {
-        Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
         return ApiResponse.ok(couponService.claim(userId, request));
     }
 
     @Operation(summary = "쿠폰 유효성 확인 + 할인 금액 미리보기 [USER]")
     @PostMapping("/validate")
     public ApiResponse<CouponValidateResponse> validate(
-            @AuthenticationPrincipal String username, Authentication authentication,
+            @CurrentUserId Long userId,
             @Valid @RequestBody CouponValidateRequest request) {
-        Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
         return ApiResponse.ok(couponService.validate(userId, request));
     }
 }

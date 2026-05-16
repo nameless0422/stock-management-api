@@ -81,7 +81,8 @@ public class WishlistService {
      * <p>userId는 JWT claim에서 추출한 값을 컨트롤러에서 전달받아 DB users 조회를 생략한다.
      */
     public Page<WishlistResponse> getList(Long userId, Pageable pageable) {
-        Page<WishlistItem> page = wishlistRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
+        // DB 레벨에서 존재하는 상품만 조회 — totalElements 정확도 보장
+        Page<WishlistItem> page = wishlistRepository.findByUserIdWithExistingProduct(userId, pageable);
         if (page.isEmpty()) {
             return page.map(item -> null); // 빈 페이지 반환
         }
@@ -93,17 +94,9 @@ public class WishlistService {
         Map<Long, Integer> availableMap = inventoryRepository.findAllByProductIdIn(productIds).stream()
                 .collect(Collectors.toMap(i -> i.getProduct().getId(), Inventory::getAvailable));
 
-        // 상품이 삭제(soft delete)된 경우 null로 매핑 후 필터링 — Spring Data Page는 filter 미지원
-        // → toList()로 materialized 후 PageImpl로 래핑
-        List<WishlistResponse> content = page.stream()
-                .filter(item -> productMap.containsKey(item.getProductId()))
-                .map(item -> WishlistResponse.of(
-                        item,
-                        productMap.get(item.getProductId()),
-                        availableMap.get(item.getProductId())))
-                .toList();
-        // 필터링 후 totalElements 보정 — 삭제 상품 수만큼 차감
-        long filteredTotal = page.getTotalElements() - (page.getContent().size() - content.size());
-        return new org.springframework.data.domain.PageImpl<>(content, pageable, Math.max(0, filteredTotal));
+        return page.map(item -> WishlistResponse.of(
+                item,
+                productMap.get(item.getProductId()),
+                availableMap.get(item.getProductId())));
     }
 }

@@ -156,11 +156,21 @@ public class CouponService {
                         row -> ((Long) row[1]).intValue()
                 ));
 
+        // 배치 조회: couponId → 사용 이력 (usedAt, orderId, discountAmount)
+        Map<Long, CouponUsage> usageMap = couponUsageRepository
+                .findByCouponIdsAndUserId(couponIds, userId).stream()
+                .collect(Collectors.toMap(
+                        cu -> cu.getCoupon().getId(),
+                        cu -> cu,
+                        (a, b) -> a  // 동일 쿠폰 다중 사용 시 첫 번째 유지
+                ));
+
         LocalDateTime now = LocalDateTime.now();
         return userCoupons.stream()
                 .map(uc -> {
                     int usedCount = usedCountMap.getOrDefault(uc.getCoupon().getId(), 0);
-                    return MyCouponResponse.from(uc, isUsable(uc.getCoupon(), usedCount, now));
+                    CouponUsage usage = usageMap.get(uc.getCoupon().getId());
+                    return MyCouponResponse.from(uc, isUsable(uc.getCoupon(), usedCount, now), usage);
                 })
                 .filter(r -> usable == null || r.isUsable() == usable)
                 .toList();
@@ -200,7 +210,7 @@ public class CouponService {
 
         log.info("[Coupon] 등록: userId={}, couponCode={}, couponId={}", userId, request.getCouponCode(), coupon.getId());
         int usedCount = couponUsageRepository.countByCoupon_IdAndUserId(coupon.getId(), userId);
-        return MyCouponResponse.from(userCoupon, isUsable(coupon, usedCount, LocalDateTime.now()));
+        return MyCouponResponse.from(userCoupon, isUsable(coupon, usedCount, LocalDateTime.now()), null);
     }
 
     /**

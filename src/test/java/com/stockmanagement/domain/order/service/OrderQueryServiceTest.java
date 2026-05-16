@@ -8,6 +8,7 @@ import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderItem;
 import com.stockmanagement.domain.order.entity.OrderStatus;
+import com.stockmanagement.domain.order.repository.OrderDeliverySnapshotRepository;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.point.service.PointService;
@@ -52,6 +53,9 @@ class OrderQueryServiceTest {
 
     @Mock
     private OrderStatusHistoryRepository historyRepository;
+
+    @Mock
+    private OrderDeliverySnapshotRepository deliverySnapshotRepository;
 
     @Mock
     private CouponService couponService;

@@ -2,6 +2,7 @@ package com.stockmanagement.domain.admin.controller;
 
 import com.stockmanagement.common.config.SecurityConfig;
 import com.stockmanagement.common.security.JwtBlacklist;
+import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.domain.admin.dto.AdminOrderResponse;
 import com.stockmanagement.domain.admin.dto.DashboardResponse;
 import com.stockmanagement.domain.admin.service.AdminService;
@@ -46,6 +47,7 @@ class AdminControllerTest {
     @MockBean private SystemSettingService systemSettingService;
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtBlacklist jwtBlacklist;
+    @MockBean private UserService userService;
 
     // ===== GET /api/admin/dashboard =====
 

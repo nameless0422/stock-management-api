@@ -1,14 +1,13 @@
 package com.stockmanagement.domain.product.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
-import com.stockmanagement.common.security.SecurityUtils;
+import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
 import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.dto.ProductSearchRequest;
 import com.stockmanagement.domain.product.dto.ProductStatusRequest;
 import com.stockmanagement.domain.product.dto.ProductUpdateRequest;
 import com.stockmanagement.domain.product.service.ProductService;
-import com.stockmanagement.domain.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -17,9 +16,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.authentication.AnonymousAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "상품", description = "상품 CRUD — 등록·조회·수정·삭제")
@@ -29,7 +25,6 @@ import org.springframework.web.bind.annotation.*;
 public class ProductController {
 
     private final ProductService productService;
-    private final UserService userService;
 
     @Operation(summary = "상품 등록", description = "ADMIN 전용. SKU 중복 시 409.")
     @PostMapping
@@ -42,10 +37,8 @@ public class ProductController {
     @GetMapping("/{id}")
     public ApiResponse<ProductResponse> getById(
             @PathVariable Long id,
-            @AuthenticationPrincipal String username,
-            Authentication authentication) {
-        if (isAuthenticated(authentication)) {
-            Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
+            @CurrentUserId(required = false) Long userId) {
+        if (userId != null) {
             return ApiResponse.ok(productService.getByIdForUser(id, userId));
         }
         return ApiResponse.ok(productService.getById(id));
@@ -62,9 +55,7 @@ public class ProductController {
     public ApiResponse<Page<ProductResponse>> getList(
             @ModelAttribute @Valid ProductSearchRequest request,
             @PageableDefault(size = 20, sort = "id") Pageable pageable,
-            @AuthenticationPrincipal String username,
-            Authentication authentication) {
-        Long userId = isAuthenticated(authentication) ? SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)) : null;
+            @CurrentUserId(required = false) Long userId) {
         return ApiResponse.ok(productService.getList(pageable, request, userId));
     }
 
@@ -89,11 +80,5 @@ public class ProductController {
             @PathVariable Long id,
             @RequestBody @Valid ProductStatusRequest request) {
         return ApiResponse.ok(productService.changeStatus(id, request));
-    }
-
-    /** 실제 인증 여부 확인 — AnonymousAuthenticationToken은 비로그인으로 처리 */
-    private boolean isAuthenticated(Authentication auth) {
-        return auth != null && auth.isAuthenticated()
-                && !(auth instanceof AnonymousAuthenticationToken);
     }
 }

@@ -24,6 +24,12 @@ public interface CouponUsageRepository extends JpaRepository<CouponUsage, Long> 
             @Param("couponIds") List<Long> couponIds,
             @Param("userId") Long userId);
 
+    /** 사용자의 쿠폰 사용 이력 배치 조회 — couponId를 key로 매핑 용도. */
+    @Query("SELECT cu FROM CouponUsage cu WHERE cu.coupon.id IN :couponIds AND cu.userId = :userId")
+    List<CouponUsage> findByCouponIdsAndUserId(
+            @Param("couponIds") List<Long> couponIds,
+            @Param("userId") Long userId);
+
     /** 주문 취소 시 쿠폰 반환을 위한 조회. */
     Optional<CouponUsage> findByOrderId(Long orderId);
 }

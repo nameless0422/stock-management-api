@@ -1,11 +1,11 @@
 package com.stockmanagement.domain.shipment.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.shipment.dto.ShipmentResponse;
 import com.stockmanagement.domain.shipment.dto.ShipmentUpdateRequest;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
-import com.stockmanagement.domain.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -38,15 +38,12 @@ import org.springframework.web.bind.annotation.*;
 public class ShipmentController {
 
     private final ShipmentService shipmentService;
-    private final UserService userService;
 
     @Operation(summary = "내 배송 목록 조회", description = "로그인한 사용자의 배송 목록을 최신순으로 반환한다.")
     @GetMapping("/my")
     public ApiResponse<Page<ShipmentResponse>> getMyShipments(
-            @AuthenticationPrincipal String username,
-            Authentication authentication,
+            @CurrentUserId Long userId,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
         return ApiResponse.ok(shipmentService.getMyShipments(userId, pageable));
     }
 

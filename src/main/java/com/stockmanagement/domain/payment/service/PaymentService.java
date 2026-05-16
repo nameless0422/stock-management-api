@@ -25,8 +25,10 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -96,6 +98,9 @@ public class PaymentService {
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
         }
 
+        // Toss 결제창에 표시할 사용자 정보 조회 (prepare 내 1회만 조회)
+        User user = userRepository.findById(userId).orElse(null);
+
         // 이번 결제 시도용 고유 tossOrderId 생성
         String tossOrderId = buildTossOrderId(order.getId());
 
@@ -104,12 +109,12 @@ public class PaymentService {
         if (existing.isPresent()) {
             Payment p = existing.get();
             if (p.getStatus() == PaymentStatus.PENDING) {
-                return buildPrepareResponse(p, order);
+                return buildPrepareResponse(p, order, user);
             }
             if (p.getStatus() == PaymentStatus.FAILED) {
                 // FAILED 결제를 새 tossOrderId로 초기화하여 재사용
                 p.resetForRetry(tossOrderId);
-                return buildPrepareResponse(p, order);
+                return buildPrepareResponse(p, order, user);
             }
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
         }
@@ -128,10 +133,10 @@ public class PaymentService {
             paymentRepository.flush();
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             return paymentRepository.findByOrderId(order.getId())
-                    .map(p -> buildPrepareResponse(p, order))
+                    .map(p -> buildPrepareResponse(p, order, user))
                     .orElseThrow(() -> e);
         }
-        return buildPrepareResponse(saved, order);
+        return buildPrepareResponse(saved, order, user);
     }
 
     /**
@@ -340,9 +345,22 @@ public class PaymentService {
      * @param isAdmin  ADMIN 여부
      * @return 결제 정보 (없으면 Optional.empty())
      */
-    /** 현재 인증 사용자의 결제 목록을 최신순으로 페이징 조회한다. */
+    /** 현재 인증 사용자의 결제 목록을 최신순으로 페이징 조회한다. 주문 요약 정보 포함. */
     public Page<PaymentResponse> getMyPayments(Long userId, Pageable pageable) {
-        return paymentRepository.findByUserId(userId, pageable).map(PaymentResponse::from);
+        Page<Payment> payments = paymentRepository.findByUserId(userId, pageable);
+        if (payments.isEmpty()) {
+            return payments.map(PaymentResponse::from);
+        }
+
+        List<Long> orderIds = payments.getContent().stream()
+                .map(Payment::getOrderId).toList();
+        Map<Long, Order> orderMap = orderRepository.findByIdsWithItems(orderIds).stream()
+                .collect(Collectors.toMap(Order::getId, o -> o));
+
+        return payments.map(p -> {
+            Order order = orderMap.get(p.getOrderId());
+            return PaymentResponse.from(p, buildOrderSummary(order));
+        });
     }
 
     public Optional<PaymentResponse> getByOrderId(Long orderId, Long userId, boolean isAdmin) {
@@ -372,8 +390,7 @@ public class PaymentService {
      * 결제 위젯용 주문명을 생성한다.
      * 예시: "MacBook Pro 외 2건"
      */
-    private PaymentPrepareResponse buildPrepareResponse(Payment payment, Order order) {
-        User user = userRepository.findById(order.getUserId()).orElse(null);
+    private PaymentPrepareResponse buildPrepareResponse(Payment payment, Order order, User user) {
         return new PaymentPrepareResponse(
                 payment.getTossOrderId(),
                 payment.getAmount(),
@@ -389,6 +406,13 @@ public class PaymentService {
         String firstName = items.get(0).getProduct().getName();
         if (items.size() == 1) return firstName;
         return firstName + " 외 " + (items.size() - 1) + "건";
+    }
+
+    private PaymentResponse.OrderSummary buildOrderSummary(Order order) {
+        if (order == null) return null;
+        List<OrderItem> items = order.getItems();
+        String thumbnailUrl = items.isEmpty() ? null : items.get(0).getProduct().getThumbnailUrl();
+        return new PaymentResponse.OrderSummary(buildOrderName(order), items.size(), thumbnailUrl);
     }
 
 }
