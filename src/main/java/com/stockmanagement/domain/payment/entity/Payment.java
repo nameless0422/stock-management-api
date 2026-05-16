@@ -172,6 +172,22 @@ public class Payment {
     }
 
     /**
+     * Toss CANCELED Webhook에 의한 취소 — PENDING/FAILED 상태에서 CANCELLED로 전환.
+     *
+     * <p>가상계좌 미입금 만료 등 Toss 측에서 미결제 건을 취소했을 때 사용한다.
+     * DONE 상태 결제는 {@link #cancel(String, BigDecimal)}을 사용해야 한다.
+     *
+     * @param reason 취소 사유
+     */
+    public void cancelByWebhook(String reason) {
+        if (this.status != PaymentStatus.PENDING && this.status != PaymentStatus.FAILED) {
+            throw new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS);
+        }
+        this.cancelReason = reason;
+        this.status = PaymentStatus.CANCELLED;
+    }
+
+    /**
      * Resets a FAILED payment to PENDING for retry.
      *
      * <p>FAILED 결제가 존재할 때 사용자가 "다시 결제하기"를 선택하면 기존 레코드를 재사용한다.

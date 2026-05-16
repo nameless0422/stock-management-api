@@ -368,6 +368,41 @@ class PaymentTransactionHelper {
         return PaymentResponse.from(payment);
     }
 
+    /**
+     * Toss CANCELED Webhook 수신 시 Payment/Order 상태를 취소로 전환하는 트랜잭션.
+     *
+     * <p>가상계좌 미입금 만료, 관리자 취소 등 Toss 측에서 결제를 취소했을 때 호출된다.
+     * Payment가 이미 CANCELLED/DONE이면 무시한다 (중복 Webhook 방어).
+     * Order가 CONFIRMED이면 OrderPaymentService.refund()로 처리하고,
+     * PENDING/PAYMENT_IN_PROGRESS이면 cancelByWebhook()으로 재고 예약을 해제한다.
+     *
+     * @param tossOrderId Toss 주문 ID
+     */
+    @Transactional
+    void applyWebhookCancelResult(String tossOrderId) {
+        Payment payment = paymentRepository.findByTossOrderIdWithLock(tossOrderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        // 이미 취소됐으면 중복 Webhook 무시
+        if (payment.getStatus() == PaymentStatus.CANCELLED) {
+            return;
+        }
+        // 이미 DONE(결제 완료)이면 Toss가 취소한 경우 — 환불 처리
+        if (payment.getStatus() == PaymentStatus.DONE) {
+            payment.cancel("TOSS_WEBHOOK_CANCELED", null);
+            orderPaymentService.refund(payment.getOrderId());
+            log.info("[Webhook] CANCELED — 결제 완료 건 환불 처리: tossOrderId={}, orderId={}",
+                    tossOrderId, payment.getOrderId());
+            return;
+        }
+
+        // PENDING/FAILED 상태 — 미결제 주문 취소 + 재고 예약 해제
+        payment.cancelByWebhook("TOSS_WEBHOOK_CANCELED");
+        orderPaymentService.cancelByWebhook(payment.getOrderId(), "TOSS_WEBHOOK_CANCELED");
+        log.info("[Webhook] CANCELED — 미결제 건 취소 처리: tossOrderId={}, orderId={}",
+                tossOrderId, payment.getOrderId());
+    }
+
     private LocalDateTime parseDateTime(String dateTimeStr) {
         if (dateTimeStr == null) return null;
         return OffsetDateTime.parse(dateTimeStr).toLocalDateTime();
