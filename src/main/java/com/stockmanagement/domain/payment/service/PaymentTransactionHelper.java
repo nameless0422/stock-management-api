@@ -33,6 +33,18 @@ import java.util.Optional;
  * {@code @Transactional} 메서드 안에서 외부 HTTP를 호출하면 HTTP 응답 대기 중에도 DB 커넥션을 점유하여
  * 커넥션 풀 고갈로 이어질 수 있다.
  * 이 클래스는 HTTP 호출 이전/이후의 DB 연산을 각각 짧은 트랜잭션으로 캡슐화하여 그 위험을 제거한다.
+ *
+ * <h3>OrderRepository 직접 접근 설계 결정 (ADR)</h3>
+ * <p>이 클래스는 {@link OrderRepository}에 직접 접근하여 Order 상태를 변경한다.
+ * 이는 도메인 경계(Payment → Order)를 침범하는 것처럼 보이지만 의도적인 설계이다:
+ * <ul>
+ *   <li><b>순환 참조 방지</b>: OrderService → PaymentService → OrderService 순환 의존이 발생하므로
+ *       중간 헬퍼가 Repository를 직접 사용하여 의존 방향을 단방향으로 유지한다.</li>
+ *   <li><b>트랜잭션 원자성</b>: Payment.approve()와 Order.startPayment()가 동일 트랜잭션 내에서
+ *       실행되어야 정합성이 보장된다. Service 계층 분리 시 REQUIRES_NEW로 인한 부분 커밋 위험이 생긴다.</li>
+ *   <li><b>주문 확정/환불 등 복합 비즈니스 로직</b>은 {@link OrderPaymentService}로 위임하여
+ *       도메인 로직의 캡슐화를 유지한다. 이 클래스는 상태 전이(startPayment, startCancellation 등)만 직접 호출한다.</li>
+ * </ul>
  */
 @Slf4j
 @Service
