@@ -98,6 +98,18 @@ public class Payment {
     /** 가상계좌 입금 기한 (가상계좌 결제 시에만 값이 있음). */
     private LocalDateTime virtualAccountDueDate;
 
+    /** 카드사명 (카드 결제 시에만 값이 있음). */
+    @Column(length = 30)
+    private String cardCompany;
+
+    /** 카드 번호 마스킹 (예: "1234-****-****-5678"). */
+    @Column(length = 30)
+    private String cardNumber;
+
+    /** 할부 개월 수 (0=일시불). */
+    @Column
+    private Integer installmentPlanMonths;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -218,6 +230,7 @@ public class Payment {
     }
 
     /**
+<<<<<<< HEAD
      * 가상계좌 입금 정보를 저장한다 — prepare 단계에서 Toss 응답 수신 후 호출.
      *
      * @param bank       은행명 (예: "우리은행")
@@ -228,5 +241,17 @@ public class Payment {
         this.virtualAccountBank = bank;
         this.virtualAccountNumber = accountNumber;
         this.virtualAccountDueDate = dueDate;
+=======
+     * 카드 결제 상세 정보를 저장한다 — confirm 성공 후 Toss 응답에서 추출.
+     *
+     * @param company            카드사명 (예: "삼성카드")
+     * @param number             마스킹된 카드 번호
+     * @param installmentMonths  할부 개월 수 (0=일시불)
+     */
+    public void setCardInfo(String company, String number, Integer installmentMonths) {
+        this.cardCompany = company;
+        this.cardNumber = number;
+        this.installmentPlanMonths = installmentMonths;
+>>>>>>> 9984889 (feat: PaymentResponse에 카드 결제 상세 정보(cardDetail) 추가 (#128))
     }
 }
