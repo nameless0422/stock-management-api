@@ -58,6 +58,9 @@ class UserControllerTest {
     private ReviewService reviewService;
 
     @MockBean
+    private com.stockmanagement.domain.user.service.RecentlyViewedService recentlyViewedService;
+
+    @MockBean
     private JwtBlacklist jwtBlacklist;
 
     /** String principal을 가진 인증 토큰 생성 헬퍼 */
