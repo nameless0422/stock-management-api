@@ -1,7 +1,7 @@
 package com.stockmanagement.domain.user.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
-import com.stockmanagement.common.security.SecurityUtils;
+import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.product.review.dto.ReviewResponse;
 import com.stockmanagement.domain.product.review.service.ReviewService;
@@ -18,7 +18,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -88,12 +87,10 @@ public class UserController {
                description = "별점 필터 지원 (?rating=1~5). sort 파라미터로 정렬 지정 (createdAt DESC 기본).")
     @GetMapping("/me/reviews")
     public ApiResponse<Page<ReviewResponse>> getMyReviews(
-            @AuthenticationPrincipal String username,
-            Authentication authentication,
+            @CurrentUserId Long userId,
             @RequestParam(required = false) Integer rating,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
         return ApiResponse.ok(reviewService.getMyReviews(userId, pageable, rating));
     }
 }

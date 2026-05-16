@@ -2,6 +2,7 @@ package com.stockmanagement.domain.point.controller;
 
 import com.stockmanagement.common.config.SecurityConfig;
 import com.stockmanagement.common.security.JwtBlacklist;
+import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.domain.point.dto.PointBalanceResponse;
 import com.stockmanagement.domain.point.dto.PointTransactionResponse;
 import com.stockmanagement.domain.point.service.PointService;
@@ -40,6 +41,7 @@ class PointControllerTest {
     @MockBean private PointService pointService;
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtBlacklist jwtBlacklist;
+    @MockBean private UserService userService;
 
     private static final UsernamePasswordAuthenticationToken USER_AUTH =
             new UsernamePasswordAuthenticationToken("user1", null,

@@ -3,6 +3,7 @@ package com.stockmanagement.domain.order.controller;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.ratelimit.RateLimit;
+import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.order.dto.OrderCancelRequest;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
@@ -16,7 +17,6 @@ import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.service.OrderCommandService;
 import com.stockmanagement.domain.order.service.OrderDetailService;
 import com.stockmanagement.domain.order.service.OrderQueryService;
-import com.stockmanagement.domain.user.service.UserService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -30,7 +30,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -50,15 +49,13 @@ public class OrderController {
     private final OrderQueryService orderQueryService;
     private final OrderCommandService orderCommandService;
     private final OrderDetailService orderDetailService;
-    private final UserService userService;
 
     @Operation(summary = "주문 금액 미리보기", description = "쿠폰·포인트 적용 시 최종 결제 금액을 계산한다. 주문 생성 없이 순수 계산만 수행.")
     @PostMapping("/preview")
     public ApiResponse<OrderPreviewResponse> preview(
             @RequestBody @Valid OrderPreviewRequest request,
-            @AuthenticationPrincipal String username,
-            Authentication authentication) {
-        return ApiResponse.ok(orderQueryService.preview(request, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username))));
+            @CurrentUserId Long userId) {
+        return ApiResponse.ok(orderQueryService.preview(request, userId));
     }
 
     @Operation(summary = "주문 생성", description = "재고 예약(reserved++) 후 PENDING 주문 생성. 동일 idempotencyKey 재요청 시 기존 주문 반환.")
@@ -67,9 +64,7 @@ public class OrderController {
     @RateLimit(limit = 10, windowSeconds = 60)
     public ApiResponse<OrderResponse> create(
             @RequestBody @Valid OrderCreateRequest request,
-            @AuthenticationPrincipal String username,
-            Authentication authentication) {
-        Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
+            @CurrentUserId Long userId) {
         return ApiResponse.ok(orderCommandService.create(request, userId));
     }
 
@@ -77,10 +72,10 @@ public class OrderController {
     @GetMapping("/{id}")
     public ApiResponse<OrderResponse> getById(
             @PathVariable Long id,
-            @AuthenticationPrincipal String username,
+            @CurrentUserId Long userId,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderQueryService.getByIdForUser(id, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), isAdmin));
+        return ApiResponse.ok(orderQueryService.getByIdForUser(id, userId, isAdmin));
     }
 
     @Operation(summary = "주문 상세 통합 조회",
@@ -88,24 +83,24 @@ public class OrderController {
     @GetMapping("/{id}/detail")
     public ApiResponse<OrderDetailResponse> getDetail(
             @PathVariable Long id,
-            @AuthenticationPrincipal String username,
+            @CurrentUserId Long userId,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderDetailService.getDetail(id, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), isAdmin));
+        return ApiResponse.ok(orderDetailService.getDetail(id, userId, isAdmin));
     }
 
     @Operation(summary = "주문 목록 조회 (필터 + 페이징)",
                description = "status / startDate / endDate 필터 지원. ADMIN은 userId 파라미터로 특정 사용자 주문 조회 가능. USER는 본인 주문만 조회된다.")
     @GetMapping
     public ApiResponse<Page<OrderResponse>> getList(
-            @AuthenticationPrincipal String username,
+            @CurrentUserId(required = false) Long userId,
             Authentication authentication,
             @ModelAttribute OrderSearchRequest request,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        Long userId = isAdmin ? null : SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
-        return ApiResponse.ok(orderQueryService.getList(userId, isAdmin, request, pageable));
+        Long effectiveUserId = isAdmin ? null : userId;
+        return ApiResponse.ok(orderQueryService.getList(effectiveUserId, isAdmin, request, pageable));
     }
 
     @Operation(
@@ -121,13 +116,12 @@ public class OrderController {
     )
     @GetMapping("/scroll")
     public ApiResponse<CursorPage<OrderResponse>> scroll(
-            @AuthenticationPrincipal String username,
+            @CurrentUserId Long userId,
             Authentication authentication,
             @RequestParam(required = false) OrderStatus status,
             @RequestParam(required = false) Long lastId,
             @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        Long userId = SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username));
         return ApiResponse.ok(orderQueryService.getOrderScroll(userId, isAdmin, status, lastId, size));
     }
 
@@ -136,20 +130,20 @@ public class OrderController {
     public ApiResponse<OrderResponse> cancel(
             @PathVariable Long id,
             @RequestBody(required = false) @Valid OrderCancelRequest request,
-            @AuthenticationPrincipal String username,
+            @CurrentUserId Long userId,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
         String reason = request != null ? request.reason() : null;
-        return ApiResponse.ok(orderCommandService.cancel(id, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), isAdmin, reason));
+        return ApiResponse.ok(orderCommandService.cancel(id, userId, isAdmin, reason));
     }
 
     @Operation(summary = "주문 상태 변경 이력 조회", description = "생성·취소·확정·환불 등 모든 상태 전이를 시간순으로 반환. ADMIN은 모든 주문, USER는 본인 주문만 가능.")
     @GetMapping("/{id}/history")
     public ApiResponse<List<OrderStatusHistoryResponse>> getHistory(
             @PathVariable Long id,
-            @AuthenticationPrincipal String username,
+            @CurrentUserId Long userId,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderQueryService.getHistory(id, SecurityUtils.resolveUserId(authentication, () -> userService.resolveUserId(username)), isAdmin));
+        return ApiResponse.ok(orderQueryService.getHistory(id, userId, isAdmin));
     }
 }
