@@ -31,8 +31,20 @@ public class PaymentResponse {
     private String failureMessage;
     private LocalDateTime createdAt;
 
+    /** 가상계좌 입금 정보 — 가상계좌 결제 시에만 non-null. */
+    private VirtualAccount virtualAccount;
+
+    /** 카드 결제 상세 정보 — 카드 결제 시에만 non-null. */
+    private CardDetail cardDetail;
+
     /** 주문 요약 정보 (상품명, 건수, 썸네일) — getMyPayments 등에서 제공. */
     private OrderSummary orderSummary;
+
+    /** 가상계좌 입금 정보. */
+    public record VirtualAccount(String bank, String accountNumber, LocalDateTime dueDate) {}
+
+    /** 카드 결제 상세 정보. */
+    public record CardDetail(String cardCompany, String cardNumber, Integer installmentPlanMonths) {}
 
     /** 결제에 연결된 주문의 요약 정보. */
     public record OrderSummary(String orderName, int itemCount, String thumbnailUrl) {}
@@ -44,6 +56,16 @@ public class PaymentResponse {
 
     /** Converts a {@link Payment} entity to a response DTO with order summary. */
     public static PaymentResponse from(Payment payment, OrderSummary orderSummary) {
+        VirtualAccount va = payment.getVirtualAccountBank() != null
+                ? new VirtualAccount(payment.getVirtualAccountBank(),
+                        payment.getVirtualAccountNumber(),
+                        payment.getVirtualAccountDueDate())
+                : null;
+        CardDetail card = payment.getCardCompany() != null
+                ? new CardDetail(payment.getCardCompany(),
+                        payment.getCardNumber(),
+                        payment.getInstallmentPlanMonths())
+                : null;
         return PaymentResponse.builder()
                 .id(payment.getId())
                 .orderId(payment.getOrderId())
@@ -59,6 +81,8 @@ public class PaymentResponse {
                 .failureCode(payment.getFailureCode())
                 .failureMessage(payment.getFailureMessage())
                 .createdAt(payment.getCreatedAt())
+                .virtualAccount(va)
+                .cardDetail(card)
                 .orderSummary(orderSummary)
                 .build();
     }

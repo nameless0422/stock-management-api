@@ -87,6 +87,29 @@ public class Payment {
     @Column(length = 200)
     private String failureMessage;
 
+    /** 가상계좌 은행명 (가상계좌 결제 시에만 값이 있음). */
+    @Column(length = 20)
+    private String virtualAccountBank;
+
+    /** 가상계좌 계좌번호 (가상계좌 결제 시에만 값이 있음). */
+    @Column(length = 30)
+    private String virtualAccountNumber;
+
+    /** 가상계좌 입금 기한 (가상계좌 결제 시에만 값이 있음). */
+    private LocalDateTime virtualAccountDueDate;
+
+    /** 카드사명 (카드 결제 시에만 값이 있음). */
+    @Column(length = 30)
+    private String cardCompany;
+
+    /** 카드 번호 마스킹 (예: "1234-****-****-5678"). */
+    @Column(length = 30)
+    private String cardNumber;
+
+    /** 할부 개월 수 (0=일시불). */
+    @Column
+    private Integer installmentPlanMonths;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -172,6 +195,22 @@ public class Payment {
     }
 
     /**
+     * Toss CANCELED Webhook에 의한 취소 — PENDING/FAILED 상태에서 CANCELLED로 전환.
+     *
+     * <p>가상계좌 미입금 만료 등 Toss 측에서 미결제 건을 취소했을 때 사용한다.
+     * DONE 상태 결제는 {@link #cancel(String, BigDecimal)}을 사용해야 한다.
+     *
+     * @param reason 취소 사유
+     */
+    public void cancelByWebhook(String reason) {
+        if (this.status != PaymentStatus.PENDING && this.status != PaymentStatus.FAILED) {
+            throw new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS);
+        }
+        this.cancelReason = reason;
+        this.status = PaymentStatus.CANCELLED;
+    }
+
+    /**
      * Resets a FAILED payment to PENDING for retry.
      *
      * <p>FAILED 결제가 존재할 때 사용자가 "다시 결제하기"를 선택하면 기존 레코드를 재사용한다.
@@ -188,5 +227,31 @@ public class Payment {
         this.failureCode = null;
         this.failureMessage = null;
         this.status = PaymentStatus.PENDING;
+    }
+
+    /**
+<<<<<<< HEAD
+     * 가상계좌 입금 정보를 저장한다 — prepare 단계에서 Toss 응답 수신 후 호출.
+     *
+     * @param bank       은행명 (예: "우리은행")
+     * @param accountNumber 가상계좌 번호
+     * @param dueDate    입금 기한
+     */
+    public void setVirtualAccountInfo(String bank, String accountNumber, LocalDateTime dueDate) {
+        this.virtualAccountBank = bank;
+        this.virtualAccountNumber = accountNumber;
+        this.virtualAccountDueDate = dueDate;
+=======
+     * 카드 결제 상세 정보를 저장한다 — confirm 성공 후 Toss 응답에서 추출.
+     *
+     * @param company            카드사명 (예: "삼성카드")
+     * @param number             마스킹된 카드 번호
+     * @param installmentMonths  할부 개월 수 (0=일시불)
+     */
+    public void setCardInfo(String company, String number, Integer installmentMonths) {
+        this.cardCompany = company;
+        this.cardNumber = number;
+        this.installmentPlanMonths = installmentMonths;
+>>>>>>> 9984889 (feat: PaymentResponse에 카드 결제 상세 정보(cardDetail) 추가 (#128))
     }
 }

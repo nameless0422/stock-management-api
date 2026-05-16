@@ -37,6 +37,13 @@ public class CouponController {
         return ApiResponse.ok(couponService.create(request));
     }
 
+    @Operation(summary = "공개 쿠폰 목록 — 다운로드 가능한 쿠폰 (인증 불필요)")
+    @GetMapping("/public")
+    public ApiResponse<Page<CouponResponse>> getPublicCoupons(
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ApiResponse.ok(couponService.getPublicCoupons(pageable));
+    }
+
     @Operation(summary = "쿠폰 목록 [ADMIN]")
     @GetMapping
     public ApiResponse<Page<CouponResponse>> getList(

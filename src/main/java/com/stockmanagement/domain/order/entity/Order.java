@@ -130,6 +130,23 @@ public class Order {
     }
 
     /**
+     * Webhook에 의한 취소 — PENDING 또는 PAYMENT_IN_PROGRESS 상태에서 취소 가능.
+     *
+     * <p>Toss가 가상계좌 미입금 만료 등으로 CANCELED Webhook을 전송할 때 사용한다.
+     * 사용자가 직접 cancel()할 수 없는 PAYMENT_IN_PROGRESS 상태도 취소 가능하다.
+     *
+     * @param reason 취소 사유
+     * @throws BusinessException PENDING/PAYMENT_IN_PROGRESS가 아닌 상태에서 호출 시
+     */
+    public void cancelByWebhook(String reason) {
+        if (this.status != OrderStatus.PENDING && this.status != OrderStatus.PAYMENT_IN_PROGRESS) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+        this.status = OrderStatus.CANCELLED;
+        this.cancelReason = reason;
+    }
+
+    /**
      * Toss API 호출 직전 결제 진행 중 상태로 전환한다.
      *
      * <p>PENDING → PAYMENT_IN_PROGRESS. 만료 스케줄러({@code findExpiredPendingOrderIds})가

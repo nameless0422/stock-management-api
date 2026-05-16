@@ -58,6 +58,9 @@ class UserControllerTest {
     private ReviewService reviewService;
 
     @MockBean
+    private com.stockmanagement.domain.user.service.RecentlyViewedService recentlyViewedService;
+
+    @MockBean
     private JwtBlacklist jwtBlacklist;
 
     /** String principal을 가진 인증 토큰 생성 헬퍼 */
@@ -75,7 +78,7 @@ class UserControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 내 정보 조회 → 200")
         void returnsMyInfo() throws Exception {
-            UserResponse response = new UserResponse(1L, "testuser", "test@example.com", UserRole.USER, null, null);
+            UserResponse response = new UserResponse(1L, "testuser", "test@example.com", null, UserRole.USER, null, null);
             given(userService.getMe("testuser")).willReturn(response);
 
             mockMvc.perform(get("/api/users/me")

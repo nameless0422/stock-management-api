@@ -85,6 +85,12 @@ public class CouponService {
         return couponRepository.findAll(pageable).map(CouponResponse::from);
     }
 
+    /** 공개 쿠폰 목록 조회 — 인증 불필요. */
+    public Page<CouponResponse> getPublicCoupons(Pageable pageable) {
+        return couponRepository.findAvailablePublicCoupons(LocalDateTime.now(), pageable)
+                .map(CouponResponse::from);
+    }
+
     public CouponResponse getById(Long id) {
         return CouponResponse.from(findById(id));
     }
