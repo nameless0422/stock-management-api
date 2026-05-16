@@ -12,7 +12,9 @@ import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
 import com.stockmanagement.domain.order.entity.Order;
+import com.stockmanagement.domain.order.entity.OrderDeliverySnapshot;
 import com.stockmanagement.domain.order.entity.OrderStatus;
+import com.stockmanagement.domain.order.repository.OrderDeliverySnapshotRepository;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderSpecification;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
@@ -52,6 +54,7 @@ public class OrderQueryService {
     private final ProductRepository productRepository;
     private final ShipmentRepository shipmentRepository;
     private final OrderStatusHistoryRepository historyRepository;
+    private final OrderDeliverySnapshotRepository deliverySnapshotRepository;
     private final CouponService couponService;
     private final PointService pointService;
 
@@ -66,7 +69,8 @@ public class OrderQueryService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         ShipmentStatus shipmentStatus = shipmentRepository.findByOrderId(id)
                 .map(s -> s.getStatus()).orElse(null);
-        return OrderResponse.from(order, null, shipmentStatus);
+        OrderDeliverySnapshot snapshot = deliverySnapshotRepository.findByOrderId(id).orElse(null);
+        return OrderResponse.from(order, null, shipmentStatus, snapshot);
     }
 
     /**
@@ -82,7 +86,8 @@ public class OrderQueryService {
         validateOrderOwnership(order, userId, isAdmin);
         ShipmentStatus shipmentStatus = shipmentRepository.findByOrderId(id)
                 .map(s -> s.getStatus()).orElse(null);
-        return OrderResponse.from(order, null, shipmentStatus);
+        OrderDeliverySnapshot snapshot = deliverySnapshotRepository.findByOrderId(id).orElse(null);
+        return OrderResponse.from(order, null, shipmentStatus, snapshot);
     }
 
     /**
@@ -99,11 +104,13 @@ public class OrderQueryService {
         Long forceUserId = isAdmin ? null : userId;
         Page<Order> page = orderRepository.findAll(OrderSpecification.of(request, forceUserId), pageable);
 
-        // 배송 상태 배치 조회 (N+1 방지)
+        // 배송 상태 + 배송지 스냅샷 배치 조회 (N+1 방지)
         List<Long> orderIds = page.map(Order::getId).toList();
         Map<Long, ShipmentStatus> statusMap = shipmentRepository.findStatusMapByOrderIds(orderIds);
+        Map<Long, OrderDeliverySnapshot> snapshotMap = deliverySnapshotRepository.findByOrderIdIn(orderIds)
+                .stream().collect(Collectors.toMap(OrderDeliverySnapshot::getOrderId, s -> s));
 
-        return page.map(o -> OrderResponse.from(o, null, statusMap.get(o.getId())));
+        return page.map(o -> OrderResponse.from(o, null, statusMap.get(o.getId()), snapshotMap.get(o.getId())));
     }
 
     /**
@@ -117,12 +124,14 @@ public class OrderQueryService {
         List<Order> items = lastId == null
                 ? orderRepository.findCursorByUserId(userId, status, limit)
                 : orderRepository.findCursorByUserIdAfter(userId, status, lastId, limit);
-        // 배송 상태 배치 조회 (N+1 방지)
+        // 배송 상태 + 배송지 스냅샷 배치 조회 (N+1 방지)
         List<Long> orderIds = items.stream().map(Order::getId).toList();
         Map<Long, ShipmentStatus> statusMap = shipmentRepository.findStatusMapByOrderIds(orderIds);
+        Map<Long, OrderDeliverySnapshot> snapshotMap = deliverySnapshotRepository.findByOrderIdIn(orderIds)
+                .stream().collect(Collectors.toMap(OrderDeliverySnapshot::getOrderId, s -> s));
 
         return CursorPage.of(
-                items.stream().map(o -> OrderResponse.from(o, null, statusMap.get(o.getId()))).toList(),
+                items.stream().map(o -> OrderResponse.from(o, null, statusMap.get(o.getId()), snapshotMap.get(o.getId()))).toList(),
                 size,
                 OrderResponse::getId);
     }

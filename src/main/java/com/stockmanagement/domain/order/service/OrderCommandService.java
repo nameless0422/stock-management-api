@@ -11,8 +11,10 @@ import com.stockmanagement.domain.order.dto.OrderItemRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderItem;
+import com.stockmanagement.domain.order.entity.OrderDeliverySnapshot;
 import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.entity.OrderStatusHistory;
+import com.stockmanagement.domain.order.repository.OrderDeliverySnapshotRepository;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
@@ -58,6 +60,7 @@ public class OrderCommandService {
     private final PointService pointService;
     private final OutboxEventStore outboxEventStore;
     private final DeliveryAddressService deliveryAddressService;
+    private final OrderDeliverySnapshotRepository deliverySnapshotRepository;
 
     /**
      * 주문을 생성한다 (내부 호출 전용 — 장바구니 결제 등).
@@ -119,10 +122,10 @@ public class OrderCommandService {
             totalAmount = totalAmount.add(item.getSubtotal());
         }
 
-        // 3. 배송지 소유권 검증
-        if (request.getDeliveryAddressId() != null) {
-            deliveryAddressService.getById(request.getDeliveryAddressId(), userId);
-        }
+        // 3. 배송지 소유권 검증 + 스냅샷 데이터 확보
+        var deliveryAddress = request.getDeliveryAddressId() != null
+                ? deliveryAddressService.getById(request.getDeliveryAddressId(), userId)
+                : null;
 
         // 4. Order 생성
         long usePointsLong = request.getUsePoints() != null ? request.getUsePoints() : 0L;
@@ -151,6 +154,18 @@ public class OrderCommandService {
             return orderRepository.findByIdempotencyKey(request.getIdempotencyKey())
                     .map(OrderResponse::from)
                     .orElseThrow(() -> e);
+        }
+
+        // 5-1. 배송지 스냅샷 저장
+        if (deliveryAddress != null) {
+            deliverySnapshotRepository.save(OrderDeliverySnapshot.builder()
+                    .orderId(savedOrder.getId())
+                    .recipient(deliveryAddress.getRecipient())
+                    .phone(deliveryAddress.getPhone())
+                    .zipCode(deliveryAddress.getZipCode())
+                    .address1(deliveryAddress.getAddress1())
+                    .address2(deliveryAddress.getAddress2())
+                    .build());
         }
 
         // 6. 재고 예약 (productId 오름차순 — 데드락 방지)
