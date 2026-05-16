@@ -35,6 +35,9 @@ public class User {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
+    @Column(length = 20)
+    private String phoneNumber;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserRole role;
@@ -67,6 +70,11 @@ public class User {
     /** 이메일을 변경한다. */
     public void updateEmail(String email) {
         this.email = email;
+    }
+
+    /** 전화번호를 변경한다. */
+    public void updatePhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
     }
 
     /** 비밀번호를 변경한다 (이미 인코딩된 값을 전달해야 한다). */

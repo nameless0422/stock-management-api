@@ -183,6 +183,9 @@ public class UserService {
             }
             user.updateEmail(request.getEmail());
         }
+        if (request.getPhoneNumber() != null) {
+            user.updatePhoneNumber(request.getPhoneNumber());
+        }
         return UserResponse.from(user);
     }
 

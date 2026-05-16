@@ -9,9 +9,10 @@ public record UserResponse(
         Long id,
         String username,
         String email,
+        String phoneNumber,
         UserRole role,
         LocalDateTime createdAt,
-        /** 포인트 잔액 — null이면 포인트 레코드 미생성 (첫 적립 전) */
+        /** 포인트 ��액 — null이면 포인트 레코드 미생성 (첫 적립 전) */
         Long pointBalance
 ) {
     public static UserResponse from(User user) {
@@ -23,6 +24,7 @@ public record UserResponse(
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
+                user.getPhoneNumber(),
                 user.getRole(),
                 user.getCreatedAt(),
                 pointBalance
