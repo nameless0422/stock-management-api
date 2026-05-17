@@ -116,6 +116,21 @@ public class EmailService {
         send(to, "[StockMall] 배송이 완료되었습니다 (#" + orderId + ")", wrap(content));
     }
 
+    public void sendPasswordResetEmail(String to, String token) {
+        String content = """
+                <h2 style="margin:0 0 6px;font-size:18px;color:#111;">비밀번호 재설정 요청 🔑</h2>
+                <p style="margin:0 0 20px;color:#666;font-size:14px;">비밀번호 재설정이 요청되었습니다. 아래 토큰을 사용하여 비밀번호를 재설정해 주세요.</p>
+                %s
+                <p style="font-size:13px;color:#555;margin-top:20px;">
+                  이 토큰은 30분 동안 유효하며 1회만 사용할 수 있습니다.<br>
+                  본인이 요청하지 않은 경우 이 메일을 무시해 주세요.
+                </p>
+                """.formatted(infoBox(
+                row("재설정 토큰", token)
+        ));
+        send(to, "[StockMall] 비밀번호 재설정 안내", wrap(content));
+    }
+
     // ══ 내부 헬퍼 ══
 
     /**

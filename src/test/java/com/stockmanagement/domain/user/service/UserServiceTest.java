@@ -20,8 +20,10 @@ import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
+import com.stockmanagement.common.email.EmailService;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.LoginRateLimiter;
+import com.stockmanagement.common.security.PasswordResetTokenStore;
 import com.stockmanagement.common.security.RefreshTokenStore;
 import com.stockmanagement.common.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
@@ -89,7 +91,13 @@ class UserServiceTest {
     private RefreshTokenStore refreshTokenStore;
 
     @Mock
+    private PasswordResetTokenStore passwordResetTokenStore;
+
+    @Mock
     private ShipmentRepository shipmentRepository;
+
+    @Mock
+    private EmailService emailService;
 
     @InjectMocks
     private UserService userService;
@@ -106,6 +114,8 @@ class UserServiceTest {
                 .role(UserRole.USER)
                 .build();
         lenient().when(shipmentRepository.findStatusMapByOrderIds(any())).thenReturn(new java.util.HashMap<>());
+        // @Autowired(required=false) 필드는 @InjectMocks가 주입하지 않으므로 수동 설정
+        org.springframework.test.util.ReflectionTestUtils.setField(userService, "emailService", emailService);
     }
 
     // ===== signup() =====
@@ -426,6 +436,71 @@ class UserServiceTest {
                             .isEqualTo(ErrorCode.USER_NOT_FOUND));
 
             verify(userRepository, never()).delete(any(User.class));
+        }
+    }
+
+    // ===== sendPasswordResetEmail() =====
+
+    @Nested
+    @DisplayName("sendPasswordResetEmail()")
+    class SendPasswordResetEmail {
+
+        @Test
+        @DisplayName("존재하는 이메일 — 토큰 발급 + 이메일 발송")
+        void issuesTokenAndSendsEmail() {
+            given(userRepository.findByEmail("test@example.com")).willReturn(Optional.of(user));
+            given(passwordResetTokenStore.issue("testuser")).willReturn("reset-uuid");
+
+            userService.sendPasswordResetEmail("test@example.com");
+
+            verify(passwordResetTokenStore).issue("testuser");
+            verify(emailService).sendPasswordResetEmail("test@example.com", "reset-uuid");
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 이메일 — 예외 없이 정상 종료 (이메일 존재 여부 비노출)")
+        void doesNotThrowForNonexistentEmail() {
+            given(userRepository.findByEmail("unknown@example.com")).willReturn(Optional.empty());
+
+            assertThatCode(() -> userService.sendPasswordResetEmail("unknown@example.com"))
+                    .doesNotThrowAnyException();
+
+            verifyNoInteractions(passwordResetTokenStore);
+            verify(emailService, never()).sendPasswordResetEmail(anyString(), anyString());
+        }
+    }
+
+    // ===== resetPassword() =====
+
+    @Nested
+    @DisplayName("resetPassword()")
+    class ResetPassword {
+
+        @Test
+        @DisplayName("유효한 토큰 — 비밀번호 변경 + Refresh Token 전체 폐기")
+        void resetsPasswordAndRevokesTokens() {
+            given(passwordResetTokenStore.consume("reset-uuid")).willReturn("testuser");
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+            given(passwordEncoder.encode("NewPassword1!")).willReturn("new-encoded-pw");
+
+            userService.resetPassword("reset-uuid", "NewPassword1!");
+
+            verify(passwordEncoder).encode("NewPassword1!");
+            verify(refreshTokenStore).revokeAll("testuser");
+        }
+
+        @Test
+        @DisplayName("유효하지 않은 토큰 — INVALID_RESET_TOKEN 예외 발생")
+        void throwsWhenTokenInvalid() {
+            given(passwordResetTokenStore.consume("invalid-uuid"))
+                    .willThrow(new BusinessException(ErrorCode.INVALID_RESET_TOKEN));
+
+            assertThatThrownBy(() -> userService.resetPassword("invalid-uuid", "NewPassword1!"))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.INVALID_RESET_TOKEN));
+
+            verify(passwordEncoder, never()).encode(anyString());
         }
     }
 }

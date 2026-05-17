@@ -21,7 +21,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -216,6 +219,93 @@ class AuthControllerTest {
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(post("/api/auth/logout"))
                     .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ===== POST /api/auth/forgot-password =====
+
+    @Nested
+    @DisplayName("POST /api/auth/forgot-password")
+    class ForgotPassword {
+
+        @Test
+        @DisplayName("유효한 이메일 요청 → 200 (인증 불필요)")
+        void forgotPasswordSuccess() throws Exception {
+            mockMvc.perform(post("/api/auth/forgot-password")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"email\":\"test@example.com\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+
+            verify(userService).sendPasswordResetEmail("test@example.com");
+        }
+
+        @Test
+        @DisplayName("이메일 형식 불량 → 400")
+        void invalidEmailFormat() throws Exception {
+            mockMvc.perform(post("/api/auth/forgot-password")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"email\":\"not-an-email\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("이메일 누락 → 400")
+        void missingEmail() throws Exception {
+            mockMvc.perform(post("/api/auth/forgot-password")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    // ===== POST /api/auth/reset-password =====
+
+    @Nested
+    @DisplayName("POST /api/auth/reset-password")
+    class ResetPassword {
+
+        @Test
+        @DisplayName("유효한 토큰 + 비밀번호 → 200 (인증 불필요)")
+        void resetPasswordSuccess() throws Exception {
+            mockMvc.perform(post("/api/auth/reset-password")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"token\":\"reset-uuid\",\"newPassword\":\"NewPassword1!\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+
+            verify(userService).resetPassword("reset-uuid", "NewPassword1!");
+        }
+
+        @Test
+        @DisplayName("유효하지 않은 토큰 → 401")
+        void invalidToken() throws Exception {
+            doThrow(new BusinessException(ErrorCode.INVALID_RESET_TOKEN))
+                    .when(userService).resetPassword(anyString(), anyString());
+
+            mockMvc.perform(post("/api/auth/reset-password")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"token\":\"bad-token\",\"newPassword\":\"NewPassword1!\"}"))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.success").value(false));
+        }
+
+        @Test
+        @DisplayName("비밀번호 정책 미충족 (대문자 없음) → 400")
+        void weakPassword() throws Exception {
+            mockMvc.perform(post("/api/auth/reset-password")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"token\":\"reset-uuid\",\"newPassword\":\"password1!\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("토큰 누락 → 400")
+        void missingToken() throws Exception {
+            mockMvc.perform(post("/api/auth/reset-password")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"newPassword\":\"NewPassword1!\"}"))
+                    .andExpect(status().isBadRequest());
         }
     }
 }
