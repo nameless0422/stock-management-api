@@ -26,7 +26,7 @@ Client
   Elasticsearch — 상품 전문 검색 (MySQL fallback)
   MinIO(S3) — 상품 이미지 Presigned URL
   OutboxEventStore — ORDER_CREATED/CANCELLED · PAYMENT_CONFIRMED · SHIPMENT_CREATE · POINT_EARN
-  Flyway V1~V42 — 스키마 버전 관리
+  Flyway V1~V46 — 스키마 버전 관리
 ```
 
 **주요 데이터 흐름**: 주문 생성 → 재고 예약(분산 락) → PENDING → Toss 결제 승인 → Outbox 이벤트(배송·포인트) → CONFIRMED → 배송 상태 전이 → 완료

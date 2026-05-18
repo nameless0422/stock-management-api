@@ -120,16 +120,11 @@
 
 ### 🔴 필수 — 없으면 서비스 운영 불가
 
-**17. 비밀번호 찾기/재설정 API 없음**
+**~~17. 비밀번호 찾기/재설정 API 없음~~ ✅ 완료 (PR #171)**
 
-현재 `PATCH /api/users/me/password`(기존 비밀번호 필요)만 있다.
-비밀번호를 잊은 사용자는 계정 복구 수단이 전혀 없다 — 실서비스에선 CS 문의 폭발.
-
-```
-필요: POST /api/auth/forgot-password   { email }
-      POST /api/auth/reset-password    { token, newPassword }
-흐름: 이메일로 재설정 링크 발송 → 토큰 검증 → 비밀번호 교체
-```
+`POST /api/auth/forgot-password` + `POST /api/auth/reset-password` 구현.
+Redis 기반 일회용 토큰(30분 TTL), Rate Limit 적용(3회/시간, 5회/시간).
+이메일 미존재 시에도 200 반환(계정 열거 방지).
 
 **18. 배송지 수령인 정보 없음**
 
@@ -274,7 +269,7 @@
 
 | 우선순위 | 항목 | 이유 |
 |---|---|---|
-| 🔴 필수 | 비밀번호 찾기/재설정 | 사용자 계정 복구 수단 전무 |
+| ~~🔴 필수~~ | ~~비밀번호 찾기/재설정~~ | ✅ 완료 (PR #171) |
 | 🔴 필수 | 배송지 수령인 정보 | 운송장 필수 항목 누락 |
 | 🟠 중요 | 위시리스트 상품 상세 포함 | N+1 요청 방지 |
 | 🟠 중요 | 위시리스트 페이지네이션 | 대량 데이터 처리 |
@@ -403,15 +398,10 @@ FAILED 결제를 `Payment.resetForRetry(newTossOrderId)`로 PENDING으로 재설
 
 V36 migration. `ShipmentResponse.estimatedDeliveryAt: LocalDate` 추가. `ShipmentUpdateRequest`에 `@FutureOrPresent estimatedDeliveryAt` 포함.
 
-**41. 홈 화면 전용 집계 API 없음**
+**~~41. 홈 화면 전용 집계 API 없음~~ ✅ 완료 (PR #172)**
 
-홈 화면 구성에 필요한 데이터(신상품, 인기상품, 진행 중인 이벤트/배너, 추천 카테고리)를 모으려면 최소 3~4번의 개별 API를 병렬 호출해야 한다. SSR/SSG 환경에서는 직접적인 성능 문제가 된다.
-
-```
-필요: GET /api/home
-     → { banners, newArrivals, popularProducts, featuredCategories }
-     → 서버에서 Redis 캐시 기반으로 단일 응답 반환 (TTL: 5~10분)
-```
+`GET /api/home` 구현. `{ newArrivals, popularProducts, featuredCategories }` 단일 응답.
+Redis 캐시 5분 TTL, 리뷰 수 기반 인기상품, N+1 방지 배치 쿼리.
 
 **42. 결제 수단 상세 정보 없음**
 
@@ -439,7 +429,7 @@ V36 migration. `ShipmentResponse.estimatedDeliveryAt: LocalDate` 추가. `Shipme
 | 🟡 중장기 | 공개 쿠폰 다운로드 목록 | 마케팅 쿠폰 배포 불가 |
 | 🟡 중장기 | 상품 정렬 옵션 부족 | popular/review 정렬 없음 |
 | 🟡 중장기 | 배송 예상 도착일 없음 | 배송 UX |
-| 🟡 중장기 | 홈 화면 집계 API 없음 | SSR 성능 |
+| ~~🟡 중장기~~ | ~~홈 화면 집계 API 없음~~ | ✅ 완료 (PR #172) |
 | 🟡 중장기 | 결제 수단 상세 정보 없음 | 결제 내역 표시 |
 
 ---

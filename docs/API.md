@@ -10,7 +10,10 @@
 
 ```json
 { "success": true,  "data": { ... } }
-{ "success": false, "message": "에러 메시지" }
+{ "success": false, "errorCode": "INSUFFICIENT_STOCK", "message": "에러 메시지" }
+{ "success": false, "errorCode": "VALIDATION_FAILED", "errors": [
+    { "field": "email", "message": "이메일 형식이 올바르지 않습니다." }
+  ]}
 ```
 
 ### 인증
@@ -19,14 +22,16 @@
 Authorization: Bearer <accessToken>
 ```
 
-미인증 요청 → `403 Forbidden` (Spring Security 6 기본 동작)
+미인증 요청 → `401 Unauthorized`, 권한 부족 → `403 Forbidden` (ApiResponse 형식 통일)
 
 ### 주요 에러 코드
 
 | HTTP | 코드 | 설명 |
 |------|------|------|
 | 400 | `INVALID_INPUT` | 요청 파라미터 검증 실패 |
-| 403 | — | 미인증 또는 권한 없음 |
+| 401 | `UNAUTHORIZED` | 미인증 (JWT 없음/만료) |
+| 401 | `INVALID_RESET_TOKEN` | 비밀번호 재설정 토큰 무효/만료 |
+| 403 | `FORBIDDEN` | 권한 없음 |
 | 404 | `PRODUCT_NOT_FOUND` 등 | 리소스 없음 |
 | 409 | `DUPLICATE_ORDER` | 멱등성 키 중복 |
 | 409 | `PAYMENT_PROCESSING_IN_PROGRESS` | 결제 처리 중 중복 요청 |
@@ -85,6 +90,26 @@ Authorization: Bearer <accessToken>
 // 응답: LoginResponse (accessToken + 새 refreshToken)
 ```
 
+### `POST /api/auth/forgot-password`
+
+> 권한: 공개 | Rate Limit: 3회/시간 (IP)
+
+```json
+// 요청
+{ "email": "user1@example.com" }
+// 응답: 200 OK (이메일 존재 여부와 무관하게 동일 응답 — 계정 열거 방지)
+```
+
+### `POST /api/auth/reset-password`
+
+> 권한: 공개 | Rate Limit: 5회/시간 (IP)
+
+```json
+// 요청
+{ "token": "uuid-...", "newPassword": "NewPass1!" }
+// 응답: 200 OK — 성공 시 해당 사용자 Refresh Token 일괄 폐기
+```
+
 ### `GET /api/users/me`
 
 > 권한: USER
@@ -117,6 +142,27 @@ Authorization: Bearer <accessToken>
 ### `DELETE /api/users/me`
 
 > 권한: USER | Soft Delete (`deleted_at` 설정) + 해당 사용자 Refresh Token 일괄 폐기
+
+---
+
+## 홈 화면
+
+### `GET /api/home`
+
+> 권한: 공개 | Redis 캐시 5분 TTL
+
+```json
+// 응답
+{
+  "newArrivals": [ { "id": 1, "name": "...", "price": 39000, ... } ],
+  "popularProducts": [ { "id": 5, "name": "...", "reviewCount": 42, ... } ],
+  "featuredCategories": [ { "id": 1, "name": "전자기기", "productCount": 120, ... } ]
+}
+```
+
+- `newArrivals`: 최신 등록 상품 8건 (ACTIVE, 생성일 내림차순)
+- `popularProducts`: 리뷰 수 기반 인기 상품 8건 (LEFT JOIN Review)
+- `featuredCategories`: 카테고리 트리 (상품 수 포함)
 
 ---
 
@@ -280,7 +326,7 @@ Authorization: Bearer <accessToken>
 
 ### `GET /api/inventory`
 
-> 권한: USER | 필터 검색
+> 권한: ADMIN | 필터 검색
 
 | 쿼리 파라미터 | 설명 |
 |---|---|
@@ -290,7 +336,7 @@ Authorization: Bearer <accessToken>
 
 ### `GET /api/inventory/{productId}/transactions`
 
-> 권한: USER | 재고 변동 이력, 페이징 지원. `(inventory_id, created_at)` 복합 인덱스
+> 권한: ADMIN | 재고 변동 이력, 페이징 지원. `(inventory_id, created_at)` 복합 인덱스
 
 ### `POST /api/inventory/{productId}/receive`
 

@@ -1,6 +1,6 @@
 # DB 스키마
 
-MySQL 8, Flyway 마이그레이션 (V1~V28), ENGINE=InnoDB, CHARSET=utf8mb4
+MySQL 8, Flyway 마이그레이션 (V1~V46), ENGINE=InnoDB, CHARSET=utf8mb4
 
 ---
 
@@ -36,6 +36,24 @@ MySQL 8, Flyway 마이그레이션 (V1~V28), ENGINE=InnoDB, CHARSET=utf8mb4
 | V26 | `coupons.is_public` 컬럼 추가 | 공개 쿠폰 여부 (누구나 claim 가능) |
 | V27 | `orders.created_at` 인덱스, `point_transactions` 복합 인덱스 추가 | 통계 집계 / 환불 조회 최적화 |
 | V28 | `refunds.user_id` 컬럼 추가 | 소유권 검증 시 orders 추가 조회 제거 (비정규화) |
+| V29 | `refunds.user_id` 백필 + FK, `payments` charset, 복합 인덱스 추가 | 기존 데이터 정비 |
+| V30 | 전체 테이블 charset/collation 통일 | utf8mb4_unicode_ci 통일 |
+| V31 | 추가 인덱스 | 누락 인덱스 보완 |
+| V32 | FK 제약 추가 | `cart_items.user_id`, `point_transactions.order_id` FK |
+| V33 | `created_at` DEFAULT 추가 | 6개 테이블 타임스탬프 기본값 |
+| V34 | `outbox_events.next_retry_at` | 지수 백오프 지원 |
+| V35 | `orders.cancel_reason` | 주문 취소 사유 |
+| V36 | `shipments.estimated_delivery_at` | 배송 예상 도착일 |
+| V37 | `cart_items.saved_price` | 장바구니 가격 변동 감지 |
+| V38 | `payments.cancelled_amount` | 부분 취소 누적 금액 |
+| V39 | `refunds` UNIQUE 제거 + INDEX 추가 | 다건 환불(부분 취소) 허용 |
+| V40 | DECIMAL 정밀도 통일 | 전체 금액 컬럼 DECIMAL(19,2) 통일 |
+| V41 | `point_transactions` UNIQUE 제약 | `(order_id, type)` 멱등성 보장 |
+| V42 | `delivery_addresses` 단일 기본 트리거 | 기본 배송지 단일 보장 |
+| V43 | `order_delivery_snapshots` | 주문 시점 배송지 스냅샷 |
+| V44 | `payments` 가상계좌 컬럼 추가 | 은행명·계좌번호·입금기한 |
+| V45 | `payments` 카드 상세 컬럼 추가 | 카드사·카드번호·할부 |
+| V46 | `users.phone_number` | 사용자 전화번호 |
 
 ---
 
@@ -548,11 +566,22 @@ users ──────────── orders ──────── order
 
 ---
 
+## 주문 상태 전이
+
+```
+PENDING ──▶ PAYMENT_IN_PROGRESS ──▶ CONFIRMED ──▶ CANCELLED (결제 취소)
+   │                            └──▶ PENDING (Toss 오류 시 복원)
+   └──▶ CANCELLED (결제 전 취소)
+```
+
+---
+
 ## 결제 상태 전이
 
 ```
-PENDING ──▶ DONE ──▶ CANCELLED
-        └──▶ FAILED
+PENDING ──▶ DONE ──▶ CANCEL_IN_PROGRESS ──▶ CANCELLED
+        └──▶ FAILED                     └──▶ DONE (취소 실패 시 복원)
+                      └──▶ PARTIAL_CANCELLED
 ```
 
 ---
