@@ -77,6 +77,18 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Query("SELECT p.category.id, COUNT(p) FROM Product p WHERE p.category.id IN :ids AND p.status <> 'DISCONTINUED' GROUP BY p.category.id")
     List<Object[]> countActiveProductsByCategoryIds(@Param("ids") Collection<Long> ids);
 
+    /**
+     * 리뷰 수가 많은 ACTIVE 상품을 조회한다 (홈 화면 인기 상품용).
+     * LEFT JOIN으로 리뷰 없는 상품도 포함, 리뷰 수 내림차순 → 최신순 정렬.
+     */
+    @Query(value = "SELECT p FROM Product p LEFT JOIN FETCH p.category " +
+                   "LEFT JOIN Review r ON r.productId = p.id " +
+                   "WHERE p.status = :status " +
+                   "GROUP BY p " +
+                   "ORDER BY COUNT(r) DESC, p.createdAt DESC",
+           countQuery = "SELECT COUNT(DISTINCT p) FROM Product p LEFT JOIN Review r ON r.productId = p.id WHERE p.status = :status")
+    Page<Product> findPopularByStatus(@Param("status") ProductStatus status, Pageable pageable);
+
     /** countActiveProductsByCategoryIds() 결과를 Map으로 변환한다. */
     default Map<Long, Long> countMapByCategoryIds(Collection<Long> ids) {
         return countActiveProductsByCategoryIds(ids).stream()

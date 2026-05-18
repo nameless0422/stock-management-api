@@ -74,6 +74,8 @@ public class CacheConfig {
                         "orders", base.entryTtl(Duration.ofMinutes(5)),
                         // 카테고리 트리: 변경 빈도 매우 낮음 → 30분 + 명시적 evict
                         "categories", base.entryTtl(Duration.ofMinutes(30)),
+                        // 홈 화면 집계: 5분 TTL — 신상품/인기상품/카테고리 통합
+                        "home", base.entryTtl(Duration.ofMinutes(5)),
                         // 시스템 설정: 변경 빈도 매우 낮음 → 1시간 + 명시적 evict
                         "settings", base.entryTtl(Duration.ofHours(1))
                 ))

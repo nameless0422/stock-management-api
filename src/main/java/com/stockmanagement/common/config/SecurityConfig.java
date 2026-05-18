@@ -98,6 +98,8 @@ public class SecurityConfig {
                         .requestMatchers("/shop/**").permitAll()
                         // 결제 테스트 페이지
                         .requestMatchers("/payment-test.html").permitAll()
+                        // 홈 화면 집계 — 비로그인 허용
+                        .requestMatchers(HttpMethod.GET, "/api/home").permitAll()
                         // 상품 조회 — 비로그인 허용 (쇼핑몰 특성상 누구나 열람 가능)
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         // 상품 이미지 — Presigned URL 발급·저장·삭제는 ADMIN 전용
