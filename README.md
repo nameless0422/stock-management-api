@@ -19,7 +19,7 @@ Spring Boot 기반 **쇼핑몰 백엔드 포트폴리오 프로젝트**.
 | **ES 검색 + Fallback** | 상품 키워드·가격·카테고리 복합 검색(Elasticsearch), 장애 시 자동 MySQL fallback |
 | **Circuit Breaker** | TossPayments HTTP 호출 실패 누적 시 회로 차단 → 빠른 실패 응답 |
 | **배치 처리** | 쿠폰 만료 비활성화·일별 재고 스냅샷·일별 주문 통계 스케줄러 (`@Scheduled`, `@ConditionalOnProperty`, 멱등성 보장) |
-| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **647개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
+| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **655개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
 
 ---
 
@@ -97,7 +97,7 @@ docker compose -f docker/docker-compose.yml up -d mysql redis elasticsearch
 ./gradlew bootRun
 ```
 
-Flyway가 기동 시 V1~V42 마이그레이션을 자동 실행합니다.
+Flyway가 기동 시 V1~V46 마이그레이션을 자동 실행합니다.
 
 ### 환경 변수
 
@@ -139,7 +139,7 @@ Flyway가 기동 시 V1~V42 마이그레이션을 자동 실행합니다.
 | 통합 | `integration/` | Testcontainers (MySQL + Redis + ES), Flyway 실행, 실제 HTTP 흐름 E2E |
 | 동시성 | `integration/InventoryConcurrencyTest` | 동시 입고 lost update · 재고 예약 overselling 검증 |
 
-현재 총 **647개** 테스트 전체 통과.
+현재 총 **655개** 테스트 전체 통과.
 
 ---
 
@@ -198,6 +198,7 @@ erDiagram
         varchar username UK
         varchar password
         varchar email UK
+        varchar phone_number "NULL 허용"
         varchar role "USER|ADMIN"
         datetime deleted_at "NULL=활성 계정"
         datetime created_at
@@ -281,7 +282,7 @@ erDiagram
     orders {
         bigint id PK
         bigint user_id FK
-        varchar status "PENDING|CONFIRMED|CANCELLED"
+        varchar status "PENDING|PAYMENT_IN_PROGRESS|CONFIRMED|CANCELLED"
         decimal total_amount
         varchar idempotency_key UK
         bigint delivery_address_id FK "NULL=미지정"
@@ -313,8 +314,15 @@ erDiagram
         varchar payment_key "Toss 발급, DONE 이후 설정"
         varchar toss_order_id UK
         decimal amount
-        varchar status "PENDING|DONE|FAILED|CANCELLED|PARTIAL_CANCELLED"
+        varchar status "PENDING|DONE|FAILED|CANCEL_IN_PROGRESS|CANCELLED|PARTIAL_CANCELLED"
         varchar method "카드|가상계좌 등"
+        varchar card_company "NULL, 카드 결제 시"
+        varchar card_number "NULL, 마스킹 번호"
+        int installment_plan_months "NULL, 할부 개월"
+        varchar virtual_account_bank "NULL, 가상계좌 시"
+        varchar virtual_account_number "NULL"
+        datetime virtual_account_due_date "NULL"
+        decimal cancelled_amount "부분 취소 누적"
         datetime requested_at
         datetime approved_at
     }
@@ -426,6 +434,17 @@ erDiagram
     coupons ||--o{ coupon_usages : "사용 이력"
     coupons ||--o{ user_coupons : "발급 이력"
 
+    order_delivery_snapshots {
+        bigint id PK
+        bigint order_id UK "FK"
+        varchar recipient
+        varchar phone
+        varchar zip_code
+        varchar address1
+        varchar address2
+    }
+
+    orders ||--o| order_delivery_snapshots : "배송지 스냅샷 (1:1)"
     orders ||--|{ order_items : "주문 항목"
     orders ||--o{ order_status_history : "상태 이력"
     orders ||--o| payments : "결제 (1:1)"
@@ -581,7 +600,9 @@ stateDiagram-v2
 
     state "주문 (Order)" as Order {
         [*] --> PENDING : 주문 생성
-        PENDING --> CONFIRMED : 결제 완료
+        PENDING --> PAYMENT_IN_PROGRESS : 결제 시작
+        PAYMENT_IN_PROGRESS --> CONFIRMED : 결제 완료
+        PAYMENT_IN_PROGRESS --> PENDING : 결제 실패 (복원)
         PENDING --> CANCELLED : 취소·만료
         CONFIRMED --> CANCELLED : 환불
     }
@@ -768,6 +789,10 @@ available = onHand - reserved - allocated
 | V40 | `DECIMAL` precision 통일 (`DECIMAL(15,2)`) |
 | V41 | `point_transactions(order_id, type)` UNIQUE 제약 — 이중 적립 방지 |
 | V42 | `delivery_addresses` `BEFORE INSERT/UPDATE` 트리거 — 기본 배송지 단일 보장 |
+| V43 | `order_delivery_snapshots` — 주문 시점 배송지 스냅샷 |
+| V44 | `payments` 가상계좌 컬럼 추가 (`virtual_account_bank/number/due_date`) |
+| V45 | `payments` 카드 결제 상세 추가 (`card_company/number/installment_plan_months`) |
+| V46 | `users.phone_number` 추가 |
 
 ---
 
@@ -783,6 +808,8 @@ available = onHand - reserved - allocated
 | POST | `/api/auth/login` | 로그인 → JWT + Refresh Token | 공개 |
 | POST | `/api/auth/logout` | 로그아웃 (JWT 블랙리스트 + Refresh Token revoke) | 공개 |
 | POST | `/api/auth/refresh` | Access Token 재발급 (Refresh Token rotation) | 공개 |
+| POST | `/api/auth/forgot-password` | 비밀번호 재설정 이메일 발송 (Rate Limit 3회/시간) | 공개 |
+| POST | `/api/auth/reset-password` | 비밀번호 재설정 (토큰 검증, Rate Limit 5회/시간) | 공개 |
 | GET | `/api/users/me` | 내 정보 조회 | USER |
 | PATCH | `/api/users/me` | 프로필 수정 (이메일 변경) | USER |
 | PATCH | `/api/users/me/password` | 비밀번호 변경 (성공 시 Refresh Token 일괄 폐기) | USER |
@@ -925,6 +952,12 @@ available = onHand - reserved - allocated
 | GET | `/api/refunds/{id}` | 환불 단건 조회 (본인만) | USER |
 | GET | `/api/payments/{paymentId}/refund` | 결제 ID로 환불 조회 (본인만) | USER |
 
+### 홈 화면
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| GET | `/api/home` | 홈 화면 집계 (신상품·인기상품·카테고리, Redis 캐시 5분 TTL) | 공개 |
+
 ### 관리자 REST API
 
 ADMIN JWT 인증 필요.
@@ -949,7 +982,8 @@ ADMIN JWT 인증 필요.
 
 ```json
 { "success": true,  "data": { ... } }
-{ "success": false, "message": "재고가 부족합니다." }
+{ "success": false, "message": "재고가 부족합니다.", "errorCode": "INSUFFICIENT_STOCK" }
+{ "success": false, "message": "입력값이 올바르지 않습니다.", "errors": [{ "field": "quantity", "message": "must be greater than 0" }] }
 ```
 
 ### 로그인
@@ -1030,7 +1064,7 @@ Authorization: Bearer <token>
 | `SecurityConfig` | @Order(2) | 나머지 전체 | JWT (stateless) |
 
 - 미인증 → 401
-- 공개: `/api/auth/**`, `/api/products/**`, `/api/categories/**`, `/actuator/health`, `/actuator/info`, `/api/payments/webhook`, `/swagger-ui/**`
+- 공개: `/api/auth/**`, `/api/products/**`, `/api/categories/**`, `/api/home`, `/actuator/health`, `/actuator/info`, `/api/payments/webhook`, `/swagger-ui/**`
 - ADMIN 전용: `/actuator/**` (health/info 제외), 상품·재고 read/write, 쿠폰 관리, 배송 상태 변경, 카테고리 write
 
 ### 추가 보안 기능
