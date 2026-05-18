@@ -23,16 +23,22 @@ import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
+import com.stockmanagement.common.email.EmailService;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.LoginRateLimiter;
+import com.stockmanagement.common.security.PasswordResetTokenStore;
 import com.stockmanagement.common.security.RefreshTokenStore;
 import com.stockmanagement.common.security.JwtTokenProvider;
-import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.Nullable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import lombok.RequiredArgsConstructor;
 
 import java.util.HashSet;
 import java.util.List;
@@ -45,6 +51,7 @@ import java.util.stream.Collectors;
  *
  * <p>회원가입, 로그인(JWT + Refresh Token 발급), 토큰 재발급, 내 정보 조회, 내 주문 목록 조회를 담당한다.
  */
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -64,6 +71,11 @@ public class UserService {
     private final JwtBlacklist jwtBlacklist;
     private final LoginRateLimiter loginRateLimiter;
     private final RefreshTokenStore refreshTokenStore;
+    private final PasswordResetTokenStore passwordResetTokenStore;
+
+    @Nullable
+    @Autowired(required = false)
+    private EmailService emailService;
 
     /** 회원가입. username/email 중복 시 예외. */
     @Transactional
@@ -229,5 +241,38 @@ public class UserService {
         Map<Long, com.stockmanagement.domain.shipment.entity.ShipmentStatus> statusMap =
                 shipmentRepository.findStatusMapByOrderIds(orderIds);
         return orders.map(o -> OrderResponse.from(o, reviewedIds, statusMap.get(o.getId())));
+    }
+
+    /**
+     * 비밀번호 재설정 이메일 발송.
+     *
+     * <p>보안: 사용자가 존재하지 않아도 동일한 응답을 반환하여 이메일 존재 여부를 노출하지 않는다.
+     */
+    public void sendPasswordResetEmail(String email) {
+        userRepository.findByEmail(email).ifPresentOrElse(
+                user -> {
+                    String token = passwordResetTokenStore.issue(user.getUsername());
+                    if (emailService != null) {
+                        emailService.sendPasswordResetEmail(email, token);
+                    } else {
+                        log.warn("[PasswordReset] mail.enabled=false — 토큰 발급됨(token={})", token);
+                    }
+                },
+                () -> log.debug("[PasswordReset] 존재하지 않는 이메일 요청: {}", email)
+        );
+    }
+
+    /**
+     * 비밀번호 재설정 — 토큰 검증 후 새 비밀번호로 교체.
+     *
+     * <p>비밀번호 변경 후 해당 사용자의 모든 Refresh Token을 폐기하여 기존 세션을 무효화한다.
+     */
+    @Transactional
+    public void resetPassword(String token, String newPassword) {
+        String username = passwordResetTokenStore.consume(token);
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        user.updatePassword(passwordEncoder.encode(newPassword));
+        refreshTokenStore.revokeAll(username);
     }
 }
