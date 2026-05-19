@@ -113,6 +113,12 @@ public class ProductSearchService {
         log.debug("ES 색인 완료. productId={}", product.getId());
     }
 
+    /** 리뷰/판매 통계를 포함한 ES 색인. */
+    public void index(Product product, long reviewCount, long salesCount) {
+        productSearchRepository.save(ProductDocument.from(product, reviewCount, salesCount));
+        log.debug("ES 색인 완료. productId={} reviewCount={} salesCount={}", product.getId(), reviewCount, salesCount);
+    }
+
     /**
      * 상품을 Elasticsearch 색인에서 삭제한다.
      * ProductService의 delete/changeStatus(DISCONTINUED)에서 호출된다.
@@ -135,6 +141,10 @@ public class ProductSearchService {
                 options.add(SortOptions.of(s -> s.field(f -> f.field("price").order(SortOrder.Desc))));
             case "newest" ->
                 options.add(SortOptions.of(s -> s.field(f -> f.field("createdAt").order(SortOrder.Desc))));
+            case "popular" ->
+                options.add(SortOptions.of(s -> s.field(f -> f.field("salesCount").order(SortOrder.Desc))));
+            case "review" ->
+                options.add(SortOptions.of(s -> s.field(f -> f.field("reviewCount").order(SortOrder.Desc))));
             // relevance: 별도 지정 없음 — ES 기본 _score 정렬
             default -> { }
         }
