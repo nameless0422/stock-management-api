@@ -44,6 +44,8 @@ public class ProductSearchRequest {
      *   <li>{@code price_asc} — 가격 오름차순
      *   <li>{@code price_desc} — 가격 내림차순
      *   <li>{@code newest} — 최신 등록순
+     *   <li>{@code popular} — 판매량순 (ES 전용)
+     *   <li>{@code review} — 리뷰순 (ES 전용)
      * </ul>
      */
     private String sort;

@@ -1,7 +1,9 @@
 package com.stockmanagement.domain.product.service;
 
 import com.stockmanagement.common.event.ProductSyncEvent;
+import com.stockmanagement.domain.order.repository.OrderItemRepository;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.product.review.repository.ReviewRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -24,6 +26,8 @@ public class ProductEventListener {
 
     private final ProductRepository productRepository;
     private final ProductSearchService productSearchService;
+    private final ReviewRepository reviewRepository;
+    private final OrderItemRepository orderItemRepository;
 
     /**
      * 상품 변경이 DB에 커밋된 후 ES 색인을 동기화한다.
@@ -44,7 +48,9 @@ public class ProductEventListener {
         try {
             productRepository.findById(productId).ifPresentOrElse(
                     product -> {
-                        productSearchService.index(product);
+                        long reviewCount = reviewRepository.countByProductId(productId);
+                        long salesCount = orderItemRepository.sumSalesCountByProductId(productId);
+                        productSearchService.index(product, reviewCount, salesCount);
                         log.debug("[ProductEventListener] ES 색인 완료. productId={}", productId);
                     },
                     () -> log.warn("[ProductEventListener] ES 색인 대상 상품 미존재. productId={}", productId)

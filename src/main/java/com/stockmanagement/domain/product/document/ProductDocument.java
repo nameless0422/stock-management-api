@@ -60,8 +60,19 @@ public class ProductDocument {
     @Field(type = FieldType.Date, format = {}, pattern = "uuuu-MM-dd'T'HH:mm:ss.SSSSSS||uuuu-MM-dd'T'HH:mm:ss.SSS||uuuu-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
 
+    @Field(type = FieldType.Long)
+    private long reviewCount;
+
+    @Field(type = FieldType.Long)
+    private long salesCount;
+
     /** Product JPA 엔티티로부터 ES 문서를 생성한다. */
     public static ProductDocument from(Product product) {
+        return from(product, 0L, 0L);
+    }
+
+    /** Product JPA 엔티티 + 리뷰/판매 통계를 포함한 ES 문서를 생성한다. */
+    public static ProductDocument from(Product product, long reviewCount, long salesCount) {
         return ProductDocument.builder()
                 .id(String.valueOf(product.getId()))
                 .name(product.getName())
@@ -72,6 +83,8 @@ public class ProductDocument {
                 .status(product.getStatus() != null ? product.getStatus().name() : null)
                 .thumbnailUrl(product.getThumbnailUrl())
                 .createdAt(product.getCreatedAt())
+                .reviewCount(reviewCount)
+                .salesCount(salesCount)
                 .build();
     }
 
