@@ -88,6 +88,9 @@ public enum ErrorCode {
     WISHLIST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 위시리스트에 추가된 상품입니다."),
     WISHLIST_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "위시리스트에서 해당 상품을 찾을 수 없습니다."),
 
+    // ===== RestockNotification =====
+    RESTOCK_ALREADY_SUBSCRIBED(HttpStatus.CONFLICT, "이미 재입고 알림을 신청한 상품입니다."),
+
     // ===== Point =====
     INSUFFICIENT_POINTS(HttpStatus.BAD_REQUEST, "포인트 잔액이 부족합니다."),
     INVALID_POINT_AMOUNT(HttpStatus.BAD_REQUEST, "포인트 사용 금액이 올바르지 않습니다."),

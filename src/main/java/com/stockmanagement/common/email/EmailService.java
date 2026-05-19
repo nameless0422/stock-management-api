@@ -131,6 +131,18 @@ public class EmailService {
         send(to, "[StockMall] 비밀번호 재설정 안내", wrap(content));
     }
 
+    public void sendRestockAvailable(String to, String productName) {
+        String content = """
+                <h2 style="margin:0 0 6px;font-size:18px;color:#111;">재입고 알림 📦</h2>
+                <p style="margin:0 0 20px;color:#666;font-size:14px;">관심 상품이 재입고되었습니다!</p>
+                %s
+                <p style="font-size:13px;color:#555;margin-top:20px;">재고가 한정되어 있으니 서둘러 구매해 주세요.</p>
+                """.formatted(infoBox(
+                row("상품명", productName)
+        ));
+        send(to, "[StockMall] 재입고 알림 — " + HtmlUtils.htmlEscape(productName), wrap(content));
+    }
+
     // ══ 내부 헬퍼 ══
 
     /**
