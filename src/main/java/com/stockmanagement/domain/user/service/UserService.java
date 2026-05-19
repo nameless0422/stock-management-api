@@ -10,6 +10,7 @@ import com.stockmanagement.domain.order.service.OrderCommandService;
 import com.stockmanagement.domain.point.entity.UserPoint;
 import com.stockmanagement.domain.point.repository.UserPointRepository;
 import com.stockmanagement.domain.product.review.repository.ReviewRepository;
+import com.stockmanagement.domain.product.notification.repository.RestockNotificationRepository;
 import com.stockmanagement.domain.product.wishlist.repository.WishlistRepository;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.domain.user.address.repository.DeliveryAddressRepository;
@@ -66,6 +67,7 @@ public class UserService {
     private final ReviewRepository reviewRepository;
     private final UserPointRepository userPointRepository;
     private final ShipmentRepository shipmentRepository;
+    private final RestockNotificationRepository restockNotificationRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtBlacklist jwtBlacklist;
@@ -168,10 +170,11 @@ public class UserService {
 
         // PENDING 주문 강제 취소 — 재고 예약 해제 + 쿠폰 반환 + 포인트 환불
         orderCommandService.cancelPendingOrdersByUser(user.getId());
-        // 장바구니, 위시리스트, 배송지 일괄 삭제
+        // 장바구니, 위시리스트, 배송지, 재입고 알림 일괄 삭제
         cartRepository.deleteByUserId(user.getId());
         wishlistRepository.deleteByUserId(user.getId());
         deliveryAddressRepository.deleteByUserId(user.getId());
+        restockNotificationRepository.deleteByUserId(user.getId());
 
         // unique 슬롯 해방: 탈퇴 계정이 email/username UNIQUE KEY를 점유하지 않도록 익명화
         user.anonymize(user.getId());

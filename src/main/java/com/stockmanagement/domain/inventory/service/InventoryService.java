@@ -17,6 +17,7 @@ import com.stockmanagement.domain.inventory.repository.InventorySpecification;
 import com.stockmanagement.domain.inventory.repository.InventoryTransactionRepository;
 import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.event.LowStockEvent;
+import com.stockmanagement.common.event.RestockEvent;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
@@ -133,8 +134,16 @@ public class InventoryService {
                         Inventory.builder().product(product).build()
                 ));
 
+        int availableBefore = inventory.getAvailable();
         inventory.receive(request.getQuantity());
         recordTransaction(inventory, InventoryTransactionType.RECEIVE, request.getQuantity(), request.getNote());
+
+        // 재입고 알림 — 가용 재고가 0에서 양수로 전환될 때 발행
+        if (availableBefore <= 0 && inventory.getAvailable() > 0) {
+            eventPublisher.publishEvent(new RestockEvent(
+                    productId, product.getName(), inventory.getAvailable()));
+        }
+
         return InventoryResponse.from(inventory);
     }
 
