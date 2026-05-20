@@ -18,6 +18,7 @@ import com.stockmanagement.domain.order.repository.OrderDeliverySnapshotReposito
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderSpecification;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
@@ -57,6 +58,7 @@ public class OrderQueryService {
     private final OrderDeliverySnapshotRepository deliverySnapshotRepository;
     private final CouponService couponService;
     private final PointService pointService;
+    private final SystemSettingService systemSettingService;
 
     /**
      * 주문 단건을 조회한다.
@@ -199,7 +201,7 @@ public class OrderQueryService {
         }
         BigDecimal pointDiscount = BigDecimal.valueOf(usePoints);
 
-        BigDecimal shippingFee = BigDecimal.ZERO;
+        BigDecimal shippingFee = systemSettingService.calculateShippingFee(originalAmount);
         BigDecimal finalAmount = originalAmount.subtract(couponDiscount).subtract(pointDiscount).add(shippingFee);
         if (finalAmount.compareTo(BigDecimal.ZERO) < 0) finalAmount = BigDecimal.ZERO;
 

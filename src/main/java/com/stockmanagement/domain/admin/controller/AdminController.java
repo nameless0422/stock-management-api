@@ -6,6 +6,8 @@ import com.stockmanagement.domain.admin.dto.DashboardResponse;
 import com.stockmanagement.domain.admin.dto.LowStockThresholdRequest;
 import com.stockmanagement.domain.admin.dto.LowStockThresholdResponse;
 import com.stockmanagement.domain.admin.dto.RoleUpdateRequest;
+import com.stockmanagement.domain.admin.dto.ShippingPolicyRequest;
+import com.stockmanagement.domain.admin.dto.ShippingPolicyResponse;
 import com.stockmanagement.domain.admin.service.AdminService;
 import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.dto.DailyInventorySnapshotResponse;
@@ -120,5 +122,21 @@ public class AdminController {
             @RequestBody @Valid LowStockThresholdRequest request,
             @AuthenticationPrincipal String username) {
         return ApiResponse.ok(systemSettingService.updateLowStockThreshold(request, username));
+    }
+
+    @Operation(summary = "배송비 정책 조회",
+               description = "현재 기본 배송비와 무료배송 기준 금액을 반환한다.")
+    @GetMapping("/settings/shipping-policy")
+    public ApiResponse<ShippingPolicyResponse> getShippingPolicy() {
+        return ApiResponse.ok(systemSettingService.getShippingPolicyDetails());
+    }
+
+    @Operation(summary = "배송비 정책 변경",
+               description = "기본 배송비와 무료배송 기준 금액을 변경한다. 변경 즉시 주문 미리보기에 반영된다.")
+    @PutMapping("/settings/shipping-policy")
+    public ApiResponse<ShippingPolicyResponse> updateShippingPolicy(
+            @RequestBody @Valid ShippingPolicyRequest request,
+            @AuthenticationPrincipal String username) {
+        return ApiResponse.ok(systemSettingService.updateShippingPolicy(request, username));
     }
 }

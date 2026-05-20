@@ -5,6 +5,7 @@ import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.domain.admin.dto.AdminOrderResponse;
 import com.stockmanagement.domain.admin.dto.DashboardResponse;
+import com.stockmanagement.domain.admin.dto.ShippingPolicyResponse;
 import com.stockmanagement.domain.admin.service.AdminService;
 import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.dto.DailyInventorySnapshotResponse;
@@ -25,6 +26,8 @@ import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -198,6 +201,65 @@ class AdminControllerTest {
                             .param("date", "2025-01-01"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
+        }
+    }
+
+    // ===== 배송비 정책 =====
+
+    @Nested
+    @DisplayName("GET /api/admin/settings/shipping-policy")
+    class GetShippingPolicy {
+
+        @Test
+        @WithMockUser(roles = "ADMIN")
+        @DisplayName("ADMIN — 배송비 정책 조회 → 200")
+        void adminGetsShippingPolicy() throws Exception {
+            given(systemSettingService.getShippingPolicyDetails())
+                    .willReturn(new ShippingPolicyResponse(
+                            new BigDecimal("3000"), new BigDecimal("50000"), "admin", LocalDateTime.now()));
+
+            mockMvc.perform(get("/api/admin/settings/shipping-policy"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.defaultFee").value(3000));
+        }
+
+        @Test
+        @WithMockUser(roles = "USER")
+        @DisplayName("USER — 배송비 정책 조회 → 403")
+        void userForbidden() throws Exception {
+            mockMvc.perform(get("/api/admin/settings/shipping-policy"))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    @Nested
+    @DisplayName("PUT /api/admin/settings/shipping-policy")
+    class UpdateShippingPolicy {
+
+        @Test
+        @WithMockUser(roles = "ADMIN")
+        @DisplayName("ADMIN — 배송비 정책 변경 → 200")
+        void adminUpdatesShippingPolicy() throws Exception {
+            given(systemSettingService.updateShippingPolicy(any(), any()))
+                    .willReturn(new ShippingPolicyResponse(
+                            new BigDecimal("2500"), new BigDecimal("30000"), "admin", LocalDateTime.now()));
+
+            mockMvc.perform(put("/api/admin/settings/shipping-policy")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"defaultFee\":2500,\"freeShippingThreshold\":30000}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.defaultFee").value(2500));
+        }
+
+        @Test
+        @WithMockUser(roles = "USER")
+        @DisplayName("USER — 배송비 정책 변경 → 403")
+        void userForbidden() throws Exception {
+            mockMvc.perform(put("/api/admin/settings/shipping-policy")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"defaultFee\":2500,\"freeShippingThreshold\":30000}"))
+                    .andExpect(status().isForbidden());
         }
     }
 }

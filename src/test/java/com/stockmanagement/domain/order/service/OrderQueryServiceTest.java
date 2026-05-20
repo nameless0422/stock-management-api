@@ -2,6 +2,7 @@ package com.stockmanagement.domain.order.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.coupon.service.CouponService;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderSearchRequest;
@@ -62,6 +63,9 @@ class OrderQueryServiceTest {
 
     @Mock
     private PointService pointService;
+
+    @Mock
+    private SystemSettingService systemSettingService;
 
     @InjectMocks
     private OrderQueryService orderQueryService;
