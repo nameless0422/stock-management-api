@@ -219,4 +219,31 @@ class ProductControllerTest {
                     .andExpect(status().isForbidden());
         }
     }
+
+    // ===== GET /api/products/search/suggestions =====
+
+    @Nested
+    @DisplayName("GET /api/products/search/suggestions")
+    class Suggest {
+
+        @Test
+        @DisplayName("비로그인 — 자동완성 조회 → 200")
+        void suggestWithoutAuth() throws Exception {
+            given(productService.suggest(eq("노트"), eq(10)))
+                    .willReturn(List.of("노트북", "노트북 Pro"));
+
+            mockMvc.perform(get("/api/products/search/suggestions").param("q", "노트"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.suggestions[0]").value("노트북"))
+                    .andExpect(jsonPath("$.data.suggestions[1]").value("노트북 Pro"));
+        }
+
+        @Test
+        @DisplayName("검색어 없음 → 400")
+        void suggestWithoutQuery() throws Exception {
+            mockMvc.perform(get("/api/products/search/suggestions"))
+                    .andExpect(status().isBadRequest());
+        }
+    }
 }

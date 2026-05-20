@@ -21,7 +21,9 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Elasticsearch 기반 상품 검색 서비스.
@@ -126,6 +128,39 @@ public class ProductSearchService {
     public void deleteFromIndex(Long productId) {
         productSearchRepository.deleteById(String.valueOf(productId));
         log.debug("ES 색인 삭제 완료. productId={}", productId);
+    }
+
+    /**
+     * 검색어 prefix로 상품명 자동완성 후보를 반환한다.
+     *
+     * <p>match_phrase_prefix 쿼리를 사용하여 nori_analyzer 기반으로 검색한다.
+     * ACTIVE 상태 상품만 대상이며, 중복 제거 후 최대 size개를 반환한다.
+     *
+     * @param prefix 검색 접두사
+     * @param size   최대 반환 개수
+     * @return 상품명 리스트
+     */
+    public List<String> suggest(String prefix, int size) {
+        BoolQuery.Builder boolQuery = new BoolQuery.Builder();
+        boolQuery.filter(f -> f.term(t -> t.field("status").value("ACTIVE")));
+        boolQuery.must(m -> m.matchPhrasePrefix(mpp -> mpp
+                .field("name")
+                .query(prefix)
+        ));
+
+        NativeQuery query = NativeQuery.builder()
+                .withQuery(q -> q.bool(boolQuery.build()))
+                .withPageable(PageRequest.of(0, size * 2))
+                .build();
+
+        SearchHits<ProductDocument> hits = elasticsearchOperations.search(query, ProductDocument.class);
+
+        Set<String> seen = new LinkedHashSet<>();
+        for (var hit : hits) {
+            seen.add(hit.getContent().getName());
+            if (seen.size() >= size) break;
+        }
+        return new ArrayList<>(seen);
     }
 
     // ===== 내부 헬퍼 =====

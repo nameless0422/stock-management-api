@@ -7,11 +7,13 @@ import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.dto.ProductSearchRequest;
 import com.stockmanagement.domain.product.dto.ProductStatusRequest;
 import com.stockmanagement.domain.product.dto.ProductUpdateRequest;
+import com.stockmanagement.domain.product.dto.SuggestResponse;
 import com.stockmanagement.domain.product.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.constraints.Size;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -57,6 +59,13 @@ public class ProductController {
             @PageableDefault(size = 20, sort = "id") Pageable pageable,
             @CurrentUserId(required = false) Long userId) {
         return ApiResponse.ok(productService.getList(pageable, request, userId));
+    }
+
+    @Operation(summary = "검색 자동완성", description = "검색어 prefix로 상품명 자동완성 후보를 반환한다. 최대 10건.")
+    @GetMapping("/search/suggestions")
+    public ApiResponse<SuggestResponse> suggest(
+            @RequestParam @Size(min = 1, max = 200, message = "검색어는 1~200자여야 합니다.") String q) {
+        return ApiResponse.ok(new SuggestResponse(productService.suggest(q, 10)));
     }
 
     @Operation(summary = "상품 수정", description = "ADMIN 전용.")

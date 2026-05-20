@@ -166,6 +166,19 @@ public class ProductService {
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
     }
 
+    /**
+     * 검색어 prefix로 상품명 자동완성 후보를 반환한다.
+     * ES 장애 시 빈 리스트를 반환한다.
+     */
+    public List<String> suggest(String prefix, int size) {
+        try {
+            return productSearchService.suggest(prefix, size);
+        } catch (Exception e) {
+            log.warn("검색 자동완성 실패 (ES 오류). prefix={}", prefix, e);
+            return List.of();
+        }
+    }
+
     /** 전체 상품 페이징 조회 (ACTIVE + DISCONTINUED, 관리자 전용). search가 있으면 상품명/SKU로 필터링 */
     public Page<ProductResponse> getListAll(Pageable pageable, String search) {
         Page<Product> products = (search != null && !search.isBlank())
