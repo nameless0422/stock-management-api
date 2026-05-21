@@ -6,6 +6,7 @@ import com.stockmanagement.domain.order.cart.repository.CartRepository;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.service.OrderCommandService;
+import com.stockmanagement.domain.notification.repository.NotificationRepository;
 import com.stockmanagement.domain.product.notification.repository.RestockNotificationRepository;
 import com.stockmanagement.domain.product.wishlist.repository.WishlistRepository;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
@@ -99,6 +100,9 @@ class UserServiceTest {
 
     @Mock
     private RestockNotificationRepository restockNotificationRepository;
+
+    @Mock
+    private NotificationRepository notificationRepository;
 
     @Mock
     private EmailService emailService;
