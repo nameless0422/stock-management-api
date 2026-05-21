@@ -9,6 +9,7 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.service.OrderCommandService;
 import com.stockmanagement.domain.point.entity.UserPoint;
 import com.stockmanagement.domain.point.repository.UserPointRepository;
+import com.stockmanagement.domain.notification.repository.NotificationRepository;
 import com.stockmanagement.domain.product.review.repository.ReviewRepository;
 import com.stockmanagement.domain.product.notification.repository.RestockNotificationRepository;
 import com.stockmanagement.domain.product.wishlist.repository.WishlistRepository;
@@ -68,6 +69,7 @@ public class UserService {
     private final UserPointRepository userPointRepository;
     private final ShipmentRepository shipmentRepository;
     private final RestockNotificationRepository restockNotificationRepository;
+    private final NotificationRepository notificationRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtBlacklist jwtBlacklist;
@@ -175,6 +177,7 @@ public class UserService {
         wishlistRepository.deleteByUserId(user.getId());
         deliveryAddressRepository.deleteByUserId(user.getId());
         restockNotificationRepository.deleteByUserId(user.getId());
+        notificationRepository.deleteByUserId(user.getId());
 
         // unique 슬롯 해방: 탈퇴 계정이 email/username UNIQUE KEY를 점유하지 않도록 익명화
         user.anonymize(user.getId());

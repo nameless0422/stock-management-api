@@ -134,6 +134,7 @@ abstract class AbstractIntegrationTest {
             stmt.execute("DELETE FROM shipments");
             stmt.execute("DELETE FROM reviews");
             stmt.execute("DELETE FROM wishlist_items");
+            stmt.execute("DELETE FROM notifications");
             stmt.execute("DELETE FROM restock_notifications");
             stmt.execute("DELETE FROM refunds");
             stmt.execute("DELETE FROM order_items");
