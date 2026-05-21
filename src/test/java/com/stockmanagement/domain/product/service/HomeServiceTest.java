@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.product.service;
 
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.entity.Inventory;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.category.dto.CategoryResponse;
@@ -43,6 +44,9 @@ class HomeServiceTest {
 
     @Mock
     private CategoryService categoryService;
+
+    @Mock
+    private SystemSettingService systemSettingService;
 
     @InjectMocks
     private HomeService homeService;

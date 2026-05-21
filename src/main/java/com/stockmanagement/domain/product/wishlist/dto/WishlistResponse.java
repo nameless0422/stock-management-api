@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.product.wishlist.dto;
 
+import com.stockmanagement.domain.inventory.entity.StockStatus;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
 import com.stockmanagement.domain.product.wishlist.entity.WishlistItem;
@@ -20,13 +21,13 @@ public class WishlistResponse {
     private String thumbnailUrl;
     private LocalDateTime addedAt;
 
-    /** 현재 가용 재고 수량 — null이면 재고 정보 미포함 */
-    private Integer availableQuantity;
+    /** 재고 상태 (IN_STOCK / LOW_STOCK / OUT_OF_STOCK) — null이면 재고 정보 미포함 */
+    private StockStatus stockStatus;
 
     /** 상품 판매 상태 */
     private ProductStatus productStatus;
 
-    public static WishlistResponse of(WishlistItem item, Product product, Integer availableQuantity) {
+    public static WishlistResponse of(WishlistItem item, Product product, StockStatus stockStatus) {
         return WishlistResponse.builder()
                 .id(item.getId())
                 .productId(item.getProductId())
@@ -34,7 +35,7 @@ public class WishlistResponse {
                 .productPrice(product.getPrice())
                 .thumbnailUrl(product.getThumbnailUrl())
                 .addedAt(item.getCreatedAt())
-                .availableQuantity(availableQuantity)
+                .stockStatus(stockStatus)
                 .productStatus(product.getStatus())
                 .build();
     }

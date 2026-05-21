@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.order.cart.dto;
 
+import com.stockmanagement.domain.inventory.entity.StockStatus;
 import com.stockmanagement.domain.order.cart.entity.CartItem;
 import lombok.Builder;
 import lombok.Getter;
@@ -19,8 +20,8 @@ public class CartItemResponse {
 
     /** 상품 대표 이미지 URL — null이면 이미지 없음 */
     private String thumbnailUrl;
-    /** 현재 가용 재고 수량 — null이면 재고 정보 미포함 */
-    private Integer availableQuantity;
+    /** 재고 상태 (IN_STOCK / LOW_STOCK / OUT_OF_STOCK) — null이면 재고 정보 미포함 */
+    private StockStatus stockStatus;
     /** 담은 수량만큼 구매 가능한지 여부 — null이면 재고 정보 미포함 */
     private Boolean isAvailable;
     /** 장바구니 담은 시점의 단가 — null이면 기록 없음 (이전 데이터) */
@@ -29,10 +30,10 @@ public class CartItemResponse {
     private Boolean priceChanged;
 
     public static CartItemResponse from(CartItem item) {
-        return from(item, null);
+        return from(item, null, null);
     }
 
-    public static CartItemResponse from(CartItem item, Integer availableQuantity) {
+    public static CartItemResponse from(CartItem item, Integer availableQuantity, StockStatus stockStatus) {
         BigDecimal unitPrice = item.getProduct().getPrice();
         BigDecimal savedPrice = item.getSavedPrice();
         Boolean priceChanged = savedPrice != null ? savedPrice.compareTo(unitPrice) != 0 : null;
@@ -43,7 +44,7 @@ public class CartItemResponse {
                 .unitPrice(unitPrice)
                 .quantity(item.getQuantity())
                 .subtotal(unitPrice.multiply(BigDecimal.valueOf(item.getQuantity())))
-                .availableQuantity(availableQuantity)
+                .stockStatus(stockStatus)
                 .isAvailable(availableQuantity != null ? availableQuantity >= item.getQuantity() : null)
                 .savedPrice(savedPrice)
                 .priceChanged(priceChanged)

@@ -2,6 +2,7 @@ package com.stockmanagement.domain.product.wishlist.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
@@ -38,6 +39,7 @@ class WishlistServiceTest {
     @Mock private WishlistRepository wishlistRepository;
     @Mock private ProductRepository productRepository;
     @Mock private InventoryRepository inventoryRepository;
+    @Mock private SystemSettingService systemSettingService;
 
     @InjectMocks private WishlistService wishlistService;
 

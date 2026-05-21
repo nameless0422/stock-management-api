@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.order.cart.dto;
 
+import com.stockmanagement.domain.inventory.entity.StockStatus;
 import com.stockmanagement.domain.order.cart.entity.CartItem;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,14 +19,19 @@ public class CartResponse {
     private BigDecimal totalAmount;
 
     public static CartResponse from(Long userId, List<CartItem> cartItems) {
-        return from(userId, cartItems, null);
+        return from(userId, cartItems, null, null);
     }
 
     public static CartResponse from(Long userId, List<CartItem> cartItems,
-                                    Map<Long, Integer> availabilityMap) {
+                                    Map<Long, Integer> availabilityMap,
+                                    Map<Long, StockStatus> stockStatusMap) {
         List<CartItemResponse> itemResponses = cartItems.stream()
-                .map(i -> CartItemResponse.from(i,
-                        availabilityMap != null ? availabilityMap.get(i.getProduct().getId()) : null))
+                .map(i -> {
+                    Long productId = i.getProduct().getId();
+                    return CartItemResponse.from(i,
+                            availabilityMap != null ? availabilityMap.get(productId) : null,
+                            stockStatusMap != null ? stockStatusMap.get(productId) : null);
+                })
                 .toList();
         BigDecimal total = itemResponses.stream()
                 .map(CartItemResponse::getSubtotal)

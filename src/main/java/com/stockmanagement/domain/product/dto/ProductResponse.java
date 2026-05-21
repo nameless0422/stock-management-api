@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.product.dto;
 
+import com.stockmanagement.domain.inventory.entity.StockStatus;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
 import com.stockmanagement.domain.product.image.dto.ProductImageResponse;
@@ -40,8 +41,10 @@ public class ProductResponse {
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
 
-    /** 현재 가용 재고 수량 — null이면 재고 정보 미포함 */
+    /** 현재 가용 재고 수량 — 공개 목록에서는 null (관리자·상세 전용) */
     private final Integer availableQuantity;
+    /** 재고 상태 (IN_STOCK / LOW_STOCK / OUT_OF_STOCK) — null이면 재고 정보 미포함 */
+    private final StockStatus stockStatus;
     /** 상품 평균 별점 (0.0~5.0) — null이면 리뷰 없음 */
     private final Double avgRating;
     /** 총 리뷰 수 — null이면 리뷰 정보 미포함 */
@@ -62,31 +65,31 @@ public class ProductResponse {
 
     /** Product 엔티티만으로 변환 (재고·리뷰 통계 미포함). */
     public static ProductResponse from(Product product) {
-        return from(product, null, null, null, null, null, null);
+        return from(product, null, null, null, null, null, null, null);
     }
 
     /** Product 엔티티 + 재고·리뷰 통계를 포함한 전체 응답으로 변환 (이미지 미포함). */
-    public static ProductResponse from(Product product, Integer availableQuantity,
+    public static ProductResponse from(Product product, Integer availableQuantity, StockStatus stockStatus,
                                        Double avgRating, Long reviewCount) {
-        return from(product, availableQuantity, avgRating, reviewCount, null, null, null);
+        return from(product, availableQuantity, stockStatus, avgRating, reviewCount, null, null, null);
     }
 
     /** Product 엔티티 + 재고·리뷰 통계 + 이미지 목록을 포함한 전체 응답으로 변환. */
-    public static ProductResponse from(Product product, Integer availableQuantity,
+    public static ProductResponse from(Product product, Integer availableQuantity, StockStatus stockStatus,
                                        Double avgRating, Long reviewCount,
                                        List<ProductImageResponse> images) {
-        return from(product, availableQuantity, avgRating, reviewCount, images, null, null);
+        return from(product, availableQuantity, stockStatus, avgRating, reviewCount, images, null, null);
     }
 
     /** Product 엔티티 + 재고·리뷰 통계 + 이미지 + canReview를 포함한 전체 응답으로 변환. */
-    public static ProductResponse from(Product product, Integer availableQuantity,
+    public static ProductResponse from(Product product, Integer availableQuantity, StockStatus stockStatus,
                                        Double avgRating, Long reviewCount,
                                        List<ProductImageResponse> images, Boolean canReview) {
-        return from(product, availableQuantity, avgRating, reviewCount, images, canReview, null);
+        return from(product, availableQuantity, stockStatus, avgRating, reviewCount, images, canReview, null);
     }
 
     /** Product 엔티티 + 전체 필드(재고·리뷰·이미지·canReview·wishlisted)를 포함한 응답으로 변환. */
-    public static ProductResponse from(Product product, Integer availableQuantity,
+    public static ProductResponse from(Product product, Integer availableQuantity, StockStatus stockStatus,
                                        Double avgRating, Long reviewCount,
                                        List<ProductImageResponse> images, Boolean canReview,
                                        Boolean wishlisted) {
@@ -103,6 +106,7 @@ public class ProductResponse {
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())
                 .availableQuantity(availableQuantity)
+                .stockStatus(stockStatus)
                 .avgRating(avgRating != null ? Math.round(avgRating * 10.0) / 10.0 : null)
                 .reviewCount(reviewCount)
                 .images(images)
