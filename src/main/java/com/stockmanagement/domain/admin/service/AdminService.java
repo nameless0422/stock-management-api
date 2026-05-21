@@ -23,6 +23,7 @@ import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -53,7 +54,9 @@ public class AdminService {
      *
      * <p>기존 6개 쿼리(상태별 count×4 + sum×1 + userCount×1)를 2개로 줄인다.
      * {@code findOrderStats()}의 GROUP BY 결과로 주문 관련 5개 쿼리를 대체한다.
+     * Redis 캐시(5분 TTL)로 반복 조회 부하를 줄인다.
      */
+    @Cacheable("dashboard")
     public DashboardResponse getDashboard() {
         // 쿼리 1: 상태별 주문 수·금액 일괄 집계
         Map<OrderStatus, OrderStatsProjection> statsMap = orderRepository.findOrderStats()
