@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.point.dto;
 
 import com.stockmanagement.domain.point.entity.PointTransaction;
+import com.stockmanagement.domain.point.entity.PointTransactionStatus;
 import com.stockmanagement.domain.point.entity.PointTransactionType;
 import lombok.Builder;
 import lombok.Getter;
@@ -14,6 +15,7 @@ public class PointTransactionResponse {
     private Long id;
     private long amount;
     private PointTransactionType type;
+    private PointTransactionStatus status;
     private String description;
     private Long orderId;
     private LocalDateTime createdAt;
@@ -23,6 +25,7 @@ public class PointTransactionResponse {
                 .id(tx.getId())
                 .amount(tx.getAmount())
                 .type(tx.getType())
+                .status(tx.getStatus())
                 .description(tx.getDescription())
                 .orderId(tx.getOrderId())
                 .createdAt(tx.getCreatedAt())

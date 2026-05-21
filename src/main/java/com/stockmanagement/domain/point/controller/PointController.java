@@ -37,4 +37,12 @@ public class PointController {
             @PageableDefault(size = 20) Pageable pageable) {
         return ApiResponse.ok(pointService.getHistory(username, pageable));
     }
+
+    @Operation(summary = "적립 예정 포인트 조회 (배송 완료 전)")
+    @GetMapping("/pending")
+    public ApiResponse<Page<PointTransactionResponse>> getPending(
+            @AuthenticationPrincipal String username,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ApiResponse.ok(pointService.getPendingHistory(username, pageable));
+    }
 }
