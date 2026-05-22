@@ -18,6 +18,7 @@ public class PointTransactionResponse {
     private PointTransactionStatus status;
     private String description;
     private Long orderId;
+    private LocalDateTime expiresAt;
     private LocalDateTime createdAt;
 
     public static PointTransactionResponse from(PointTransaction tx) {
@@ -28,6 +29,7 @@ public class PointTransactionResponse {
                 .status(tx.getStatus())
                 .description(tx.getDescription())
                 .orderId(tx.getOrderId())
+                .expiresAt(tx.getExpiresAt())
                 .createdAt(tx.getCreatedAt())
                 .build();
     }

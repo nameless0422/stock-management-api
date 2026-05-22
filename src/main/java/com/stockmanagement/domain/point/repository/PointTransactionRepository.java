@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,4 +27,12 @@ public interface PointTransactionRepository extends JpaRepository<PointTransacti
     /** 사용자의 적립 예정 (PENDING) 트랜잭션 페이징 조회 */
     Page<PointTransaction> findByUserIdAndStatusOrderByCreatedAtDesc(
             Long userId, PointTransactionStatus status, Pageable pageable);
+
+    /** 만료 대상 조회: CONFIRMED + expiresAt 경과 */
+    List<PointTransaction> findByStatusAndExpiresAtBefore(
+            PointTransactionStatus status, LocalDateTime now);
+
+    /** 사용자의 만료 예정 CONFIRMED 포인트 조회 (만료일 가까운 순) */
+    Page<PointTransaction> findByUserIdAndStatusAndExpiresAtBeforeOrderByExpiresAtAsc(
+            Long userId, PointTransactionStatus status, LocalDateTime deadline, Pageable pageable);
 }

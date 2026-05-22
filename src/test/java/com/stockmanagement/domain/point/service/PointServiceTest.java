@@ -279,4 +279,42 @@ class PointServiceTest {
             // early return — userPointRepository 호출 없음
         }
     }
+
+    @Nested
+    @DisplayName("expireBySchedule() — 기간 만료 처리")
+    class ExpireBySchedule {
+
+        @Test
+        @DisplayName("CONFIRMED + 만료일 경과 → EXPIRED 전환 + 잔액 차감")
+        void expiresConfirmed() {
+            UserPoint up = mockUserPoint(1L, 500);
+            PointTransaction tx = PointTransaction.builder()
+                    .userId(1L).amount(200L).type(PointTransactionType.EARN)
+                    .status(PointTransactionStatus.CONFIRMED)
+                    .description("적립").orderId(100L).build();
+
+            given(pointTransactionRepository.findByStatusAndExpiresAtBefore(
+                    any(PointTransactionStatus.class), any()))
+                    .willReturn(List.of(tx));
+            given(userPointRepository.findByUserIdWithLock(1L)).willReturn(Optional.of(up));
+
+            int count = pointService.expireBySchedule();
+
+            assertThat(count).isEqualTo(1);
+            assertThat(tx.getStatus()).isEqualTo(PointTransactionStatus.EXPIRED);
+            assertThat(up.getBalance()).isEqualTo(300L);
+        }
+
+        @Test
+        @DisplayName("만료 대상 없음 → 0 반환")
+        void noExpired() {
+            given(pointTransactionRepository.findByStatusAndExpiresAtBefore(
+                    any(PointTransactionStatus.class), any()))
+                    .willReturn(List.of());
+
+            int count = pointService.expireBySchedule();
+
+            assertThat(count).isEqualTo(0);
+        }
+    }
 }

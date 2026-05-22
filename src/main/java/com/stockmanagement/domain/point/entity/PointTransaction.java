@@ -42,19 +42,25 @@ public class PointTransaction {
     @Column(nullable = false, length = 20)
     private PointTransactionStatus status;
 
+    /** 적립 포인트 만료 예정일 — EARN 타입에만 설정 */
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Builder
     private PointTransaction(Long userId, long amount, PointTransactionType type,
-                             String description, Long orderId, PointTransactionStatus status) {
+                             String description, Long orderId, PointTransactionStatus status,
+                             LocalDateTime expiresAt) {
         this.userId = userId;
         this.amount = amount;
         this.type = type;
         this.description = description;
         this.orderId = orderId;
         this.status = status != null ? status : PointTransactionStatus.CONFIRMED;
+        this.expiresAt = expiresAt;
     }
 
     /** PENDING → CONFIRMED 전환 */
@@ -69,6 +75,14 @@ public class PointTransaction {
     public void expire() {
         if (this.status != PointTransactionStatus.PENDING) {
             throw new IllegalStateException("PENDING 상태만 만료 가능: current=" + this.status);
+        }
+        this.status = PointTransactionStatus.EXPIRED;
+    }
+
+    /** CONFIRMED → EXPIRED 전환 (기간 만료 시) */
+    public void expireConfirmed() {
+        if (this.status != PointTransactionStatus.CONFIRMED) {
+            throw new IllegalStateException("CONFIRMED 상태만 기간 만료 가능: current=" + this.status);
         }
         this.status = PointTransactionStatus.EXPIRED;
     }
