@@ -77,7 +77,9 @@ public class CacheConfig {
                         // 홈 화면 집계: 5분 TTL — 신상품/인기상품/카테고리 통합
                         "home", base.entryTtl(Duration.ofMinutes(5)),
                         // 시스템 설정: 변경 빈도 매우 낮음 → 1시간 + 명시적 evict
-                        "settings", base.entryTtl(Duration.ofHours(1))
+                        "settings", base.entryTtl(Duration.ofHours(1)),
+                        // 관리자 대시보드: GROUP BY 집계 부하 감소 → 5분 TTL
+                        "dashboard", base.entryTtl(Duration.ofMinutes(5))
                 ))
                 .build();
     }
