@@ -2,6 +2,7 @@ package com.stockmanagement.domain.product.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.category.repository.CategoryRepository;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
@@ -60,6 +61,9 @@ class ProductServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private SystemSettingService systemSettingService;
 
     @InjectMocks
     private ProductService productService;

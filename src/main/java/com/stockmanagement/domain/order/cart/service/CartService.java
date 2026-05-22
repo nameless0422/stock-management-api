@@ -2,6 +2,7 @@ package com.stockmanagement.domain.order.cart.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.order.cart.dto.CartCheckoutRequest;
 import com.stockmanagement.domain.order.cart.dto.CartItemRequest;
 import com.stockmanagement.domain.order.cart.dto.CartItemResponse;
@@ -13,6 +14,7 @@ import com.stockmanagement.domain.order.dto.OrderItemRequest;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.service.OrderCommandService;
 import com.stockmanagement.domain.inventory.entity.Inventory;
+import com.stockmanagement.domain.inventory.entity.StockStatus;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
@@ -49,17 +51,21 @@ public class CartService {
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
     private final OrderCommandService orderCommandService;
+    private final SystemSettingService systemSettingService;
 
     /** 사용자의 장바구니 전체를 재고 상태 포함하여 조회한다. */
     public CartResponse getCart(Long userId) {
         List<CartItem> items = cartRepository.findByUserId(userId);
         if (items.isEmpty()) {
-            return CartResponse.from(userId, items, null);
+            return CartResponse.from(userId, items);
         }
+        int threshold = systemSettingService.getLowStockThreshold();
         List<Long> productIds = items.stream().map(i -> i.getProduct().getId()).toList();
         Map<Long, Integer> availabilityMap = inventoryRepository.findAllByProductIdIn(productIds).stream()
                 .collect(Collectors.toMap(inv -> inv.getProduct().getId(), Inventory::getAvailable));
-        return CartResponse.from(userId, items, availabilityMap);
+        Map<Long, StockStatus> stockStatusMap = availabilityMap.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> StockStatus.of(e.getValue(), threshold)));
+        return CartResponse.from(userId, items, availabilityMap, stockStatusMap);
     }
 
     /**
@@ -106,7 +112,9 @@ public class CartService {
         Integer available = inventoryRepository.findByProductId(product.getId())
                 .map(Inventory::getAvailable)
                 .orElse(null);
-        return CartItemResponse.from(cartItem, available);
+        StockStatus stockStatus = available != null
+                ? StockStatus.of(available, systemSettingService.getLowStockThreshold()) : null;
+        return CartItemResponse.from(cartItem, available, stockStatus);
     }
 
     /**

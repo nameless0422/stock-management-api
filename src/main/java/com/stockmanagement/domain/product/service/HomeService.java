@@ -1,6 +1,8 @@
 package com.stockmanagement.domain.product.service;
 
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.entity.Inventory;
+import com.stockmanagement.domain.inventory.entity.StockStatus;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.category.dto.CategoryResponse;
 import com.stockmanagement.domain.product.category.service.CategoryService;
@@ -41,6 +43,7 @@ public class HomeService {
     private final InventoryRepository inventoryRepository;
     private final ReviewRepository reviewRepository;
     private final CategoryService categoryService;
+    private final SystemSettingService systemSettingService;
 
     @Cacheable(cacheNames = "home", key = "'screen'")
     public HomeResponse getHomeScreen() {
@@ -94,12 +97,14 @@ public class HomeService {
             List<Product> products,
             Map<Long, ReviewStatsProjection> reviewStatsMap,
             Map<Long, Integer> inventoryMap) {
+        int threshold = systemSettingService.getLowStockThreshold();
         return products.stream().map(p -> {
             ReviewStatsProjection stats = reviewStatsMap.get(p.getId());
             Double avgRating = stats != null ? stats.getAvgRating() : null;
             Long reviewCount = stats != null ? stats.getReviewCount() : null;
-            Integer available = inventoryMap.get(p.getId());
-            return ProductResponse.from(p, available, avgRating, reviewCount);
+            int available = inventoryMap.getOrDefault(p.getId(), 0);
+            StockStatus stockStatus = StockStatus.of(available, threshold);
+            return ProductResponse.from(p, null, stockStatus, avgRating, reviewCount);
         }).collect(Collectors.toList());
     }
 }

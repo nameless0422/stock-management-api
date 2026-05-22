@@ -2,6 +2,7 @@ package com.stockmanagement.domain.order.cart.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.order.cart.dto.CartCheckoutRequest;
 import com.stockmanagement.domain.order.cart.dto.CartItemRequest;
 import com.stockmanagement.domain.order.cart.dto.CartResponse;
@@ -40,6 +41,7 @@ class CartServiceTest {
     @Mock ProductRepository productRepository;
     @Mock InventoryRepository inventoryRepository;
     @Mock OrderCommandService orderCommandService;
+    @Mock SystemSettingService systemSettingService;
 
     @InjectMocks CartService cartService;
 

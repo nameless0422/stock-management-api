@@ -2,7 +2,9 @@ package com.stockmanagement.domain.product.wishlist.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.entity.Inventory;
+import com.stockmanagement.domain.inventory.entity.StockStatus;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.repository.ProductRepository;
@@ -28,6 +30,7 @@ public class WishlistService {
     private final WishlistRepository wishlistRepository;
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
+    private final SystemSettingService systemSettingService;
 
     /**
      * 위시리스트에 상품을 추가한다.
@@ -48,10 +51,11 @@ public class WishlistService {
                 .productId(productId)
                 .build();
 
-        Integer available = inventoryRepository.findByProductId(productId)
+        int available = inventoryRepository.findByProductId(productId)
                 .map(Inventory::getAvailable)
-                .orElse(null);
-        return WishlistResponse.of(wishlistRepository.save(item), product, available);
+                .orElse(0);
+        StockStatus stockStatus = StockStatus.of(available, systemSettingService.getLowStockThreshold());
+        return WishlistResponse.of(wishlistRepository.save(item), product, stockStatus);
     }
 
     /**
@@ -89,14 +93,18 @@ public class WishlistService {
 
         // N+1 방지: 상품 + 재고를 한 번에 배치 조회
         List<Long> productIds = page.map(WishlistItem::getProductId).toList();
+        int threshold = systemSettingService.getLowStockThreshold();
         Map<Long, Product> productMap = productRepository.findAllById(productIds).stream()
                 .collect(Collectors.toMap(Product::getId, Function.identity()));
         Map<Long, Integer> availableMap = inventoryRepository.findAllByProductIdIn(productIds).stream()
                 .collect(Collectors.toMap(i -> i.getProduct().getId(), Inventory::getAvailable));
 
-        return page.map(item -> WishlistResponse.of(
-                item,
-                productMap.get(item.getProductId()),
-                availableMap.get(item.getProductId())));
+        return page.map(item -> {
+            int avail = availableMap.getOrDefault(item.getProductId(), 0);
+            return WishlistResponse.of(
+                    item,
+                    productMap.get(item.getProductId()),
+                    StockStatus.of(avail, threshold));
+        });
     }
 }

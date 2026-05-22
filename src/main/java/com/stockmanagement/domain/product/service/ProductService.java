@@ -2,7 +2,9 @@ package com.stockmanagement.domain.product.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.entity.Inventory;
+import com.stockmanagement.domain.inventory.entity.StockStatus;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.product.category.entity.Category;
@@ -64,6 +66,7 @@ public class ProductService {
     private final ApplicationEventPublisher eventPublisher;
     private final OrderRepository orderRepository;
     private final WishlistRepository wishlistRepository;
+    private final SystemSettingService systemSettingService;
 
     /**
      * 상품을 등록한다.
@@ -104,13 +107,14 @@ public class ProductService {
         Product product = findById(id);
         Integer available = inventoryRepository.findByProductId(id)
                 .map(Inventory::getAvailable).orElse(0);
+        StockStatus stockStatus = StockStatus.of(available, systemSettingService.getLowStockThreshold());
         ReviewStatsProjection stats = reviewRepository.findReviewStatsByProductId(id).orElse(null);
         List<ProductImageResponse> images = productImageRepository
                 .findByProductIdOrderByDisplayOrderAsc(id).stream()
                 .map(ProductImageResponse::from).toList();
         boolean purchased = orderRepository.existsPurchaseByUserIdAndProductId(userId, id);
         boolean reviewed = reviewRepository.existsByProductIdAndUserId(id, userId);
-        return ProductResponse.from(product, available,
+        return ProductResponse.from(product, null, stockStatus,
                 stats != null ? stats.getAvgRating() : null,
                 stats != null ? stats.getReviewCount() : 0L,
                 images, purchased && !reviewed);
@@ -244,9 +248,10 @@ public class ProductService {
         Integer available = inventoryRepository.findByProductId(product.getId())
                 .map(Inventory::getAvailable)
                 .orElse(0);
+        StockStatus stockStatus = StockStatus.of(available, systemSettingService.getLowStockThreshold());
         ReviewStatsProjection stats = reviewRepository
                 .findReviewStatsByProductId(product.getId()).orElse(null);
-        return ProductResponse.from(product, available,
+        return ProductResponse.from(product, available, stockStatus,
                 stats != null ? stats.getAvgRating() : null,
                 stats != null ? stats.getReviewCount() : 0L);
     }
@@ -260,13 +265,14 @@ public class ProductService {
         Integer available = inventoryRepository.findByProductId(product.getId())
                 .map(Inventory::getAvailable)
                 .orElse(0);
+        StockStatus stockStatus = StockStatus.of(available, systemSettingService.getLowStockThreshold());
         ReviewStatsProjection stats = reviewRepository
                 .findReviewStatsByProductId(product.getId()).orElse(null);
         List<ProductImageResponse> images = productImageRepository
                 .findByProductIdOrderByDisplayOrderAsc(product.getId()).stream()
                 .map(ProductImageResponse::from)
                 .toList();
-        return ProductResponse.from(product, available,
+        return ProductResponse.from(product, available, stockStatus,
                 stats != null ? stats.getAvgRating() : null,
                 stats != null ? stats.getReviewCount() : 0L,
                 images);
@@ -280,6 +286,7 @@ public class ProductService {
         if (products.isEmpty()) return products.map(ProductResponse::from);
 
         List<Long> ids = products.stream().map(Product::getId).toList();
+        int threshold = systemSettingService.getLowStockThreshold();
 
         Map<Long, Integer> availableMap = inventoryRepository.findAllByProductIdIn(ids).stream()
                 .collect(Collectors.toMap(i -> i.getProduct().getId(), Inventory::getAvailable));
@@ -293,10 +300,12 @@ public class ProductService {
                 : Set.of();
 
         return products.map(p -> {
+            int available = availableMap.getOrDefault(p.getId(), 0);
+            StockStatus stockStatus = StockStatus.of(available, threshold);
             ReviewStatsProjection stats = statsMap.get(p.getId());
             return ProductResponse.from(
                     p,
-                    availableMap.getOrDefault(p.getId(), 0),
+                    null, stockStatus,
                     stats != null ? stats.getAvgRating() : null,
                     stats != null ? stats.getReviewCount() : 0L,
                     null,
@@ -313,6 +322,7 @@ public class ProductService {
         if (esPage.isEmpty()) return esPage;
 
         List<Long> ids = esPage.getContent().stream().map(ProductResponse::getId).toList();
+        int threshold = systemSettingService.getLowStockThreshold();
 
         Map<Long, Integer> availableMap = inventoryRepository.findAllByProductIdIn(ids).stream()
                 .collect(Collectors.toMap(i -> i.getProduct().getId(), Inventory::getAvailable));
@@ -326,6 +336,7 @@ public class ProductService {
                 : Set.of();
 
         List<ProductResponse> enriched = esPage.getContent().stream().map(r -> {
+            int available = availableMap.getOrDefault(r.getId(), 0);
             ReviewStatsProjection stats = statsMap.get(r.getId());
             return ProductResponse.builder()
                     .id(r.getId())
@@ -339,7 +350,7 @@ public class ProductService {
                     .status(r.getStatus())
                     .createdAt(r.getCreatedAt())
                     .updatedAt(r.getUpdatedAt())
-                    .availableQuantity(availableMap.getOrDefault(r.getId(), 0))
+                    .stockStatus(StockStatus.of(available, threshold))
                     .avgRating(stats != null && stats.getAvgRating() != null
                             ? Math.round(stats.getAvgRating() * 10.0) / 10.0 : null)
                     .reviewCount(stats != null ? stats.getReviewCount() : 0L)
