@@ -13,6 +13,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Point", description = "포인트/적립금 API")
@@ -44,5 +45,14 @@ public class PointController {
             @AuthenticationPrincipal String username,
             @PageableDefault(size = 20) Pageable pageable) {
         return ApiResponse.ok(pointService.getPendingHistory(username, pageable));
+    }
+
+    @Operation(summary = "만료 예정 포인트 조회")
+    @GetMapping("/expiring-soon")
+    public ApiResponse<Page<PointTransactionResponse>> getExpiringSoon(
+            @AuthenticationPrincipal String username,
+            @RequestParam(defaultValue = "30") int withinDays,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ApiResponse.ok(pointService.getExpiringSoon(username, withinDays, pageable));
     }
 }

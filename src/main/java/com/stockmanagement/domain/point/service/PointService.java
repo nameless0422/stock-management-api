@@ -17,11 +17,15 @@ import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -51,6 +55,9 @@ public class PointService {
 
     /** 결제 완료 시 적립 비율 (1%) */
     private static final double EARN_RATE = 0.01;
+
+    @Value("${point.expiry.retention-days:365}")
+    private int retentionDays;
 
     private final UserPointRepository userPointRepository;
     private final PointTransactionRepository pointTransactionRepository;
@@ -90,6 +97,15 @@ public class PointService {
         User user = findUser(username);
         return pointTransactionRepository.findByUserIdAndStatusOrderByCreatedAtDesc(
                         user.getId(), PointTransactionStatus.PENDING, pageable)
+                .map(PointTransactionResponse::from);
+    }
+
+    /** 만료 예정 CONFIRMED 포인트를 만료일 가까운 순으로 페이징 조회한다. */
+    public Page<PointTransactionResponse> getExpiringSoon(String username, int withinDays, Pageable pageable) {
+        User user = findUser(username);
+        LocalDateTime deadline = LocalDateTime.now().plusDays(withinDays);
+        return pointTransactionRepository.findByUserIdAndStatusAndExpiresAtBeforeOrderByExpiresAtAsc(
+                        user.getId(), PointTransactionStatus.CONFIRMED, deadline, pageable)
                 .map(PointTransactionResponse::from);
     }
 
@@ -142,6 +158,7 @@ public class PointService {
                 .status(PointTransactionStatus.PENDING)
                 .description("주문 구매 적립 예정 (주문 #" + orderId + ")")
                 .orderId(orderId)
+                .expiresAt(LocalDateTime.now().plusDays(retentionDays))
                 .build());
     }
 
@@ -267,6 +284,40 @@ public class PointService {
         if (!newTxns.isEmpty()) {
             pointTransactionRepository.saveAll(newTxns);
         }
+    }
+
+    /**
+     * 만료일이 경과한 CONFIRMED 포인트를 일괄 만료 처리한다.
+     * 사용자별로 잔액 차감 후 EXPIRED 전환.
+     *
+     * @return 만료 처리된 트랜잭션 수
+     */
+    @Transactional
+    public int expireBySchedule() {
+        LocalDateTime now = LocalDateTime.now();
+        List<PointTransaction> expired = pointTransactionRepository
+                .findByStatusAndExpiresAtBefore(PointTransactionStatus.CONFIRMED, now);
+        if (expired.isEmpty()) return 0;
+
+        // 사용자별 그룹핑하여 잔액 차감
+        Map<Long, List<PointTransaction>> byUser = expired.stream()
+                .collect(Collectors.groupingBy(PointTransaction::getUserId));
+
+        byUser.forEach((userId, txns) -> {
+            UserPoint userPoint = getOrCreate(userId);
+            long totalExpire = 0;
+            for (PointTransaction tx : txns) {
+                long actualExpire = Math.min(tx.getAmount(), userPoint.getBalance());
+                if (actualExpire > 0) {
+                    userPoint.use(actualExpire);
+                }
+                tx.expireConfirmed();
+                totalExpire += tx.getAmount();
+            }
+            log.info("[Point] 기간 만료: userId={}, 건수={}, 총액={}", userId, txns.size(), totalExpire);
+        });
+
+        return expired.size();
     }
 
     private UserPoint getOrCreate(Long userId) {
