@@ -4,6 +4,7 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.point.dto.PointBalanceResponse;
 import com.stockmanagement.domain.point.entity.PointTransaction;
+import com.stockmanagement.domain.point.entity.PointTransactionStatus;
 import com.stockmanagement.domain.point.entity.PointTransactionType;
 import com.stockmanagement.domain.point.entity.UserPoint;
 import com.stockmanagement.domain.point.repository.PointTransactionRepository;
@@ -88,20 +89,85 @@ class PointServiceTest {
     }
 
     @Nested
-    @DisplayName("earn() — 포인트 적립")
+    @DisplayName("earn() — 포인트 적립 예정")
     class Earn {
 
         @Test
-        @DisplayName("적립 성공 → balance 증가 + 이력 저장")
+        @DisplayName("적립 성공 → PENDING 이력 저장, balance 미변경")
         void success() {
-            UserPoint up = mockUserPoint(1L, 0);
-            given(userPointRepository.findByUserIdWithLock(1L)).willReturn(Optional.of(up));
+            given(pointTransactionRepository.existsByOrderIdAndType(100L, PointTransactionType.EARN))
+                    .willReturn(false);
             given(pointTransactionRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 
             pointService.earn(1L, 10000L, 100L);
 
-            assertThat(up.getBalance()).isEqualTo(100L); // 10000 * 0.01 = 100
             verify(pointTransactionRepository).save(any());
+        }
+
+        @Test
+        @DisplayName("이미 적립 이력 있으면 중복 적립 방지")
+        void idempotent() {
+            given(pointTransactionRepository.existsByOrderIdAndType(100L, PointTransactionType.EARN))
+                    .willReturn(true);
+
+            pointService.earn(1L, 10000L, 100L);
+
+            verify(pointTransactionRepository, org.mockito.Mockito.never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("confirmPending() — 적립 확정")
+    class ConfirmPending {
+
+        @Test
+        @DisplayName("PENDING 트랜잭션 확정 → balance 반영")
+        void success() {
+            UserPoint up = mockUserPoint(1L, 0);
+            PointTransaction tx = PointTransaction.builder()
+                    .userId(1L).amount(100L).type(PointTransactionType.EARN)
+                    .status(PointTransactionStatus.PENDING)
+                    .description("적립 예정").orderId(100L).build();
+            given(pointTransactionRepository.findByOrderIdAndTypeAndStatus(
+                    100L, PointTransactionType.EARN, PointTransactionStatus.PENDING))
+                    .willReturn(Optional.of(tx));
+            given(userPointRepository.findByUserIdWithLock(1L)).willReturn(Optional.of(up));
+
+            pointService.confirmPending(100L);
+
+            assertThat(up.getBalance()).isEqualTo(100L);
+            assertThat(tx.getStatus()).isEqualTo(PointTransactionStatus.CONFIRMED);
+        }
+
+        @Test
+        @DisplayName("PENDING 없으면 no-op")
+        void noPending() {
+            given(pointTransactionRepository.findByOrderIdAndTypeAndStatus(
+                    100L, PointTransactionType.EARN, PointTransactionStatus.PENDING))
+                    .willReturn(Optional.empty());
+
+            pointService.confirmPending(100L);
+        }
+    }
+
+    @Nested
+    @DisplayName("expirePending() — 적립 만료")
+    class ExpirePending {
+
+        @Test
+        @DisplayName("PENDING 트랜잭션 만료 → EXPIRED, balance 미변경")
+        void success() {
+            PointTransaction tx = PointTransaction.builder()
+                    .userId(1L).amount(100L).type(PointTransactionType.EARN)
+                    .status(PointTransactionStatus.PENDING)
+                    .description("적립 예정").orderId(100L).build();
+            given(pointTransactionRepository.findByOrderIdAndTypeAndStatus(
+                    100L, PointTransactionType.EARN, PointTransactionStatus.PENDING))
+                    .willReturn(Optional.of(tx));
+
+            pointService.expirePending(100L);
+
+            assertThat(tx.getStatus()).isEqualTo(PointTransactionStatus.EXPIRED);
         }
     }
 
@@ -157,8 +223,10 @@ class PointServiceTest {
     class RefundByOrder {
 
         @Test
-        @DisplayName("USE + EARN 이력 있음 → 반환 + 회수 처리")
+        @DisplayName("USE + EARN(CONFIRMED) 이력 있음 → 반환 + 회수 처리")
         void refundsBothUseAndEarn() {
+            given(pointTransactionRepository.existsByOrderIdAndType(100L, PointTransactionType.REFUND))
+                    .willReturn(false);
             UserPoint up = mockUserPoint(1L, 200); // earn된 상태
             given(userPointRepository.findByUserIdWithLock(1L)).willReturn(Optional.of(up));
 
@@ -178,6 +246,27 @@ class PointServiceTest {
 
             // USE → REFUND: +2000, EARN → EXPIRE: -200 (잔액에서 회수)
             assertThat(up.getBalance()).isEqualTo(200 + 2000 - 200);
+        }
+
+        @Test
+        @DisplayName("PENDING 적립만 있음 → EXPIRED 전환, balance 미변경")
+        void refundsPendingEarn() {
+            PointTransaction pendingEarnTx = PointTransaction.builder()
+                    .userId(1L).amount(100L)
+                    .type(PointTransactionType.EARN)
+                    .status(PointTransactionStatus.PENDING)
+                    .description("적립 예정").orderId(100L).build();
+
+            given(pointTransactionRepository.existsByOrderIdAndType(100L, PointTransactionType.REFUND))
+                    .willReturn(false);
+            given(pointTransactionRepository.findByOrderId(100L)).willReturn(List.of(pendingEarnTx));
+            UserPoint up = mockUserPoint(1L, 0);
+            given(userPointRepository.findByUserIdWithLock(1L)).willReturn(Optional.of(up));
+
+            pointService.refundByOrder(1L, 100L);
+
+            assertThat(pendingEarnTx.getStatus()).isEqualTo(PointTransactionStatus.EXPIRED);
+            assertThat(up.getBalance()).isEqualTo(0);
         }
 
         @Test

@@ -106,6 +106,13 @@ class OutboxEventProcessor {
                 pointService.earn(userId, paidAmount, orderId);
                 log.info("[Outbox] 포인트 적립 완료: userId={}, paidAmount={}, orderId={}", userId, paidAmount, orderId);
             }
+            case SHIPMENT_DELIVERED -> {
+                Long orderId = toLong(p.get("orderId"));
+                // 배송 완료 시 PENDING 적립 포인트를 확정 (CONFIRMED + 잔액 반영)
+                pointService.confirmPending(orderId);
+                eventPublisher.publishEvent(new ShipmentDeliveredEvent(orderId));
+                log.info("[Outbox] 배송 완료 처리 + 포인트 확정: orderId={}", orderId);
+            }
             default -> eventPublisher.publishEvent(buildEvent(outbox, p));
         }
     }
@@ -120,7 +127,6 @@ class OutboxEventProcessor {
                     toLong(p.get("paymentId")), toLong(p.get("orderId")), toBigDecimal(p.get("amount")));
             case SHIPMENT_SHIPPED -> new ShipmentShippedEvent(
                     toLong(p.get("orderId")), (String) p.get("carrier"), (String) p.get("trackingNumber"));
-            case SHIPMENT_DELIVERED -> new ShipmentDeliveredEvent(toLong(p.get("orderId")));
             case SHIPMENT_RETURNED -> new ShipmentReturnedEvent(toLong(p.get("orderId")));
             default -> throw new IllegalStateException("buildEvent에서 처리되지 않은 타입: " + outbox.getEventType());
         };

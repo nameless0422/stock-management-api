@@ -5,6 +5,7 @@ import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.point.dto.PointBalanceResponse;
 import com.stockmanagement.domain.point.dto.PointTransactionResponse;
 import com.stockmanagement.domain.point.entity.PointTransaction;
+import com.stockmanagement.domain.point.entity.PointTransactionStatus;
 import com.stockmanagement.domain.point.entity.PointTransactionType;
 import com.stockmanagement.domain.point.entity.UserPoint;
 import com.stockmanagement.domain.point.repository.PointTransactionRepository;
@@ -29,10 +30,17 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 포인트 적립/사용/환불을 처리하는 서비스.
  *
+ * <p>적립 흐름:
+ * <ol>
+ *   <li>결제 확정 → {@code earn()} — PENDING 상태로 트랜잭션 생성 (잔액 미반영)
+ *   <li>배송 완료 → {@code confirmPending()} — CONFIRMED 전환 + 잔액 반영
+ *   <li>주문 취소 → {@code expirePending()} — EXPIRED 전환 (잔액 변동 없음)
+ * </ol>
+ *
  * <p>트랜잭션 전략:
  * <ul>
- *   <li>{@code earn} — {@code REQUIRES_NEW}: 결제 확정 트랜잭션과 독립 커밋 (실패해도 결제 롤백 방지)
- *   <li>{@code use}, {@code refundByOrder} — {@code REQUIRED}: 주문 생성/취소 트랜잭션에 참여 (원자성 보장)
+ *   <li>{@code earn}, {@code confirmPending} — {@code REQUIRES_NEW}: 독립 커밋
+ *   <li>{@code use}, {@code refundByOrder} — {@code REQUIRED}: 주문 트랜잭션에 참여
  * </ul>
  */
 @Slf4j
@@ -77,6 +85,14 @@ public class PointService {
                 .map(PointTransactionResponse::from);
     }
 
+    /** 적립 예정 (PENDING) 포인트 이력을 최신순 페이징 조회한다. */
+    public Page<PointTransactionResponse> getPendingHistory(String username, Pageable pageable) {
+        User user = findUser(username);
+        return pointTransactionRepository.findByUserIdAndStatusOrderByCreatedAtDesc(
+                        user.getId(), PointTransactionStatus.PENDING, pageable)
+                .map(PointTransactionResponse::from);
+    }
+
     // ===== 변경 =====
 
     /**
@@ -99,10 +115,12 @@ public class PointService {
     }
 
     /**
-     * 결제 완료 시 포인트를 적립한다 (결제금액의 1%).
+     * 결제 완료 시 포인트 적립 예정 트랜잭션을 생성한다 (PENDING, 잔액 미반영).
+     *
+     * <p>배송 완료 시 {@link #confirmPending(Long)}으로 CONFIRMED 전환 후 잔액에 반영된다.
+     * 주문 취소 시 {@link #expirePending(Long)}으로 EXPIRED 전환된다.
      *
      * <p>{@code REQUIRES_NEW}: 결제 확정 트랜잭션과 독립적으로 커밋/롤백된다.
-     * 포인트 적립 실패가 결제 확정 트랜잭션을 rollback-only로 오염시키지 않도록 하기 위함.
      *
      * @param userId     수혜 사용자 ID
      * @param paidAmount 실 결제 금액 (포인트/쿠폰 차감 후)
@@ -110,24 +128,55 @@ public class PointService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void earn(Long userId, long paidAmount, Long orderId) {
-        if (paidAmount <= 0) return; // 쿠폰/포인트 전액 할인 시 적립 없음
+        if (paidAmount <= 0) return;
         // 멱등성 보장 — Outbox 재처리 시 이중 적립 방지 (앱 레벨 1차, DB UNIQUE 2차)
         if (pointTransactionRepository.existsByOrderIdAndType(orderId, PointTransactionType.EARN)) {
             return;
         }
         long earnAmount = Math.max(1L, Math.round(paidAmount * EARN_RATE));
-        UserPoint userPoint = getOrCreate(userId);
-        userPoint.earn(earnAmount);
 
         pointTransactionRepository.save(PointTransaction.builder()
                 .userId(userId)
                 .amount(earnAmount)
                 .type(PointTransactionType.EARN)
-                .description("주문 구매 적립 (주문 #" + orderId + ")")
+                .status(PointTransactionStatus.PENDING)
+                .description("주문 구매 적립 예정 (주문 #" + orderId + ")")
                 .orderId(orderId)
                 .build());
-        // UK(order_id, type) 충돌 시 DataIntegrityViolationException 발생 → REQUIRES_NEW 트랜잭션 롤백
-        // (앱 레벨 existsBy 체크로 정상 흐름에서는 미발생)
+    }
+
+    /**
+     * 배송 완료 시 PENDING 적립 포인트를 확정한다 (CONFIRMED + 잔액 반영).
+     *
+     * <p>PENDING 트랜잭션이 없으면 skip (이미 확정되었거나 적립 없음).
+     *
+     * @param orderId 배송 완료된 주문 ID
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void confirmPending(Long orderId) {
+        pointTransactionRepository.findByOrderIdAndTypeAndStatus(
+                orderId, PointTransactionType.EARN, PointTransactionStatus.PENDING
+        ).ifPresent(tx -> {
+            tx.confirm();
+            UserPoint userPoint = getOrCreate(tx.getUserId());
+            userPoint.earn(tx.getAmount());
+            log.info("[Point] 적립 확정: userId={}, orderId={}, amount={}", tx.getUserId(), orderId, tx.getAmount());
+        });
+    }
+
+    /**
+     * 주문 취소 시 PENDING 적립 포인트를 만료시킨다 (잔액 변동 없음).
+     *
+     * @param orderId 취소된 주문 ID
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void expirePending(Long orderId) {
+        pointTransactionRepository.findByOrderIdAndTypeAndStatus(
+                orderId, PointTransactionType.EARN, PointTransactionStatus.PENDING
+        ).ifPresent(tx -> {
+            tx.expire();
+            log.info("[Point] 적립 만료: userId={}, orderId={}, amount={}", tx.getUserId(), orderId, tx.getAmount());
+        });
     }
 
     /**
@@ -143,7 +192,6 @@ public class PointService {
         if (usePoints <= 0) {
             throw new BusinessException(ErrorCode.INVALID_POINT_AMOUNT);
         }
-        // 포인트 계정이 없으면 잔액 0으로 생성 → 이후 use()에서 INSUFFICIENT_POINTS 발생
         UserPoint userPoint = getOrCreate(userId);
         userPoint.use(usePoints);
 
@@ -159,9 +207,8 @@ public class PointService {
     /**
      * 주문 취소/환불 시 포인트를 원상복구한다.
      *
-     * <p>사용된 포인트 반환 + 결제 완료로 적립된 포인트 회수를 모두 처리한다.
-     * 포인트 트랜잭션이 없는 주문(포인트 미사용·미적립)은 early return하여
-     * 불필요한 {@code SELECT FOR UPDATE}(getOrCreate) 호출을 방지한다.
+     * <p>PENDING 적립 포인트는 만료 처리하고, CONFIRMED 적립 포인트는 회수한다.
+     * 사용된 포인트는 반환한다.
      *
      * @param userId  사용자 ID
      * @param orderId 취소된 주문 ID
@@ -172,7 +219,6 @@ public class PointService {
         if (pointTransactionRepository.existsByOrderIdAndType(orderId, PointTransactionType.REFUND)) {
             return;
         }
-        // 포인트 트랜잭션이 없으면 early return — getOrCreate(SELECT FOR UPDATE + 잠재적 INSERT) 불필요
         List<PointTransaction> orderTxns = pointTransactionRepository.findByOrderId(orderId);
         if (orderTxns.isEmpty()) return;
 
@@ -192,29 +238,32 @@ public class PointService {
                         .orderId(orderId)
                         .build());
             } else if (tx.getType() == PointTransactionType.EARN) {
-                // 적립 포인트 회수 (취소 시 소급 적용)
-                // 잔액 부족 시 회수 가능한 만큼만 차감하고, 트랜잭션 기록도 실제 차감량으로 남긴다
-                long reclaimAmount = tx.getAmount();
-                long actualReclaim = Math.min(reclaimAmount, userPoint.getBalance());
-                if (actualReclaim > 0) {
-                    userPoint.use(actualReclaim);
-                    newTxns.add(PointTransaction.builder()
-                            .userId(userId)
-                            .amount(-actualReclaim)
-                            .type(PointTransactionType.EXPIRE)
-                            .description("주문 취소 적립금 회수 (주문 #" + orderId + ")")
-                            .orderId(orderId)
-                            .build());
-                }
-                if (actualReclaim < reclaimAmount) {
-                    log.warn("[Point] 적립금 전액 회수 불가: userId={}, orderId={}, 요청={}, 실제={}",
-                            userId, orderId, reclaimAmount, actualReclaim);
-                    pointPartialReclaimCounter.increment();
+                if (tx.getStatus() == PointTransactionStatus.PENDING) {
+                    // PENDING 적립 → EXPIRED (잔액 변동 없음)
+                    tx.expire();
+                } else if (tx.getStatus() == PointTransactionStatus.CONFIRMED) {
+                    // CONFIRMED 적립 → 회수 (잔액에서 차감)
+                    long reclaimAmount = tx.getAmount();
+                    long actualReclaim = Math.min(reclaimAmount, userPoint.getBalance());
+                    if (actualReclaim > 0) {
+                        userPoint.use(actualReclaim);
+                        newTxns.add(PointTransaction.builder()
+                                .userId(userId)
+                                .amount(-actualReclaim)
+                                .type(PointTransactionType.EXPIRE)
+                                .description("주문 취소 적립금 회수 (주문 #" + orderId + ")")
+                                .orderId(orderId)
+                                .build());
+                    }
+                    if (actualReclaim < reclaimAmount) {
+                        log.warn("[Point] 적립금 전액 회수 불가: userId={}, orderId={}, 요청={}, 실제={}",
+                                userId, orderId, reclaimAmount, actualReclaim);
+                        pointPartialReclaimCounter.increment();
+                    }
                 }
             }
         });
 
-        // 신규 트랜잭션 기록을 단일 배치 INSERT로 처리
         if (!newTxns.isEmpty()) {
             pointTransactionRepository.saveAll(newTxns);
         }
@@ -227,7 +276,6 @@ public class PointService {
                         return userPointRepository.save(
                                 UserPoint.builder().userId(userId).build());
                     } catch (DataIntegrityViolationException e) {
-                        // 동시 생성 충돌 — 재조회하여 이미 생성된 레코드 반환
                         return userPointRepository.findByUserIdWithLock(userId)
                                 .orElseThrow(() -> e);
                     }
