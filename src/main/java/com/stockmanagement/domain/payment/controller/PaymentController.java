@@ -3,6 +3,7 @@ package com.stockmanagement.domain.payment.controller;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import com.stockmanagement.common.annotation.RequireEmailVerified;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.common.security.CurrentUserId;
@@ -48,6 +49,7 @@ public class PaymentController {
 
     @Operation(summary = "결제 준비", description = "TossPayments 결제창 렌더링 전 호출. tossOrderId와 amount 반환. 본인 주문만 가능.")
     @PostMapping("/prepare")
+    @RequireEmailVerified
     public ApiResponse<PaymentPrepareResponse> prepare(
             @RequestBody @Valid PaymentPrepareRequest request,
             @CurrentUserId Long userId) {
@@ -57,6 +59,7 @@ public class PaymentController {
     @Operation(summary = "결제 승인", description = "결제창 완료 후 paymentKey로 호출. Order → CONFIRMED, reserved→allocated. 본인 주문만 가능.")
     @PostMapping("/confirm")
     @RateLimit(limit = 5, windowSeconds = 60)
+    @RequireEmailVerified
     public ApiResponse<PaymentResponse> confirm(
             @RequestBody @Valid PaymentConfirmRequest request,
             @CurrentUserId Long userId) {

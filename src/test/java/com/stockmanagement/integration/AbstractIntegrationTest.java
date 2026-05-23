@@ -168,7 +168,7 @@ abstract class AbstractIntegrationTest {
 
     // ===== 공통 헬퍼 =====
 
-    /** 회원가입 후 JWT 토큰을 반환한다. */
+    /** 회원가입 후 이메일 인증 완료 처리 후 JWT 토큰을 반환한다. */
     protected String signupAndLogin(String username, String password, String email) throws Exception {
         String signupJson = String.format(
                 "{\"username\":\"%s\",\"password\":\"%s\",\"email\":\"%s\"}",
@@ -177,6 +177,10 @@ abstract class AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson))
                 .andExpect(status().isCreated());
+        // 통합 테스트에서 @RequireEmailVerified 차단 방지
+        User signedUpUser = userRepository.findByUsername(username).orElseThrow();
+        signedUpUser.verifyEmail();
+        userRepository.save(signedUpUser);
         return login(username, password);
     }
 
@@ -200,6 +204,7 @@ abstract class AbstractIntegrationTest {
                 .email(email)
                 .role(UserRole.ADMIN)
                 .build();
+        admin.verifyEmail();
         userRepository.save(admin);
         return login(username, password);
     }

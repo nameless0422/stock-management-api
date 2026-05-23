@@ -7,10 +7,17 @@ public record LoginResponse(
         String tokenType,
         long expiresIn,
         String refreshToken,
-        LocalDateTime refreshTokenExpiresAt
+        LocalDateTime refreshTokenExpiresAt,
+        boolean emailVerified
 ) {
-    public static LoginResponse of(String accessToken, long expiresInSeconds, String refreshToken) {
+    public static LoginResponse of(String accessToken, long expiresInSeconds, String refreshToken,
+                                   boolean emailVerified) {
         return new LoginResponse(accessToken, "Bearer", expiresInSeconds, refreshToken,
-                LocalDateTime.now().plusDays(30));
+                LocalDateTime.now().plusDays(30), emailVerified);
+    }
+
+    /** 하위 호환 — emailVerified 미지정 시 true 기본값 */
+    public static LoginResponse of(String accessToken, long expiresInSeconds, String refreshToken) {
+        return of(accessToken, expiresInSeconds, refreshToken, true);
     }
 }

@@ -7,6 +7,7 @@ import com.stockmanagement.domain.user.dto.LoginResponse;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.service.UserService;
+import com.stockmanagement.common.security.EmailVerificationTokenStore;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.RefreshTokenStore;
 import com.stockmanagement.common.security.JwtTokenProvider;
@@ -52,6 +53,9 @@ class AuthControllerTest {
 
     @MockBean
     private RefreshTokenStore refreshTokenStore;
+
+    @MockBean
+    private EmailVerificationTokenStore emailVerificationTokenStore;
 
     // ===== POST /api/auth/signup =====
 
@@ -218,6 +222,89 @@ class AuthControllerTest {
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
             mockMvc.perform(post("/api/auth/logout"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ===== POST /api/auth/email/verify =====
+
+    @Nested
+    @DisplayName("POST /api/auth/email/verify")
+    class EmailVerify {
+
+        @Test
+        @DisplayName("유효한 토큰 → 200 (인증 불필요)")
+        void verifyEmailSuccess() throws Exception {
+            mockMvc.perform(post("/api/auth/email/verify")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"token\":\"verify-uuid\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+
+            verify(userService).verifyEmail("verify-uuid");
+        }
+
+        @Test
+        @DisplayName("유효하지 않은 토큰 → 401")
+        void invalidToken() throws Exception {
+            doThrow(new BusinessException(ErrorCode.INVALID_VERIFICATION_TOKEN))
+                    .when(userService).verifyEmail(anyString());
+
+            mockMvc.perform(post("/api/auth/email/verify")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"token\":\"bad-token\"}"))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.success").value(false));
+        }
+
+        @Test
+        @DisplayName("토큰 누락 → 400")
+        void missingToken() throws Exception {
+            mockMvc.perform(post("/api/auth/email/verify")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    // ===== POST /api/auth/email/resend =====
+
+    @Nested
+    @DisplayName("POST /api/auth/email/resend")
+    class EmailResend {
+
+        private static UsernamePasswordAuthenticationToken userAuth(String username) {
+            return new UsernamePasswordAuthenticationToken(
+                    username, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        }
+
+        @Test
+        @DisplayName("인증된 사용자 → 200")
+        void resendSuccess() throws Exception {
+            mockMvc.perform(post("/api/auth/email/resend")
+                            .with(authentication(userAuth("testuser"))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+
+            verify(userService).resendVerificationEmail("testuser");
+        }
+
+        @Test
+        @DisplayName("이미 인증된 이메일 → 400")
+        void alreadyVerified() throws Exception {
+            doThrow(new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED))
+                    .when(userService).resendVerificationEmail(anyString());
+
+            mockMvc.perform(post("/api/auth/email/resend")
+                            .with(authentication(userAuth("testuser"))))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.success").value(false));
+        }
+
+        @Test
+        @DisplayName("미인증 → 401")
+        void unauthorizedWithoutAuth() throws Exception {
+            mockMvc.perform(post("/api/auth/email/resend"))
                     .andExpect(status().isUnauthorized());
         }
     }

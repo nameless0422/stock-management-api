@@ -131,6 +131,22 @@ public class EmailService {
         send(to, "[StockMall] 비밀번호 재설정 안내", wrap(content));
     }
 
+    public void sendVerificationEmail(String to, String username, String token) {
+        String content = """
+                <h2 style="margin:0 0 6px;font-size:18px;color:#111;">이메일 인증 안내 ✉️</h2>
+                <p style="margin:0 0 20px;color:#666;font-size:14px;">회원가입을 완료하려면 아래 인증 토큰을 사용해 주세요.</p>
+                %s
+                <p style="font-size:13px;color:#555;margin-top:20px;">
+                  이 토큰은 24시간 동안 유효하며 1회만 사용할 수 있습니다.<br>
+                  본인이 가입하지 않은 경우 이 메일을 무시해 주세요.
+                </p>
+                """.formatted(infoBox(
+                row("사용자명", username),
+                row("인증 토큰", token)
+        ));
+        send(to, "[StockMall] 이메일 인증을 완료해 주세요", wrap(content));
+    }
+
     public void sendRestockAvailable(String to, String productName) {
         String content = """
                 <h2 style="margin:0 0 6px;font-size:18px;color:#111;">재입고 알림 📦</h2>

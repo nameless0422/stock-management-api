@@ -23,6 +23,7 @@ import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import com.stockmanagement.common.email.EmailService;
+import com.stockmanagement.common.security.EmailVerificationTokenStore;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.LoginRateLimiter;
 import com.stockmanagement.common.security.PasswordResetTokenStore;
@@ -106,6 +107,9 @@ class UserServiceTest {
 
     @Mock
     private EmailService emailService;
+
+    @Mock
+    private EmailVerificationTokenStore emailVerificationTokenStore;
 
     @InjectMocks
     private UserService userService;
@@ -444,6 +448,83 @@ class UserServiceTest {
                             .isEqualTo(ErrorCode.USER_NOT_FOUND));
 
             verify(userRepository, never()).delete(any(User.class));
+        }
+    }
+
+    // ===== verifyEmail() =====
+
+    @Nested
+    @DisplayName("verifyEmail()")
+    class VerifyEmail {
+
+        @Test
+        @DisplayName("유효한 토큰 — 이메일 인증 완료")
+        void verifiesEmail() {
+            given(emailVerificationTokenStore.consume("verify-token")).willReturn("testuser");
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+
+            userService.verifyEmail("verify-token");
+
+            assertThat(user.isEmailVerified()).isTrue();
+            verify(emailVerificationTokenStore).consume("verify-token");
+        }
+
+        @Test
+        @DisplayName("이미 인증된 이메일 — EMAIL_ALREADY_VERIFIED 예외")
+        void throwsWhenAlreadyVerified() {
+            user.verifyEmail(); // 이미 인증 상태
+            given(emailVerificationTokenStore.consume("verify-token")).willReturn("testuser");
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+
+            assertThatThrownBy(() -> userService.verifyEmail("verify-token"))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.EMAIL_ALREADY_VERIFIED));
+        }
+
+        @Test
+        @DisplayName("유효하지 않은 토큰 — INVALID_VERIFICATION_TOKEN 예외")
+        void throwsWhenTokenInvalid() {
+            given(emailVerificationTokenStore.consume("bad-token"))
+                    .willThrow(new BusinessException(ErrorCode.INVALID_VERIFICATION_TOKEN));
+
+            assertThatThrownBy(() -> userService.verifyEmail("bad-token"))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.INVALID_VERIFICATION_TOKEN));
+        }
+    }
+
+    // ===== resendVerificationEmail() =====
+
+    @Nested
+    @DisplayName("resendVerificationEmail()")
+    class ResendVerificationEmail {
+
+        @Test
+        @DisplayName("미인증 사용자 — 토큰 재발급 + 이메일 발송")
+        void resendsVerificationEmail() {
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+            given(emailVerificationTokenStore.issue("testuser")).willReturn("new-token");
+
+            userService.resendVerificationEmail("testuser");
+
+            verify(emailVerificationTokenStore).issue("testuser");
+            verify(emailService).sendVerificationEmail("test@example.com", "testuser", "new-token");
+        }
+
+        @Test
+        @DisplayName("이미 인증된 사용자 — EMAIL_ALREADY_VERIFIED 예외")
+        void throwsWhenAlreadyVerified() {
+            user.verifyEmail();
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+
+            assertThatThrownBy(() -> userService.resendVerificationEmail("testuser"))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.EMAIL_ALREADY_VERIFIED));
+
+            verifyNoInteractions(emailVerificationTokenStore);
         }
     }
 
