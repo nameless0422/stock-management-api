@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.order.cart.controller;
 
+import com.stockmanagement.common.annotation.RequireEmailVerified;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.domain.order.cart.dto.CartCheckoutRequest;
@@ -70,6 +71,7 @@ public class CartController {
                description = "현재 장바구니의 상품으로 주문을 생성하고 장바구니를 비운다.")
     @PostMapping("/checkout")
     @ResponseStatus(HttpStatus.CREATED)
+    @RequireEmailVerified
     public ApiResponse<OrderResponse> checkout(
             @CurrentUserId Long userId,
             @RequestBody @Valid CartCheckoutRequest request) {

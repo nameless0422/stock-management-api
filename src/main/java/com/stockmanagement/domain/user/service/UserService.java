@@ -28,6 +28,7 @@ import com.stockmanagement.domain.user.repository.UserRepository;
 import com.stockmanagement.common.email.EmailService;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.LoginRateLimiter;
+import com.stockmanagement.common.security.EmailVerificationTokenStore;
 import com.stockmanagement.common.security.PasswordResetTokenStore;
 import com.stockmanagement.common.security.RefreshTokenStore;
 import com.stockmanagement.common.security.JwtTokenProvider;
@@ -76,6 +77,7 @@ public class UserService {
     private final LoginRateLimiter loginRateLimiter;
     private final RefreshTokenStore refreshTokenStore;
     private final PasswordResetTokenStore passwordResetTokenStore;
+    private final EmailVerificationTokenStore emailVerificationTokenStore;
 
     @Nullable
     @Autowired(required = false)
@@ -112,6 +114,14 @@ public class UserService {
         }
         // 포인트 계정을 회원가입 시점에 미리 생성 — getOrCreate() 경쟁 조건 원천 차단
         userPointRepository.save(UserPoint.builder().userId(savedUser.getId()).build());
+
+        // 이메일 인증 토큰 발급 + 인증 메일 발송
+        String verificationToken = emailVerificationTokenStore.issue(savedUser.getUsername());
+        if (emailService != null) {
+            emailService.sendVerificationEmail(savedUser.getEmail(), savedUser.getUsername(), verificationToken);
+        } else {
+            log.warn("[EmailVerification] mail.enabled=false — 인증 토큰 발급됨(token={})", verificationToken);
+        }
         return UserResponse.from(savedUser);
     }
 
@@ -129,7 +139,8 @@ public class UserService {
         loginRateLimiter.reset(request.username());
         String accessToken  = jwtTokenProvider.createToken(user.getUsername(), user.getRole().name(), user.getId());
         String refreshToken = refreshTokenStore.issue(user.getUsername());
-        return LoginResponse.of(accessToken, jwtTokenProvider.getTokenValidityInSeconds(), refreshToken);
+        return LoginResponse.of(accessToken, jwtTokenProvider.getTokenValidityInSeconds(), refreshToken,
+                user.isEmailVerified());
     }
 
     /**
@@ -145,7 +156,36 @@ public class UserService {
 
         String newAccessToken  = jwtTokenProvider.createToken(user.getUsername(), user.getRole().name(), user.getId());
         String newRefreshToken = refreshTokenStore.issue(user.getUsername());
-        return LoginResponse.of(newAccessToken, jwtTokenProvider.getTokenValidityInSeconds(), newRefreshToken);
+        return LoginResponse.of(newAccessToken, jwtTokenProvider.getTokenValidityInSeconds(), newRefreshToken,
+                user.isEmailVerified());
+    }
+
+    /** 이메일 인증 토큰을 검증하고 사용자의 이메일을 인증 완료 처리한다. */
+    @Transactional
+    public void verifyEmail(String token) {
+        String username = emailVerificationTokenStore.consume(token);
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (user.isEmailVerified()) {
+            throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
+        }
+        user.verifyEmail();
+    }
+
+    /** 이메일 인증 메일을 재발송한다. 이미 인증된 경우 예외. */
+    @Transactional(readOnly = true)
+    public void resendVerificationEmail(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (user.isEmailVerified()) {
+            throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
+        }
+        String verificationToken = emailVerificationTokenStore.issue(username);
+        if (emailService != null) {
+            emailService.sendVerificationEmail(user.getEmail(), username, verificationToken);
+        } else {
+            log.warn("[EmailVerification] mail.enabled=false — 재발송 토큰(token={})", verificationToken);
+        }
     }
 
     /** username으로 사용자 ID를 반환한다. */

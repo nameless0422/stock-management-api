@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.order.controller;
 
+import com.stockmanagement.common.annotation.RequireEmailVerified;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.ratelimit.RateLimit;
@@ -62,6 +63,7 @@ public class OrderController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @RateLimit(limit = 10, windowSeconds = 60)
+    @RequireEmailVerified
     public ApiResponse<OrderResponse> create(
             @RequestBody @Valid OrderCreateRequest request,
             @CurrentUserId Long userId) {

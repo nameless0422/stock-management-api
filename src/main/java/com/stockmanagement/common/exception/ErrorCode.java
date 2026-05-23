@@ -112,6 +112,9 @@ public enum ErrorCode {
     SAME_PASSWORD(HttpStatus.BAD_REQUEST, "현재 비밀번호와 동일한 비밀번호로는 변경할 수 없습니다."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 Refresh Token입니다."),
     INVALID_RESET_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 비밀번호 재설정 토큰입니다."),
+    INVALID_VERIFICATION_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 이메일 인증 토큰입니다."),
+    EMAIL_ALREADY_VERIFIED(HttpStatus.BAD_REQUEST, "이미 인증된 이메일입니다."),
+    EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN, "이메일 인증이 필요합니다."),
 
     // ===== Admin =====
     LAST_ADMIN(HttpStatus.CONFLICT, "마지막 관리자의 권한은 해제할 수 없습니다."),
