@@ -132,6 +132,7 @@ abstract class AbstractIntegrationTest {
             // order_status_history → orders (ON DELETE CASCADE로 자동 삭제되지만 명시적으로 먼저 삭제)
             stmt.execute("DELETE FROM cart_items");
             stmt.execute("DELETE FROM shipments");
+            stmt.execute("DELETE FROM product_qna");
             stmt.execute("DELETE FROM reviews");
             stmt.execute("DELETE FROM wishlist_items");
             stmt.execute("DELETE FROM notifications");

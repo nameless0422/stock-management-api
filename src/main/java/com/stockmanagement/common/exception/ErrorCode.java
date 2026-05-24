@@ -84,6 +84,10 @@ public enum ErrorCode {
     REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 리뷰를 작성한 상품입니다."),
     REVIEW_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 리뷰만 삭제할 수 있습니다."),
 
+    // ===== Product Q&A =====
+    QNA_NOT_FOUND(HttpStatus.NOT_FOUND, "Q&A를 찾을 수 없습니다."),
+    QNA_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 Q&A만 삭제할 수 있습니다."),
+
     // ===== Wishlist =====
     WISHLIST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 위시리스트에 추가된 상품입니다."),
     WISHLIST_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "위시리스트에서 해당 상품을 찾을 수 없습니다."),
