@@ -112,6 +112,12 @@ public class SecurityConfig {
                         // 리뷰 작성/삭제 — 일반 사용자 인증 필요 (ADMIN 패턴보다 먼저 선언)
                         .requestMatchers(HttpMethod.POST, "/api/products/*/reviews").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/products/*/reviews/**").authenticated()
+                        // Q&A 질문 작성 — 인증 필요 (ADMIN 패턴보다 먼저 선언)
+                        .requestMatchers(HttpMethod.POST, "/api/products/*/qna").authenticated()
+                        // Q&A 답변 작성 — ADMIN 전용
+                        .requestMatchers(HttpMethod.POST, "/api/products/*/qna/*/answer").hasRole("ADMIN")
+                        // Q&A 삭제 — 인증 필요 (작성자 또는 ADMIN, 서비스에서 분기)
+                        .requestMatchers(HttpMethod.DELETE, "/api/products/*/qna/*").authenticated()
                         // 재입고 알림 신청/취소 — 일반 사용자 인증 필요 (ADMIN 패턴보다 먼저 선언)
                         .requestMatchers(HttpMethod.POST, "/api/products/*/restock-notify").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/products/*/restock-notify").authenticated()
