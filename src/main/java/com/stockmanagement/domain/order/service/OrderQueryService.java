@@ -1,6 +1,5 @@
 package com.stockmanagement.domain.order.service;
 
-import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.coupon.dto.CouponValidateRequest;
@@ -13,7 +12,6 @@ import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderDeliverySnapshot;
-import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.repository.OrderDeliverySnapshotRepository;
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderSpecification;
@@ -28,7 +26,6 @@ import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -113,29 +110,6 @@ public class OrderQueryService {
                 .stream().collect(Collectors.toMap(OrderDeliverySnapshot::getOrderId, s -> s));
 
         return page.map(o -> OrderResponse.from(o, null, statusMap.get(o.getId()), snapshotMap.get(o.getId())));
-    }
-
-    /**
-     * 사용자 주문 목록을 커서 기반으로 최신순 조회한다.
-     *
-     * <p>오프셋 방식과 달리 COUNT 쿼리가 없어 대용량 이력 스크롤에 적합하다.
-     */
-    public CursorPage<OrderResponse> getOrderScroll(Long userId, boolean isAdmin,
-                                                     OrderStatus status, Long lastId, int size) {
-        PageRequest limit = PageRequest.of(0, size + 1);
-        List<Order> items = lastId == null
-                ? orderRepository.findCursorByUserId(userId, status, limit)
-                : orderRepository.findCursorByUserIdAfter(userId, status, lastId, limit);
-        // 배송 상태 + 배송지 스냅샷 배치 조회 (N+1 방지)
-        List<Long> orderIds = items.stream().map(Order::getId).toList();
-        Map<Long, ShipmentStatus> statusMap = shipmentRepository.findStatusMapByOrderIds(orderIds);
-        Map<Long, OrderDeliverySnapshot> snapshotMap = deliverySnapshotRepository.findByOrderIdIn(orderIds)
-                .stream().collect(Collectors.toMap(OrderDeliverySnapshot::getOrderId, s -> s));
-
-        return CursorPage.of(
-                items.stream().map(o -> OrderResponse.from(o, null, statusMap.get(o.getId()), snapshotMap.get(o.getId()))).toList(),
-                size,
-                OrderResponse::getId);
     }
 
     /**
