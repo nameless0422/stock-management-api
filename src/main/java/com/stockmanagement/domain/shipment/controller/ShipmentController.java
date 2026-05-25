@@ -3,6 +3,7 @@ package com.stockmanagement.domain.shipment.controller;
 import com.stockmanagement.common.dto.ApiResponse;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.common.security.SecurityUtils;
+import com.stockmanagement.domain.shipment.dto.ReturnRequestDto;
 import com.stockmanagement.domain.shipment.dto.ShipmentResponse;
 import com.stockmanagement.domain.shipment.dto.ShipmentUpdateRequest;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
@@ -22,10 +23,13 @@ import org.springframework.web.bind.annotation.*;
  * 배송 REST API 컨트롤러.
  *
  * <pre>
- * GET   /api/shipments/orders/{orderId}          주문별 배송 조회              → 200 OK (인증)
- * PATCH /api/shipments/orders/{orderId}/ship      배송 출고 처리               → 200 OK (ADMIN)
- * PATCH /api/shipments/orders/{orderId}/deliver   배송 완료 처리               → 200 OK (ADMIN)
- * PATCH /api/shipments/orders/{orderId}/return    반품 처리                    → 200 OK (ADMIN)
+ * GET   /api/shipments/orders/{orderId}                 주문별 배송 조회        → 200 OK (인증)
+ * PATCH /api/shipments/orders/{orderId}/ship            배송 출고 처리         → 200 OK (ADMIN)
+ * PATCH /api/shipments/orders/{orderId}/deliver         배송 완료 처리         → 200 OK (ADMIN)
+ * PATCH /api/shipments/orders/{orderId}/return          반품 처리              → 200 OK (ADMIN)
+ * POST  /api/shipments/orders/{orderId}/return-request  반품 신청              → 200 OK (인증)
+ * PATCH /api/shipments/orders/{orderId}/return-approve   반품 승인             → 200 OK (ADMIN)
+ * PATCH /api/shipments/orders/{orderId}/return-reject    반품 거부             → 200 OK (ADMIN)
  * </pre>
  *
  * <p>배송 생성은 결제 확정({@code PaymentService.confirm()}) 시 자동으로 수행되므로
@@ -76,5 +80,26 @@ public class ShipmentController {
     @PatchMapping("/orders/{orderId}/return")
     public ApiResponse<ShipmentResponse> processReturn(@PathVariable Long orderId) {
         return ApiResponse.ok(shipmentService.processReturn(orderId));
+    }
+
+    @Operation(summary = "반품 신청", description = "DELIVERED → RETURN_REQUESTED. 사용자가 직접 반품을 신청한다.")
+    @PostMapping("/orders/{orderId}/return-request")
+    public ApiResponse<ShipmentResponse> requestReturn(
+            @PathVariable Long orderId,
+            @CurrentUserId Long userId,
+            @RequestBody @Valid ReturnRequestDto request) {
+        return ApiResponse.ok(shipmentService.requestReturn(orderId, userId, request.getReason()));
+    }
+
+    @Operation(summary = "반품 승인 (ADMIN)", description = "RETURN_REQUESTED → RETURNED.")
+    @PatchMapping("/orders/{orderId}/return-approve")
+    public ApiResponse<ShipmentResponse> approveReturn(@PathVariable Long orderId) {
+        return ApiResponse.ok(shipmentService.approveReturn(orderId));
+    }
+
+    @Operation(summary = "반품 거부 (ADMIN)", description = "RETURN_REQUESTED → DELIVERED.")
+    @PatchMapping("/orders/{orderId}/return-reject")
+    public ApiResponse<ShipmentResponse> rejectReturn(@PathVariable Long orderId) {
+        return ApiResponse.ok(shipmentService.rejectReturn(orderId));
     }
 }

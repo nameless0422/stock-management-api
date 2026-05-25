@@ -130,7 +130,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/inventory/**").hasRole("ADMIN")
                         // 내 배송 목록 조회 — 인증된 사용자 전용 (ADMIN PATCH 패턴보다 앞에 선언)
                         .requestMatchers(HttpMethod.GET, "/api/shipments/my").authenticated()
-                        // 배송 상태 변경 (출고/완료/반품)은 ADMIN 전용
+                        // 반품 신청 — 인증된 사용자 (ADMIN PATCH 패턴보다 앞에 선언)
+                        .requestMatchers(HttpMethod.POST, "/api/shipments/orders/*/return-request").authenticated()
+                        // 배송 상태 변경 (출고/완료/반품/반품승인/반품거부)은 ADMIN 전용
                         .requestMatchers(HttpMethod.PATCH, "/api/shipments/**").hasRole("ADMIN")
                         // 카테고리 조회 공개, 관리 (생성/수정/삭제)는 ADMIN 전용
                         .requestMatchers(HttpMethod.GET, "/api/categories/**").permitAll()

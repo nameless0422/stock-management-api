@@ -31,7 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
  *   결제 완료(CONFIRMED)  → {@link #createForOrder}    : PREPARING 생성 (PaymentService 호출)
  *   PREPARING            → {@link #startShipping}     : SHIPPED (운송장 등록)
  *   SHIPPED              → {@link #completeDelivery}  : DELIVERED
- *   PREPARING|SHIPPED    → {@link #processReturn}     : RETURNED
+ *   PREPARING|SHIPPED    → {@link #processReturn}     : RETURNED (ADMIN 직접)
+ *   DELIVERED            → {@link #requestReturn}     : RETURN_REQUESTED (사용자 신청)
+ *   RETURN_REQUESTED     → {@link #approveReturn}     : RETURNED (ADMIN 승인)
+ *   RETURN_REQUESTED     → {@link #rejectReturn}      : DELIVERED (ADMIN 거부)
  * </pre>
  */
 @Service
@@ -140,6 +143,50 @@ public class ShipmentService {
         Shipment shipment = findByOrderIdOrThrow(orderId);
         shipment.processReturn();
         outboxEventStore.save(new ShipmentReturnedEvent(orderId));
+        return ShipmentResponse.from(shipment);
+    }
+
+    /**
+     * 사용자가 반품을 신청한다. (DELIVERED → RETURN_REQUESTED)
+     *
+     * @param orderId 주문 ID
+     * @param userId  요청자 ID (소유권 검증)
+     * @param reason  반품 사유
+     */
+    @Transactional
+    public ShipmentResponse requestReturn(Long orderId, Long userId, String reason) {
+        Long orderUserId = orderRepository.findUserIdById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!orderUserId.equals(userId)) {
+            throw new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND);
+        }
+        Shipment shipment = findByOrderIdOrThrow(orderId);
+        shipment.requestReturn(reason);
+        return ShipmentResponse.from(shipment);
+    }
+
+    /**
+     * ADMIN이 반품을 승인한다. (RETURN_REQUESTED → RETURNED)
+     *
+     * @param orderId 주문 ID
+     */
+    @Transactional
+    public ShipmentResponse approveReturn(Long orderId) {
+        Shipment shipment = findByOrderIdOrThrow(orderId);
+        shipment.approveReturn();
+        outboxEventStore.save(new ShipmentReturnedEvent(orderId));
+        return ShipmentResponse.from(shipment);
+    }
+
+    /**
+     * ADMIN이 반품을 거부한다. (RETURN_REQUESTED → DELIVERED)
+     *
+     * @param orderId 주문 ID
+     */
+    @Transactional
+    public ShipmentResponse rejectReturn(Long orderId) {
+        Shipment shipment = findByOrderIdOrThrow(orderId);
+        shipment.rejectReturn();
         return ShipmentResponse.from(shipment);
     }
 
