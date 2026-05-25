@@ -56,6 +56,7 @@ public enum ErrorCode {
     SHIPMENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 배송이 생성된 주문입니다."),
     INVALID_SHIPMENT_STATUS(HttpStatus.CONFLICT, "현재 배송 상태에서 허용되지 않는 작업입니다."),
     SHIPMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 배송 정보만 접근할 수 있습니다."),
+    RETURN_ALREADY_REQUESTED(HttpStatus.CONFLICT, "이미 반품이 신청된 배송입니다."),
 
     // ===== Category =====
     CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "카테고리를 찾을 수 없습니다."),
