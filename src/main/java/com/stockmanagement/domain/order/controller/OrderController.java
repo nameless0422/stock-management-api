@@ -2,7 +2,6 @@ package com.stockmanagement.domain.order.controller;
 
 import com.stockmanagement.common.annotation.RequireEmailVerified;
 import com.stockmanagement.common.dto.ApiResponse;
-import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.common.security.SecurityUtils;
@@ -14,17 +13,13 @@ import com.stockmanagement.domain.order.dto.OrderPreviewResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.dto.OrderSearchRequest;
 import com.stockmanagement.domain.order.dto.OrderStatusHistoryResponse;
-import com.stockmanagement.domain.order.entity.OrderStatus;
 import com.stockmanagement.domain.order.service.OrderCommandService;
 import com.stockmanagement.domain.order.service.OrderDetailService;
 import com.stockmanagement.domain.order.service.OrderQueryService;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -44,7 +39,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
-@Validated
 public class OrderController {
 
     private final OrderQueryService orderQueryService;
@@ -103,28 +97,6 @@ public class OrderController {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
         Long effectiveUserId = isAdmin ? null : userId;
         return ApiResponse.ok(orderQueryService.getList(effectiveUserId, isAdmin, request, pageable));
-    }
-
-    @Operation(
-        summary = "주문 목록 커서 스크롤 (사용자용)",
-        description = """
-            커서 기반 페이지네이션으로 주문 목록을 최신순 조회한다.
-            - 첫 조회: lastId 없이 호출
-            - 다음 페이지: 이전 응답의 nextCursor를 lastId로 전달
-            - status 필터 지원 (PENDING / CONFIRMED / CANCELLED / REFUNDED)
-            - ADMIN: userId 파라미터로 특정 사용자 주문 스크롤 가능
-            - USER: 본인 주문만 조회 (userId 파라미터 무시)
-            """
-    )
-    @GetMapping("/scroll")
-    public ApiResponse<CursorPage<OrderResponse>> scroll(
-            @CurrentUserId Long userId,
-            Authentication authentication,
-            @RequestParam(required = false) OrderStatus status,
-            @RequestParam(required = false) Long lastId,
-            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
-        boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(orderQueryService.getOrderScroll(userId, isAdmin, status, lastId, size));
     }
 
     @Operation(summary = "주문 취소", description = "PENDING 상태만 취소 가능. 재고 예약 해제(reserved--). ADMIN은 모든 주문 취소 가능.")
