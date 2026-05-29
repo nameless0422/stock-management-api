@@ -35,6 +35,8 @@ public enum ErrorCode {
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다."),
     INVALID_ORDER_STATUS(HttpStatus.CONFLICT, "현재 주문 상태에서 허용되지 않는 작업입니다."),
     ORDER_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 주문만 접근할 수 있습니다."),
+    ORDER_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 주문에서 아이템을 찾을 수 없습니다."),
+    ORDER_ITEM_ALREADY_CANCELLED(HttpStatus.CONFLICT, "이미 취소된 주문 아이템입니다."),
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "결제 정보를 찾을 수 없습니다."),

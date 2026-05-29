@@ -225,8 +225,6 @@ class PointServiceTest {
         @Test
         @DisplayName("USE + EARN(CONFIRMED) 이력 있음 → 반환 + 회수 처리")
         void refundsBothUseAndEarn() {
-            given(pointTransactionRepository.existsByOrderIdAndType(100L, PointTransactionType.REFUND))
-                    .willReturn(false);
             UserPoint up = mockUserPoint(1L, 200); // earn된 상태
             given(userPointRepository.findByUserIdWithLock(1L)).willReturn(Optional.of(up));
 
@@ -257,8 +255,6 @@ class PointServiceTest {
                     .status(PointTransactionStatus.PENDING)
                     .description("적립 예정").orderId(100L).build();
 
-            given(pointTransactionRepository.existsByOrderIdAndType(100L, PointTransactionType.REFUND))
-                    .willReturn(false);
             given(pointTransactionRepository.findByOrderId(100L)).willReturn(List.of(pendingEarnTx));
             UserPoint up = mockUserPoint(1L, 0);
             given(userPointRepository.findByUserIdWithLock(1L)).willReturn(Optional.of(up));

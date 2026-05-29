@@ -2,12 +2,17 @@ package com.stockmanagement.domain.order.service;
 
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.common.lock.DistributedLock;
 import com.stockmanagement.domain.coupon.service.CouponService;
 import com.stockmanagement.domain.inventory.service.InventoryService;
+import com.stockmanagement.domain.payment.service.PaymentService;
 import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.user.address.service.DeliveryAddressService;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
+import com.stockmanagement.domain.order.dto.OrderItemCancelRequest;
+import com.stockmanagement.domain.order.dto.OrderItemCancelResponse;
 import com.stockmanagement.domain.order.dto.OrderItemRequest;
+import com.stockmanagement.domain.order.dto.OrderItemResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.entity.Order;
 import com.stockmanagement.domain.order.entity.OrderItem;
@@ -31,14 +36,17 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.dao.DataIntegrityViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -59,6 +67,7 @@ public class OrderCommandService {
     private final OrderStatusHistoryRepository historyRepository;
     private final CouponService couponService;
     private final PointService pointService;
+    private final PaymentService paymentService;
     private final OutboxEventStore outboxEventStore;
     private final DeliveryAddressService deliveryAddressService;
     private final OrderDeliverySnapshotRepository deliverySnapshotRepository;
@@ -259,6 +268,148 @@ public class OrderCommandService {
         recordHistory(order.getId(), previousStatus, OrderStatus.CANCELLED, "system:expiry");
         outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "SYSTEM_EXPIRY"));
     }
+
+    // ===== 아이템 부분 취소 =====
+
+    /**
+     * 주문 아이템을 부분 취소한다.
+     *
+     * <p>CONFIRMED/PARTIAL_CANCELLED 상태 주문에서 지정 아이템을 취소하고 Toss 부분 환불을 수행한다.
+     * 분산 락으로 동일 주문 동시 부분 취소를 방지한다.
+     *
+     * <p>흐름:
+     * <ol>
+     *   <li>[Short TX] 검증 + 환불 금액 계산
+     *   <li>[No TX] Toss 부분 환불 API 호출
+     *   <li>[Short TX] 아이템 CANCELLED 처리 + 재고 해제 + 포인트 반환 + 주문 상태 전이
+     * </ol>
+     */
+    @DistributedLock(key = "'order-item-cancel:' + #orderId")
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public OrderItemCancelResponse cancelItems(Long orderId, Long userId, boolean isAdmin,
+                                               OrderItemCancelRequest request) {
+        // 1. Short TX: 검증 + 환불 금액 계산
+        CancelItemsContext ctx = validateAndPrepare(orderId, userId, isAdmin, request.getItemIds());
+
+        // 2. Toss 부분 환불 (DB 커넥션 미점유)
+        if (ctx.refundAmount.compareTo(BigDecimal.ZERO) > 0) {
+            paymentService.cancelPartialForItems(orderId, ctx.refundAmount, request.getReason());
+        }
+
+        // 3. Short TX: 아이템 취소 + 재고 해제 + 포인트 반환 + 주문 상태 전이
+        return applyItemCancel(orderId, request.getItemIds(), request.getReason(),
+                ctx.refundAmount, ctx.pointsToRefund);
+    }
+
+    /**
+     * [Short TX] 부분 취소 검증 + 환불 금액 계산.
+     */
+    @Transactional
+    CancelItemsContext validateAndPrepare(Long orderId, Long userId, boolean isAdmin,
+                                          List<Long> itemIds) {
+        Order order = orderRepository.findByIdWithItemsForUpdate(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        validateOrderOwnership(order, userId, isAdmin);
+
+        // CONFIRMED 또는 PARTIAL_CANCELLED 상태만 부분 취소 가능
+        if (order.getStatus() != OrderStatus.CONFIRMED
+                && order.getStatus() != OrderStatus.PARTIAL_CANCELLED) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+
+        // 요청 아이템 검증
+        Set<Long> requestedIds = new HashSet<>(itemIds);
+        Map<Long, OrderItem> itemMap = order.getItems().stream()
+                .collect(Collectors.toMap(OrderItem::getId, i -> i));
+
+        List<OrderItem> targetItems = new ArrayList<>();
+        for (Long itemId : requestedIds) {
+            OrderItem item = itemMap.get(itemId);
+            if (item == null) {
+                throw new BusinessException(ErrorCode.ORDER_ITEM_NOT_FOUND);
+            }
+            if (!item.isActive()) {
+                throw new BusinessException(ErrorCode.ORDER_ITEM_ALREADY_CANCELLED);
+            }
+            targetItems.add(item);
+        }
+
+        // 환불 금액 계산 (비례 안분)
+        BigDecimal cancelledSubtotal = targetItems.stream()
+                .map(OrderItem::getSubtotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal cancelRatio = cancelledSubtotal.divide(
+                order.getTotalAmount(), 10, RoundingMode.DOWN);
+
+        BigDecimal proportionalDiscount = order.getDiscountAmount()
+                .multiply(cancelRatio).setScale(0, RoundingMode.DOWN);
+
+        long proportionalPoints = BigDecimal.valueOf(order.getUsedPoints())
+                .multiply(cancelRatio).setScale(0, RoundingMode.DOWN).longValue();
+
+        BigDecimal refundAmount = cancelledSubtotal
+                .subtract(proportionalDiscount)
+                .subtract(BigDecimal.valueOf(proportionalPoints))
+                .max(BigDecimal.ZERO);
+
+        return new CancelItemsContext(refundAmount, proportionalPoints);
+    }
+
+    /**
+     * [Short TX] 아이템 취소 + 재고 해제 + 포인트 반환 + 주문 상태 전이.
+     */
+    @Transactional
+    @CacheEvict(cacheNames = "orders", key = "#orderId")
+    OrderItemCancelResponse applyItemCancel(Long orderId, List<Long> itemIds, String reason,
+                                            BigDecimal refundAmount, long pointsToRefund) {
+        Order order = orderRepository.findByIdWithItemsForUpdate(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        OrderStatus previousStatus = order.getStatus();
+        Set<Long> requestedIds = new HashSet<>(itemIds);
+
+        // 아이템 취소 + 재고 해제
+        List<OrderItemResponse> cancelledResponses = new ArrayList<>();
+        for (OrderItem item : order.getItems()) {
+            if (requestedIds.contains(item.getId()) && item.isActive()) {
+                item.cancel();
+                inventoryService.releaseAllocation(item.getVariant().getId(), item.getQuantity());
+                cancelledResponses.add(OrderItemResponse.from(item));
+            }
+        }
+
+        // 비례 포인트 반환
+        if (pointsToRefund > 0) {
+            pointService.refundPartial(order.getUserId(), orderId, pointsToRefund);
+        }
+
+        // 주문 상태 전이
+        order.partialCancel(reason);
+
+        // 모든 아이템 취소 → 쿠폰 반환 + EARN 포인트 처리
+        if (order.isAllItemsCancelled()) {
+            couponService.releaseCoupon(orderId);
+            pointService.expirePending(orderId);
+        }
+
+        recordHistory(orderId, previousStatus, order.getStatus(),
+                "partial-cancel:items=" + itemIds);
+        outboxEventStore.save(new OrderCancelledEvent(
+                orderId, order.getUserId(), "PARTIAL_ITEM_CANCELLED"));
+
+        return OrderItemCancelResponse.builder()
+                .orderId(orderId)
+                .orderStatus(order.getStatus().name())
+                .refundAmount(refundAmount)
+                .refundedPoints(pointsToRefund)
+                .cancelledItems(cancelledResponses)
+                .build();
+    }
+
+    /** 부분 취소 검증 결과 컨텍스트. */
+    record CancelItemsContext(BigDecimal refundAmount, long pointsToRefund) {}
 
     /**
      * 회원 탈퇴 시 사용자의 모든 PENDING 주문을 강제 취소한다.

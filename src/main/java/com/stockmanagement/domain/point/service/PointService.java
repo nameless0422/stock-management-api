@@ -232,29 +232,40 @@ public class PointService {
      */
     @Transactional
     public void refundByOrder(Long userId, Long orderId) {
-        // 멱등성: 이미 REFUND 처리된 주문이면 중복 실행 방지
-        if (pointTransactionRepository.existsByOrderIdAndType(orderId, PointTransactionType.REFUND)) {
-            return;
-        }
         List<PointTransaction> orderTxns = pointTransactionRepository.findByOrderId(orderId);
         if (orderTxns.isEmpty()) return;
+
+        // 이미 부분 환불된 포인트 합산
+        long alreadyRefunded = orderTxns.stream()
+                .filter(tx -> tx.getType() == PointTransactionType.REFUND)
+                .mapToLong(PointTransaction::getAmount)
+                .sum();
+
+        // USE 트랜잭션의 총 사용 포인트
+        long totalUsed = orderTxns.stream()
+                .filter(tx -> tx.getType() == PointTransactionType.USE)
+                .mapToLong(tx -> Math.abs(tx.getAmount()))
+                .sum();
+
+        // 잔여 환불 포인트 = 총 사용 - 이미 환불된 양
+        long remainingRefund = totalUsed - alreadyRefunded;
 
         UserPoint userPoint = getOrCreate(userId);
         List<PointTransaction> newTxns = new ArrayList<>();
 
+        if (remainingRefund > 0) {
+            userPoint.refund(remainingRefund);
+            newTxns.add(PointTransaction.builder()
+                    .userId(userId)
+                    .amount(remainingRefund)
+                    .type(PointTransactionType.REFUND)
+                    .description("주문 취소 포인트 반환 (주문 #" + orderId + ")")
+                    .orderId(orderId)
+                    .build());
+        }
+
         orderTxns.forEach(tx -> {
-            if (tx.getType() == PointTransactionType.USE) {
-                // 사용 포인트 반환
-                long refundAmount = Math.abs(tx.getAmount());
-                userPoint.refund(refundAmount);
-                newTxns.add(PointTransaction.builder()
-                        .userId(userId)
-                        .amount(refundAmount)
-                        .type(PointTransactionType.REFUND)
-                        .description("주문 취소 포인트 반환 (주문 #" + orderId + ")")
-                        .orderId(orderId)
-                        .build());
-            } else if (tx.getType() == PointTransactionType.EARN) {
+            if (tx.getType() == PointTransactionType.EARN) {
                 if (tx.getStatus() == PointTransactionStatus.PENDING) {
                     // PENDING 적립 → EXPIRED (잔액 변동 없음)
                     tx.expire();
@@ -284,6 +295,32 @@ public class PointService {
         if (!newTxns.isEmpty()) {
             pointTransactionRepository.saveAll(newTxns);
         }
+    }
+
+    /**
+     * 부분 취소 시 비례 포인트를 반환한다.
+     *
+     * <p>전체 취소({@link #refundByOrder})와 달리 지정 금액만 반환하며 EARN 처리를 하지 않는다.
+     * EARN 처리는 모든 아이템 취소 시 전체 취소 흐름에서 수행한다.
+     *
+     * @param userId         사용자 ID
+     * @param orderId        주문 ID
+     * @param pointsToRefund 반환할 포인트
+     */
+    @Transactional
+    public void refundPartial(Long userId, Long orderId, long pointsToRefund) {
+        if (pointsToRefund <= 0) return;
+
+        UserPoint userPoint = getOrCreate(userId);
+        userPoint.refund(pointsToRefund);
+
+        pointTransactionRepository.save(PointTransaction.builder()
+                .userId(userId)
+                .amount(pointsToRefund)
+                .type(PointTransactionType.REFUND)
+                .description("부분 취소 포인트 반환 (주문 #" + orderId + ")")
+                .orderId(orderId)
+                .build());
     }
 
     /**
