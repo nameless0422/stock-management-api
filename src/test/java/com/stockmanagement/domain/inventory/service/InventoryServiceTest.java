@@ -15,7 +15,9 @@ import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.inventory.repository.InventoryTransactionRepository;
 import com.stockmanagement.domain.product.entity.Product;
-import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.product.entity.ProductVariant;
+import com.stockmanagement.domain.product.repository.ProductVariantRepository;
+import org.springframework.cache.CacheManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -52,7 +54,7 @@ class InventoryServiceTest {
     private InventoryTransactionRepository transactionRepository;
 
     @Mock
-    private ProductRepository productRepository;
+    private ProductVariantRepository variantRepository;
 
     @Mock
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
@@ -60,10 +62,14 @@ class InventoryServiceTest {
     @Mock
     private SystemSettingService systemSettingService;
 
+    @Mock
+    private CacheManager cacheManager;
+
     @InjectMocks
     private InventoryService inventoryService;
 
     private Product product;
+    private ProductVariant variant;
 
     @BeforeEach
     void setUp() {
@@ -73,30 +79,37 @@ class InventoryServiceTest {
                 .price(new BigDecimal("10000"))
                 .sku("SKU-001")
                 .build();
+        variant = ProductVariant.builder()
+                .product(product)
+                .optionName("기본")
+                .sku("SKU-001")
+                .price(new BigDecimal("10000"))
+                .build();
         lenient().when(systemSettingService.getLowStockThreshold()).thenReturn(10);
+        lenient().when(cacheManager.getCache("products")).thenReturn(null);
     }
 
     /** onHand=10, reserved=3, available=7 인 재고 픽스처 */
     private Inventory inventoryWithStock() {
-        Inventory inv = Inventory.builder().product(product).build();
+        Inventory inv = Inventory.builder().variant(variant).build();
         inv.receive(10);
         inv.reserve(3);
         return inv;
     }
 
-    // ===== getByProductId() =====
+    // ===== getByVariantId() =====
 
     @Nested
-    @DisplayName("getByProductId()")
-    class GetByProductId {
+    @DisplayName("getByVariantId()")
+    class GetByVariantId {
 
         @Test
         @DisplayName("재고가 존재하면 수량 정보가 담긴 InventoryResponse를 반환한다")
         void returnsInventoryResponse() {
             Inventory inventory = inventoryWithStock();
-            given(inventoryRepository.findByProductId(1L)).willReturn(Optional.of(inventory));
+            given(inventoryRepository.findByVariantId(1L)).willReturn(Optional.of(inventory));
 
-            InventoryResponse response = inventoryService.getByProductId(1L);
+            InventoryResponse response = inventoryService.getByVariantId(1L);
 
             assertThat(response.getOnHand()).isEqualTo(10);
             assertThat(response.getReserved()).isEqualTo(3);
@@ -106,9 +119,9 @@ class InventoryServiceTest {
         @Test
         @DisplayName("재고 레코드가 없으면 INVENTORY_NOT_FOUND 예외를 발생시킨다")
         void throwsWhenNotFound() {
-            given(inventoryRepository.findByProductId(99L)).willReturn(Optional.empty());
+            given(inventoryRepository.findByVariantId(99L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> inventoryService.getByProductId(99L))
+            assertThatThrownBy(() -> inventoryService.getByVariantId(99L))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVENTORY_NOT_FOUND));
@@ -125,7 +138,7 @@ class InventoryServiceTest {
         @DisplayName("재고가 존재하면 이력 목록을 반환한다 (커서 기반)")
         void returnsTransactionList() {
             Inventory inventory = inventoryWithStock();
-            given(inventoryRepository.findByProductId(1L)).willReturn(Optional.of(inventory));
+            given(inventoryRepository.findByVariantId(1L)).willReturn(Optional.of(inventory));
             InventoryTransaction tx = mock(InventoryTransaction.class);
             given(tx.getId()).willReturn(1L);
             given(tx.getType()).willReturn(InventoryTransactionType.RECEIVE);
@@ -134,7 +147,7 @@ class InventoryServiceTest {
             given(tx.getSnapshotReserved()).willReturn(0);
             given(tx.getSnapshotAllocated()).willReturn(0);
             given(tx.getCreatedAt()).willReturn(LocalDateTime.now());
-            given(transactionRepository.findByInventoryProductIdOrderByIdDesc(eq(1L), any(Pageable.class)))
+            given(transactionRepository.findByInventoryIdOrderByIdDesc(any(), any(Pageable.class)))
                     .willReturn(List.of(tx));
 
             var result = inventoryService.getTransactions(1L, null, 20);
@@ -146,7 +159,7 @@ class InventoryServiceTest {
         @Test
         @DisplayName("재고 레코드가 없으면 INVENTORY_NOT_FOUND 예외를 발생시킨다")
         void throwsWhenInventoryNotFound() {
-            given(inventoryRepository.findByProductId(99L)).willReturn(Optional.empty());
+            given(inventoryRepository.findByVariantId(99L)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> inventoryService.getTransactions(99L, null, 20))
                     .isInstanceOf(BusinessException.class)
@@ -175,8 +188,8 @@ class InventoryServiceTest {
         @DisplayName("기존 재고 레코드가 있으면 onHand를 증가시키고 이력을 기록한다")
         void increasesOnHandForExistingInventory() {
             Inventory inventory = inventoryWithStock(); // onHand=10
-            given(productRepository.findById(1L)).willReturn(Optional.of(product));
-            given(inventoryRepository.findByProductIdWithLock(1L)).willReturn(Optional.of(inventory));
+            given(variantRepository.findByIdWithProduct(1L)).willReturn(Optional.of(variant));
+            given(inventoryRepository.findByVariantIdWithLock(1L)).willReturn(Optional.of(inventory));
 
             InventoryResponse response = inventoryService.receive(1L, receiveRequest);
 
@@ -187,9 +200,9 @@ class InventoryServiceTest {
         @Test
         @DisplayName("재고 레코드가 없으면 자동 생성 후 onHand를 설정하고 이력을 기록한다")
         void createsInventoryWhenNotExists() {
-            Inventory newInventory = Inventory.builder().product(product).build();
-            given(productRepository.findById(1L)).willReturn(Optional.of(product));
-            given(inventoryRepository.findByProductIdWithLock(1L)).willReturn(Optional.empty());
+            Inventory newInventory = Inventory.builder().variant(variant).build();
+            given(variantRepository.findByIdWithProduct(1L)).willReturn(Optional.of(variant));
+            given(inventoryRepository.findByVariantIdWithLock(1L)).willReturn(Optional.empty());
             given(inventoryRepository.save(any(Inventory.class))).willReturn(newInventory);
 
             InventoryResponse response = inventoryService.receive(1L, receiveRequest);
@@ -200,14 +213,14 @@ class InventoryServiceTest {
         }
 
         @Test
-        @DisplayName("상품이 존재하지 않으면 PRODUCT_NOT_FOUND 예외를 발생시킨다")
-        void throwsWhenProductNotFound() {
-            given(productRepository.findById(99L)).willReturn(Optional.empty());
+        @DisplayName("variant가 존재하지 않으면 VARIANT_NOT_FOUND 예외를 발생시킨다")
+        void throwsWhenVariantNotFound() {
+            given(variantRepository.findByIdWithProduct(99L)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> inventoryService.receive(99L, receiveRequest))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                            .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND));
+                            .isEqualTo(ErrorCode.VARIANT_NOT_FOUND));
 
             verifyNoInteractions(inventoryRepository, transactionRepository);
         }
@@ -223,7 +236,7 @@ class InventoryServiceTest {
         @DisplayName("가용 재고가 충분하면 reserved가 증가하고 이력을 기록한다")
         void reservesSuccessfully() {
             Inventory inventory = inventoryWithStock(); // available=7
-            given(inventoryRepository.findByProductIdWithLock(1L)).willReturn(Optional.of(inventory));
+            given(inventoryRepository.findByVariantIdWithLock(1L)).willReturn(Optional.of(inventory));
 
             assertThatCode(() -> inventoryService.reserve(1L, 5)).doesNotThrowAnyException();
 
@@ -235,7 +248,7 @@ class InventoryServiceTest {
         @DisplayName("가용 재고 부족 시 InsufficientStockException이 전파된다")
         void propagatesInsufficientStockException() {
             Inventory inventory = inventoryWithStock(); // available=7
-            given(inventoryRepository.findByProductIdWithLock(1L)).willReturn(Optional.of(inventory));
+            given(inventoryRepository.findByVariantIdWithLock(1L)).willReturn(Optional.of(inventory));
 
             assertThatThrownBy(() -> inventoryService.reserve(1L, 8))
                     .isInstanceOf(InsufficientStockException.class);
@@ -244,7 +257,7 @@ class InventoryServiceTest {
         @Test
         @DisplayName("재고 레코드가 없으면 INVENTORY_NOT_FOUND 예외를 발생시킨다")
         void throwsWhenInventoryNotFound() {
-            given(inventoryRepository.findByProductIdWithLock(99L)).willReturn(Optional.empty());
+            given(inventoryRepository.findByVariantIdWithLock(99L)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> inventoryService.reserve(99L, 1))
                     .isInstanceOf(BusinessException.class)
@@ -263,7 +276,7 @@ class InventoryServiceTest {
         @DisplayName("예약 해제 시 reserved가 감소하고 이력을 기록한다")
         void releasesReservation() {
             Inventory inventory = inventoryWithStock(); // reserved=3
-            given(inventoryRepository.findByProductIdWithLock(1L)).willReturn(Optional.of(inventory));
+            given(inventoryRepository.findByVariantIdWithLock(1L)).willReturn(Optional.of(inventory));
 
             inventoryService.releaseReservation(1L, 3);
 
@@ -274,7 +287,7 @@ class InventoryServiceTest {
         @Test
         @DisplayName("재고 레코드가 없으면 INVENTORY_NOT_FOUND 예외를 발생시킨다")
         void throwsWhenInventoryNotFound() {
-            given(inventoryRepository.findByProductIdWithLock(99L)).willReturn(Optional.empty());
+            given(inventoryRepository.findByVariantIdWithLock(99L)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> inventoryService.releaseReservation(99L, 1))
                     .isInstanceOf(BusinessException.class)
@@ -293,7 +306,7 @@ class InventoryServiceTest {
         @DisplayName("결제 완료 시 reserved 감소, allocated 증가, 이력 기록")
         void confirmsAllocation() {
             Inventory inventory = inventoryWithStock(); // reserved=3
-            given(inventoryRepository.findByProductIdWithLock(1L)).willReturn(Optional.of(inventory));
+            given(inventoryRepository.findByVariantIdWithLock(1L)).willReturn(Optional.of(inventory));
 
             inventoryService.confirmAllocation(1L, 3);
 
@@ -305,7 +318,7 @@ class InventoryServiceTest {
         @Test
         @DisplayName("재고 레코드가 없으면 INVENTORY_NOT_FOUND 예외를 발생시킨다")
         void throwsWhenInventoryNotFound() {
-            given(inventoryRepository.findByProductIdWithLock(99L)).willReturn(Optional.empty());
+            given(inventoryRepository.findByVariantIdWithLock(99L)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> inventoryService.confirmAllocation(99L, 1))
                     .isInstanceOf(BusinessException.class)
@@ -325,7 +338,7 @@ class InventoryServiceTest {
         void releasesAllocation() {
             Inventory inventory = inventoryWithStock(); // reserved=3
             inventory.confirmAllocation(3); // reserved=0, allocated=3
-            given(inventoryRepository.findByProductIdWithLock(1L)).willReturn(Optional.of(inventory));
+            given(inventoryRepository.findByVariantIdWithLock(1L)).willReturn(Optional.of(inventory));
 
             inventoryService.releaseAllocation(1L, 3);
 
@@ -338,7 +351,7 @@ class InventoryServiceTest {
         void availableIncreasesAfterRelease() {
             Inventory inventory = inventoryWithStock(); // onHand=10, reserved=3, available=7
             inventory.confirmAllocation(3); // reserved=0, allocated=3, available=7
-            given(inventoryRepository.findByProductIdWithLock(1L)).willReturn(Optional.of(inventory));
+            given(inventoryRepository.findByVariantIdWithLock(1L)).willReturn(Optional.of(inventory));
 
             inventoryService.releaseAllocation(1L, 3);
 
@@ -349,7 +362,7 @@ class InventoryServiceTest {
         @Test
         @DisplayName("재고 레코드가 없으면 INVENTORY_NOT_FOUND 예외를 발생시킨다")
         void throwsWhenInventoryNotFound() {
-            given(inventoryRepository.findByProductIdWithLock(99L)).willReturn(Optional.empty());
+            given(inventoryRepository.findByVariantIdWithLock(99L)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> inventoryService.releaseAllocation(99L, 1))
                     .isInstanceOf(BusinessException.class)

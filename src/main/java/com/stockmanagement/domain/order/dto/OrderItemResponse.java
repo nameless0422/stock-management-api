@@ -24,6 +24,12 @@ public class OrderItemResponse {
     /** 상품명 — 주문 당시 이름 (Product 참조를 통해 현재 이름을 반환) */
     private final String productName;
 
+    /** 주문한 변형 ID */
+    private final Long variantId;
+
+    /** 변형 옵션 이름 (예: "빨강/L") */
+    private final String variantOptionName;
+
     /** 주문 수량 */
     private final int quantity;
 
@@ -50,6 +56,8 @@ public class OrderItemResponse {
                 .id(item.getId())
                 .productId(item.getProduct().getId())
                 .productName(item.getProduct().getName())
+                .variantId(item.getVariant().getId())
+                .variantOptionName(item.getVariant().getOptionName())
                 .quantity(item.getQuantity())
                 .unitPrice(item.getUnitPrice())
                 .subtotal(item.getSubtotal())

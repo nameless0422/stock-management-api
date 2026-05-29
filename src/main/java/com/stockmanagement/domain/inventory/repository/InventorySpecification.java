@@ -4,6 +4,7 @@ import com.stockmanagement.domain.inventory.dto.InventorySearchRequest;
 import com.stockmanagement.domain.inventory.entity.Inventory;
 import com.stockmanagement.domain.inventory.entity.InventoryStatus;
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import jakarta.persistence.criteria.*;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -36,8 +37,9 @@ public class InventorySpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            // product JOIN (필터용 — FETCH 아님, EntityGraph에서 별도 로딩)
-            Join<Inventory, Product> product = root.join("product", JoinType.INNER);
+            // variant → product JOIN 체인 (필터용 — FETCH 아님, EntityGraph에서 별도 로딩)
+            Join<Inventory, ProductVariant> variant = root.join("variant", JoinType.INNER);
+            Join<ProductVariant, Product> product = variant.join("product", JoinType.INNER);
 
             // available = onHand - reserved - allocated (Criteria 연산)
             Expression<Integer> available = cb.diff(

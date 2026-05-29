@@ -4,6 +4,7 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.exception.InsufficientStockException;
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -17,6 +18,7 @@ import static org.assertj.core.api.Assertions.*;
 class InventoryTest {
 
     private Product product;
+    private ProductVariant variant;
 
     @BeforeEach
     void setUp() {
@@ -26,10 +28,16 @@ class InventoryTest {
                 .price(new BigDecimal("10000"))
                 .sku("SKU-001")
                 .build();
+        variant = ProductVariant.builder()
+                .product(product)
+                .optionName("기본")
+                .sku("SKU-001")
+                .price(new BigDecimal("10000"))
+                .build();
     }
 
     private Inventory createInventory() {
-        return Inventory.builder().product(product).build();
+        return Inventory.builder().variant(variant).build();
     }
 
     // ===== getAvailable() =====

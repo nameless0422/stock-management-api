@@ -10,9 +10,13 @@ import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.dto.ProductUpdateRequest;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import com.stockmanagement.domain.product.image.repository.ProductImageRepository;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.product.repository.ProductVariantRepository;
 import com.stockmanagement.domain.product.review.repository.ReviewRepository;
+import com.stockmanagement.domain.product.wishlist.repository.WishlistRepository;
+import com.stockmanagement.domain.order.repository.OrderRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -45,6 +49,9 @@ class ProductServiceTest {
     private ProductRepository productRepository;
 
     @Mock
+    private ProductVariantRepository variantRepository;
+
+    @Mock
     private ProductSearchService productSearchService;
 
     @Mock
@@ -61,6 +68,12 @@ class ProductServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private OrderRepository orderRepository;
+
+    @Mock
+    private WishlistRepository wishlistRepository;
 
     @Mock
     private SystemSettingService systemSettingService;
@@ -104,12 +117,15 @@ class ProductServiceTest {
         @Test
         @DisplayName("신규 SKU이면 상품을 저장하고 응답을 반환한다")
         void savesProductAndReturnsResponse() {
-            given(productRepository.existsBySku("SKU-001")).willReturn(false);
+            given(variantRepository.existsBySku("SKU-001")).willReturn(false);
             given(productRepository.save(any(Product.class))).willReturn(product);
+            given(variantRepository.save(any(ProductVariant.class))).willAnswer(inv -> inv.getArgument(0));
+            given(inventoryRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 
             ProductResponse response = productService.create(request);
 
             verify(productRepository).save(any(Product.class));
+            verify(variantRepository).save(any(ProductVariant.class));
             assertThat(response.getName()).isEqualTo("테스트 상품");
             assertThat(response.getSku()).isEqualTo("SKU-001");
             assertThat(response.getStatus()).isEqualTo(ProductStatus.ACTIVE);
@@ -118,7 +134,7 @@ class ProductServiceTest {
         @Test
         @DisplayName("SKU가 중복이면 DUPLICATE_SKU 예외를 발생시킨다")
         void throwsWhenSkuDuplicated() {
-            given(productRepository.existsBySku("SKU-001")).willReturn(true);
+            given(variantRepository.existsBySku("SKU-001")).willReturn(true);
 
             assertThatThrownBy(() -> productService.create(request))
                     .isInstanceOf(BusinessException.class)

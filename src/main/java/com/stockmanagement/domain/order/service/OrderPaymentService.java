@@ -55,7 +55,7 @@ public class OrderPaymentService {
         order.confirm();
 
         for (OrderItem item : order.getItems()) {
-            inventoryService.confirmAllocation(item.getProduct().getId(), item.getQuantity());
+            inventoryService.confirmAllocation(item.getVariant().getId(), item.getQuantity());
         }
 
         recordHistory(order.getId(), previousStatus, OrderStatus.CONFIRMED, null);
@@ -78,7 +78,7 @@ public class OrderPaymentService {
         order.refund();
 
         for (OrderItem item : order.getItems()) {
-            inventoryService.releaseAllocation(item.getProduct().getId(), item.getQuantity());
+            inventoryService.releaseAllocation(item.getVariant().getId(), item.getQuantity());
         }
 
         couponService.releaseCoupon(order.getId());
@@ -107,7 +107,7 @@ public class OrderPaymentService {
         order.cancelByWebhook(reason);
 
         for (OrderItem item : order.getItems()) {
-            inventoryService.releaseReservation(item.getProduct().getId(), item.getQuantity());
+            inventoryService.releaseReservation(item.getVariant().getId(), item.getQuantity());
         }
 
         couponService.releaseCoupon(order.getId());

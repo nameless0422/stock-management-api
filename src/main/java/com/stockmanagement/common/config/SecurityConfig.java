@@ -105,6 +105,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/shipping/policy").permitAll()
                         // 상품 조회 — 비로그인 허용 (쇼핑몰 특성상 누구나 열람 가능)
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
+                        // 상품 변형 — 추가·수정·삭제는 ADMIN 전용 (GET은 상품 조회 공개 규칙에 포함)
+                        .requestMatchers(HttpMethod.POST, "/api/products/*/variants").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/products/*/variants/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/products/*/variants/*").hasRole("ADMIN")
                         // 상품 이미지 — Presigned URL 발급·저장·삭제는 ADMIN 전용
                         .requestMatchers(HttpMethod.POST, "/api/products/*/images/presigned").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/products/*/images").hasRole("ADMIN")

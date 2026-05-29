@@ -9,6 +9,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 상품 마스터 엔티티.
@@ -62,6 +64,11 @@ public class Product {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ProductStatus status;
+
+    /** 상품에 속한 변형(variant) 목록 */
+    @OneToMany(mappedBy = "product", fetch = FetchType.LAZY)
+    @BatchSize(size = 50)
+    private List<ProductVariant> variants = new ArrayList<>();
 
     /** 최초 생성 시각 — Hibernate가 자동 설정, 이후 변경 불가 */
     @CreationTimestamp

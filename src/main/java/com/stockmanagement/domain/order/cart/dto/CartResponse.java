@@ -27,10 +27,10 @@ public class CartResponse {
                                     Map<Long, StockStatus> stockStatusMap) {
         List<CartItemResponse> itemResponses = cartItems.stream()
                 .map(i -> {
-                    Long productId = i.getProduct().getId();
+                    Long variantId = i.getVariant().getId();
                     return CartItemResponse.from(i,
-                            availabilityMap != null ? availabilityMap.get(productId) : null,
-                            stockStatusMap != null ? stockStatusMap.get(productId) : null);
+                            availabilityMap != null ? availabilityMap.get(variantId) : null,
+                            stockStatusMap != null ? stockStatusMap.get(variantId) : null);
                 })
                 .toList();
         BigDecimal total = itemResponses.stream()

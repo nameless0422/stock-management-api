@@ -51,9 +51,8 @@ public class WishlistService {
                 .productId(productId)
                 .build();
 
-        int available = inventoryRepository.findByProductId(productId)
-                .map(Inventory::getAvailable)
-                .orElse(0);
+        int available = inventoryRepository.findAllByProductId(productId).stream()
+                .mapToInt(Inventory::getAvailable).sum();
         StockStatus stockStatus = StockStatus.of(available, systemSettingService.getLowStockThreshold());
         return WishlistResponse.of(wishlistRepository.save(item), product, stockStatus);
     }
@@ -97,7 +96,9 @@ public class WishlistService {
         Map<Long, Product> productMap = productRepository.findAllById(productIds).stream()
                 .collect(Collectors.toMap(Product::getId, Function.identity()));
         Map<Long, Integer> availableMap = inventoryRepository.findAllByProductIdIn(productIds).stream()
-                .collect(Collectors.toMap(i -> i.getProduct().getId(), Inventory::getAvailable));
+                .collect(Collectors.groupingBy(
+                        i -> i.getVariant().getProduct().getId(),
+                        Collectors.summingInt(Inventory::getAvailable)));
 
         return page.map(item -> {
             int avail = availableMap.getOrDefault(item.getProductId(), 0);

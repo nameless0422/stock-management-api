@@ -27,8 +27,9 @@ class PointIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long productId = objectMapper.readTree(body).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + qty + "}"))
@@ -87,6 +88,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
     void createOrder_withPoints() throws Exception {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-PT1", 20000, 10);
+        long variantId = getDefaultVariantId(productId);
 
         String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
@@ -98,8 +100,8 @@ class PointIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\",\"usePoints\":3000," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":20000}]}",
-                                userId, UUID.randomUUID(), productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":20000}]}",
+                                userId, UUID.randomUUID(), productId, variantId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.usedPoints").value(3000));
 
@@ -115,6 +117,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
     void createOrder_insufficientPoints() throws Exception {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-PT2", 10000, 10);
+        long variantId = getDefaultVariantId(productId);
 
         String userToken = signupAndLogin("buyer2", "Password1!", "b2@test.com");
         long userId = userRepository.findByUsername("buyer2").orElseThrow().getId();
@@ -126,8 +129,8 @@ class PointIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\",\"usePoints\":1000," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                userId, UUID.randomUUID(), productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                userId, UUID.randomUUID(), productId, variantId)))
                 .andExpect(status().isBadRequest());
     }
 }

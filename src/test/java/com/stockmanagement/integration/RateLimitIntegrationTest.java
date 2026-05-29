@@ -30,8 +30,9 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long productId = objectMapper.readTree(productBody).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":20}"))
@@ -47,8 +48,8 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
                                     "{\"userId\":%d,\"idempotencyKey\":\"rl-test-%d\"," +
-                                    "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                    buyerId, i, productId)))
+                                    "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                    buyerId, i, productId, variantId)))
                     .andExpect(status().isCreated());
         }
 
@@ -58,8 +59,8 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"rl-test-11\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                buyerId, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                buyerId, productId, variantId)))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.success").value(false));
     }
@@ -79,8 +80,9 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long productId = objectMapper.readTree(productBody).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":30}"))
@@ -96,8 +98,8 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
                                     "{\"userId\":%d,\"idempotencyKey\":\"rl-a-test-%d\"," +
-                                    "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                    userAId, i, productId)))
+                                    "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                    userAId, i, productId, variantId)))
                     .andExpect(status().isCreated());
         }
 
@@ -107,8 +109,8 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"rl-a-test-11\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                userAId, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                userAId, productId, variantId)))
                 .andExpect(status().isTooManyRequests());
 
         // userB는 다른 카운터 → 첫 요청이므로 정상 처리
@@ -117,8 +119,8 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"rl-b-test-1\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                userBId, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                userBId, productId, variantId)))
                 .andExpect(status().isCreated());
     }
 }

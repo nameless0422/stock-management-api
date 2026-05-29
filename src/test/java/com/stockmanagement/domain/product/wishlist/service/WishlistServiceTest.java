@@ -64,7 +64,7 @@ class WishlistServiceTest {
         void success() {
             given(productRepository.findById(10L)).willReturn(Optional.of(mockProduct(10L)));
             given(wishlistRepository.existsByUserIdAndProductId(1L, 10L)).willReturn(false);
-            given(inventoryRepository.findByProductId(10L)).willReturn(Optional.empty());
+            given(inventoryRepository.findAllByProductId(10L)).willReturn(List.of());
             WishlistItem saved = mockItem(5L, 1L, 10L);
             given(wishlistRepository.save(any())).willReturn(saved);
 

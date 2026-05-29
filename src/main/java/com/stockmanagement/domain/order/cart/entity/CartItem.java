@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.order.cart.entity;
 
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -15,8 +16,8 @@ import java.time.LocalDateTime;
 /**
  * 장바구니 아이템 엔티티.
  *
- * <p>사용자({@code userId})별로 상품({@code product})을 담는다.
- * {@code userId + product_id} 조합이 UNIQUE하므로 동일 상품은 수량만 변경된다.
+ * <p>사용자({@code userId})별로 상품 변형({@code variant})을 담는다.
+ * {@code userId + variant_id} 조합이 UNIQUE하므로 동일 변형은 수량만 변경된다.
  */
 @Entity
 @Table(name = "cart_items")
@@ -36,6 +37,11 @@ public class CartItem {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
+    /** 장바구니에 담은 상품 변형 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "variant_id", nullable = false)
+    private ProductVariant variant;
+
     /** 담은 수량 — 1 이상이어야 한다 */
     @Column(nullable = false)
     private int quantity;
@@ -53,9 +59,11 @@ public class CartItem {
     private LocalDateTime updatedAt;
 
     @Builder
-    private CartItem(Long userId, Product product, int quantity, BigDecimal savedPrice) {
+    private CartItem(Long userId, Product product, ProductVariant variant,
+                     int quantity, BigDecimal savedPrice) {
         this.userId = userId;
         this.product = product;
+        this.variant = variant;
         this.quantity = quantity;
         this.savedPrice = savedPrice;
     }

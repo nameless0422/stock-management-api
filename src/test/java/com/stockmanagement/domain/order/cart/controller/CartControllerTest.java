@@ -83,7 +83,7 @@ class CartControllerTest {
     @DisplayName("POST /api/cart/items")
     class AddOrUpdate {
 
-        private static final String ITEM_JSON = "{\"productId\":1,\"quantity\":2}";
+        private static final String ITEM_JSON = "{\"productId\":1,\"variantId\":1,\"quantity\":2}";
 
         @Test
         @DisplayName("인증된 사용자 — 상품 추가 → 200")
@@ -109,23 +109,23 @@ class CartControllerTest {
         }
     }
 
-    // ===== DELETE /api/cart/items/{productId} =====
+    // ===== DELETE /api/cart/items/variants/{variantId} =====
 
     @Nested
-    @DisplayName("DELETE /api/cart/items/{productId}")
+    @DisplayName("DELETE /api/cart/items/variants/{variantId}")
     class RemoveItem {
 
         @Test
-        @DisplayName("인증된 사용자 — 상품 제거 → 204")
+        @DisplayName("인증된 사용자 — 변형 제거 → 204")
         void removesItem() throws Exception {
-            mockMvc.perform(delete("/api/cart/items/1").with(authentication(USER_AUTH)))
+            mockMvc.perform(delete("/api/cart/items/variants/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isNoContent());
         }
 
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(delete("/api/cart/items/1"))
+            mockMvc.perform(delete("/api/cart/items/variants/1"))
                     .andExpect(status().isUnauthorized());
         }
     }

@@ -28,8 +28,9 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long productId = objectMapper.readTree(body).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + qty + "}"))
@@ -42,13 +43,14 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
      * TossPayments API 없이 구매 완료 상태를 시뮬레이션한다.
      */
     private void placeConfirmedOrder(String userToken, long userId, long productId, int price) throws Exception {
+        long variantId = getDefaultVariantId(productId);
         String body = mockMvc.perform(post("/api/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":%d}]}",
-                                userId, UUID.randomUUID(), productId, price)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":%d}]}",
+                                userId, UUID.randomUUID(), productId, variantId, price)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long orderId = objectMapper.readTree(body).path("data").path("id").asLong();

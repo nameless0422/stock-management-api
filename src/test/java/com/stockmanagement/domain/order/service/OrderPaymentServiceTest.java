@@ -12,6 +12,7 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -56,6 +57,7 @@ class OrderPaymentServiceTest {
     private OrderPaymentService orderPaymentService;
 
     private Product product;
+    private ProductVariant variant;
     private Order order;
 
     @BeforeEach
@@ -68,6 +70,14 @@ class OrderPaymentServiceTest {
                 .build();
         ReflectionTestUtils.setField(product, "id", 1L);
 
+        variant = ProductVariant.builder()
+                .product(product)
+                .optionName("기본")
+                .sku("SKU-001")
+                .price(new BigDecimal("10000"))
+                .build();
+        ReflectionTestUtils.setField(variant, "id", 1L);
+
         order = Order.builder()
                 .userId(1L)
                 .totalAmount(new BigDecimal("10000"))
@@ -76,6 +86,7 @@ class OrderPaymentServiceTest {
 
         OrderItem orderItem = OrderItem.builder()
                 .product(product)
+                .variant(variant)
                 .quantity(1)
                 .unitPrice(new BigDecimal("10000"))
                 .build();
@@ -96,19 +107,19 @@ class OrderPaymentServiceTest {
             orderPaymentService.confirm(1L);
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
-            verify(inventoryService).confirmAllocation(any(), eq(1));
+            verify(inventoryService).confirmAllocation(eq(1L), eq(1));
         }
 
         @Test
         @DisplayName("PAYMENT_IN_PROGRESS 주문 확정 — 일반 Toss 결제 경로 (CONFIRMED 전환)")
         void confirmsPaymentInProgressOrder() {
-            order.startPayment(); // PENDING → PAYMENT_IN_PROGRESS
+            order.startPayment(); // PENDING -> PAYMENT_IN_PROGRESS
             given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
             orderPaymentService.confirm(1L);
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
-            verify(inventoryService).confirmAllocation(any(), eq(1));
+            verify(inventoryService).confirmAllocation(eq(1L), eq(1));
         }
 
         @Test
@@ -132,13 +143,13 @@ class OrderPaymentServiceTest {
         @Test
         @DisplayName("CONFIRMED 주문 환불 — CANCELLED 전환 및 재고 releaseAllocation 호출")
         void refundsConfirmedOrder() {
-            order.confirm(); // PENDING → CONFIRMED
+            order.confirm(); // PENDING -> CONFIRMED
             given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
             orderPaymentService.refund(1L);
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-            verify(inventoryService).releaseAllocation(any(), eq(1));
+            verify(inventoryService).releaseAllocation(eq(1L), eq(1));
         }
 
         @Test

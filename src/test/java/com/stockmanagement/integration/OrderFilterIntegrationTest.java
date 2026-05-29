@@ -17,6 +17,7 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
     private long userId1;
     private long userId2;
     private long productId;
+    private long variantId;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -26,6 +27,7 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
         userId1 = userRepository.findByUsername("user1").orElseThrow().getId();
         userId2 = userRepository.findByUsername("user2").orElseThrow().getId();
         productId = createProductAndReceive("SKU-F1", 1000, 100);
+        variantId = getDefaultVariantId(productId);
     }
 
     // ===== 공통 헬퍼 =====
@@ -39,7 +41,8 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         long pid = objectMapper.readTree(body).path("data").path("id").asLong();
 
-        mockMvc.perform(post("/api/inventory/" + pid + "/receive")
+        long vid = getDefaultVariantId(pid);
+        mockMvc.perform(post("/api/inventory/variants/" + vid + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + qty + "}"))
@@ -53,8 +56,8 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":1000}]}",
-                                userId, idempotencyKey, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":1000}]}",
+                                userId, idempotencyKey, productId, variantId)))
                 .andExpect(status().isCreated());
     }
 
@@ -64,8 +67,8 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":1000}]}",
-                                userId, idempotencyKey, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":1000}]}",
+                                userId, idempotencyKey, productId, variantId)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("data").path("id").asLong();

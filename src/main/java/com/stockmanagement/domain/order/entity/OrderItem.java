@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.order.entity;
 
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -43,6 +44,11 @@ public class OrderItem {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
+    /** 주문한 상품 변형 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "variant_id", nullable = false)
+    private ProductVariant variant;
+
     /** 주문 수량 */
     @Column(nullable = false)
     private int quantity;
@@ -60,8 +66,9 @@ public class OrderItem {
     private LocalDateTime createdAt;
 
     @Builder
-    private OrderItem(Product product, int quantity, BigDecimal unitPrice) {
+    private OrderItem(Product product, ProductVariant variant, int quantity, BigDecimal unitPrice) {
         this.product = product;
+        this.variant = variant;
         this.quantity = quantity;
         this.unitPrice = unitPrice;
         this.subtotal = unitPrice.multiply(BigDecimal.valueOf(quantity));

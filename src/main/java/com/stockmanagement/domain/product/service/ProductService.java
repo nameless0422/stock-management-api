@@ -15,9 +15,14 @@ import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.dto.ProductSearchRequest;
 import com.stockmanagement.domain.product.dto.ProductStatusRequest;
 import com.stockmanagement.domain.product.dto.ProductUpdateRequest;
+import com.stockmanagement.domain.product.dto.ProductVariantCreateRequest;
+import com.stockmanagement.domain.product.dto.ProductVariantResponse;
+import com.stockmanagement.domain.product.dto.ProductVariantUpdateRequest;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.product.repository.ProductVariantRepository;
 import com.stockmanagement.domain.product.image.dto.ProductImageResponse;
 import com.stockmanagement.domain.product.image.repository.ProductImageRepository;
 import com.stockmanagement.domain.product.review.repository.ReviewRepository;
@@ -58,6 +63,7 @@ import java.util.stream.Collectors;
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final ProductVariantRepository variantRepository;
     private final ProductSearchService productSearchService;
     private final CategoryRepository categoryRepository;
     private final InventoryRepository inventoryRepository;
@@ -71,11 +77,11 @@ public class ProductService {
     /**
      * 상품을 등록한다.
      * SKU 중복 여부를 먼저 확인해 충돌을 방지한다.
-     * categoryId가 있으면 Category를 조회해 연결한다.
+     * 기본 variant("기본")와 Inventory를 자동 생성한다.
      */
     @Transactional
     public ProductResponse create(ProductCreateRequest request) {
-        if (productRepository.existsBySku(request.getSku())) {
+        if (variantRepository.existsBySku(request.getSku())) {
             throw new BusinessException(ErrorCode.DUPLICATE_SKU);
         }
         Category category = resolveCategory(request.getCategoryId());
@@ -87,11 +93,23 @@ public class ProductService {
                 .category(category)
                 .build();
         Product saved = productRepository.save(product);
+
+        // 기본 variant 자동 생성
+        ProductVariant defaultVariant = variantRepository.save(ProductVariant.builder()
+                .product(saved)
+                .optionName("기본")
+                .sku(request.getSku())
+                .price(request.getPrice())
+                .build());
+
+        // 기본 variant의 Inventory 자동 생성
+        inventoryRepository.save(Inventory.builder().variant(defaultVariant).build());
+
         eventPublisher.publishEvent(new ProductSyncEvent(saved.getId(), false));
         return ProductResponse.from(saved);
     }
 
-    /** 단건 조회 — 캐시 hit 시 Redis에서 반환, miss 시 DB + 재고·리뷰 통계 + 이미지 목록 조회 후 캐싱 */
+    /** 단건 조회 — 캐시 hit 시 Redis에서 반환, miss 시 DB + 재고·리뷰 통계 + 이미지 + variants 조회 후 캐싱 */
     @Cacheable(cacheNames = "products", key = "#id")
     public ProductResponse getById(Long id) {
         return buildProductResponseWithImages(findById(id));
@@ -105,19 +123,20 @@ public class ProductService {
      */
     public ProductResponse getByIdForUser(Long id, Long userId) {
         Product product = findById(id);
-        Integer available = inventoryRepository.findByProductId(id)
-                .map(Inventory::getAvailable).orElse(0);
+        int available = sumAvailableByProductId(id);
         StockStatus stockStatus = StockStatus.of(available, systemSettingService.getLowStockThreshold());
         ReviewStatsProjection stats = reviewRepository.findReviewStatsByProductId(id).orElse(null);
         List<ProductImageResponse> images = productImageRepository
                 .findByProductIdOrderByDisplayOrderAsc(id).stream()
                 .map(ProductImageResponse::from).toList();
+        List<ProductVariantResponse> variants = variantRepository.findByProductId(id).stream()
+                .map(ProductVariantResponse::from).toList();
         boolean purchased = orderRepository.existsPurchaseByUserIdAndProductId(userId, id);
         boolean reviewed = reviewRepository.existsByProductIdAndUserId(id, userId);
         return ProductResponse.from(product, null, stockStatus,
                 stats != null ? stats.getAvgRating() : null,
                 stats != null ? stats.getReviewCount() : 0L,
-                images, purchased && !reviewed);
+                images, variants, purchased && !reviewed);
     }
 
     /**
@@ -230,6 +249,55 @@ public class ProductService {
         return buildProductResponse(product);
     }
 
+    // ===== Variant CRUD =====
+
+    /** 상품의 variant 목록을 조회한다. */
+    public List<ProductVariantResponse> getVariants(Long productId) {
+        findById(productId);
+        return variantRepository.findByProductId(productId).stream()
+                .map(ProductVariantResponse::from).toList();
+    }
+
+    /** 상품에 variant를 추가한다. */
+    @Transactional
+    @CacheEvict(cacheNames = "products", key = "#productId")
+    public ProductVariantResponse addVariant(Long productId, ProductVariantCreateRequest request) {
+        Product product = findById(productId);
+        if (variantRepository.existsBySku(request.getSku())) {
+            throw new BusinessException(ErrorCode.DUPLICATE_SKU);
+        }
+        ProductVariant variant = variantRepository.save(ProductVariant.builder()
+                .product(product)
+                .optionName(request.getOptionName())
+                .sku(request.getSku())
+                .price(request.getPrice())
+                .build());
+        // 새 variant의 Inventory 자동 생성
+        inventoryRepository.save(Inventory.builder().variant(variant).build());
+        return ProductVariantResponse.from(variant);
+    }
+
+    /** variant 정보를 수정한다. */
+    @Transactional
+    @CacheEvict(cacheNames = "products", key = "#productId")
+    public ProductVariantResponse updateVariant(Long productId, Long variantId,
+                                                ProductVariantUpdateRequest request) {
+        ProductVariant variant = findVariant(productId, variantId);
+        variant.update(request.getOptionName(), request.getPrice());
+        if (request.getStatus() != null) {
+            variant.changeStatus(request.getStatus());
+        }
+        return ProductVariantResponse.from(variant);
+    }
+
+    /** variant를 비활성화한다 (DISCONTINUED 전환). */
+    @Transactional
+    @CacheEvict(cacheNames = "products", key = "#productId")
+    public void deactivateVariant(Long productId, Long variantId) {
+        ProductVariant variant = findVariant(productId, variantId);
+        variant.changeStatus(ProductStatus.DISCONTINUED);
+    }
+
     // ===== 내부 헬퍼 =====
 
     /** LIKE 패턴 와일드카드(!, %, _)를 이스케이프한다. ESCAPE ! 기준. */
@@ -237,17 +305,19 @@ public class ProductService {
         return com.stockmanagement.common.util.SqlUtils.escapeLike(value);
     }
 
+    /** 상품의 전체 variant 가용 재고를 합산한다. */
+    private int sumAvailableByProductId(Long productId) {
+        return inventoryRepository.findAllByProductId(productId).stream()
+                .mapToInt(Inventory::getAvailable).sum();
+    }
+
     /**
      * 단일 상품에 재고·리뷰 통계를 포함한 응답을 생성한다 (이미지 미포함).
      *
-     * <p>기존 avgRatingByProductId() + countByProductId() 2개 쿼리를
-     * findReviewStatsByProductId() 단일 쿼리로 대체한다.
-     * 재고 레코드가 없으면 availableQuantity=0, 리뷰가 없으면 avgRating=null, reviewCount=0.
+     * <p>재고 레코드가 없으면 availableQuantity=0, 리뷰가 없으면 avgRating=null, reviewCount=0.
      */
     private ProductResponse buildProductResponse(Product product) {
-        Integer available = inventoryRepository.findByProductId(product.getId())
-                .map(Inventory::getAvailable)
-                .orElse(0);
+        int available = sumAvailableByProductId(product.getId());
         StockStatus stockStatus = StockStatus.of(available, systemSettingService.getLowStockThreshold());
         ReviewStatsProjection stats = reviewRepository
                 .findReviewStatsByProductId(product.getId()).orElse(null);
@@ -257,14 +327,10 @@ public class ProductService {
     }
 
     /**
-     * 단일 상품에 재고·리뷰 통계 + 이미지 목록을 포함한 응답을 생성한다 (상세 조회용).
-     *
-     * <p>리뷰 통계는 findReviewStatsByProductId() 단일 쿼리로 조회한다.
+     * 단일 상품에 재고·리뷰 통계 + 이미지 + variants를 포함한 응답을 생성한다 (상세 조회용).
      */
     private ProductResponse buildProductResponseWithImages(Product product) {
-        Integer available = inventoryRepository.findByProductId(product.getId())
-                .map(Inventory::getAvailable)
-                .orElse(0);
+        int available = sumAvailableByProductId(product.getId());
         StockStatus stockStatus = StockStatus.of(available, systemSettingService.getLowStockThreshold());
         ReviewStatsProjection stats = reviewRepository
                 .findReviewStatsByProductId(product.getId()).orElse(null);
@@ -272,15 +338,17 @@ public class ProductService {
                 .findByProductIdOrderByDisplayOrderAsc(product.getId()).stream()
                 .map(ProductImageResponse::from)
                 .toList();
+        List<ProductVariantResponse> variants = variantRepository.findByProductId(product.getId()).stream()
+                .map(ProductVariantResponse::from).toList();
         return ProductResponse.from(product, available, stockStatus,
                 stats != null ? stats.getAvgRating() : null,
                 stats != null ? stats.getReviewCount() : 0L,
-                images);
+                images, variants);
     }
 
     /**
      * 상품 페이지에 재고·리뷰 통계를 배치로 보강한다 (N+1 방지).
-     * 재고/리뷰 없는 상품은 0으로 처리한다.
+     * 한 상품에 여러 variant 재고가 있을 수 있으므로 합산한다.
      */
     private Page<ProductResponse> enrichPage(Page<Product> products, Long userId) {
         if (products.isEmpty()) return products.map(ProductResponse::from);
@@ -288,8 +356,11 @@ public class ProductService {
         List<Long> ids = products.stream().map(Product::getId).toList();
         int threshold = systemSettingService.getLowStockThreshold();
 
+        // variant별 재고를 상품 단위로 합산
         Map<Long, Integer> availableMap = inventoryRepository.findAllByProductIdIn(ids).stream()
-                .collect(Collectors.toMap(i -> i.getProduct().getId(), Inventory::getAvailable));
+                .collect(Collectors.groupingBy(
+                        i -> i.getVariant().getProduct().getId(),
+                        Collectors.summingInt(Inventory::getAvailable)));
 
         Map<Long, ReviewStatsProjection> statsMap = reviewRepository
                 .findReviewStatsByProductIdIn(ids).stream()
@@ -310,6 +381,7 @@ public class ProductService {
                     stats != null ? stats.getReviewCount() : 0L,
                     null,
                     null,
+                    null,
                     userId != null ? wishlistedIds.contains(p.getId()) : null);
         });
     }
@@ -325,7 +397,9 @@ public class ProductService {
         int threshold = systemSettingService.getLowStockThreshold();
 
         Map<Long, Integer> availableMap = inventoryRepository.findAllByProductIdIn(ids).stream()
-                .collect(Collectors.toMap(i -> i.getProduct().getId(), Inventory::getAvailable));
+                .collect(Collectors.groupingBy(
+                        i -> i.getVariant().getProduct().getId(),
+                        Collectors.summingInt(Inventory::getAvailable)));
 
         Map<Long, ReviewStatsProjection> statsMap = reviewRepository
                 .findReviewStatsByProductIdIn(ids).stream()
@@ -372,6 +446,16 @@ public class ProductService {
         if (categoryId == null) return null;
         return categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CATEGORY_NOT_FOUND));
+    }
+
+    /** variant를 조회하고 해당 상품 소속인지 검증한다. */
+    private ProductVariant findVariant(Long productId, Long variantId) {
+        ProductVariant variant = variantRepository.findById(variantId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.VARIANT_NOT_FOUND));
+        if (!variant.getProduct().getId().equals(productId)) {
+            throw new BusinessException(ErrorCode.VARIANT_NOT_FOUND);
+        }
+        return variant;
     }
 
 }

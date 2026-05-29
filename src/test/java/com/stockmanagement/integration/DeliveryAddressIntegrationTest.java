@@ -178,7 +178,8 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long productId = objectMapper.readTree(body).path("data").path("id").asLong();
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        long variantId = getDefaultVariantId(productId);
+        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":10}"))
@@ -194,8 +195,8 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"ik-001\"," +
                                 "\"deliveryAddressId\":%d," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":5000}]}",
-                                userId, addressId, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":5000}]}",
+                                userId, addressId, productId, variantId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.deliveryAddressId").value(addressId));
     }
