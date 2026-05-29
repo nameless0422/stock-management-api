@@ -36,7 +36,8 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
     }
 
     private void receive(String adminToken, long productId, int quantity) throws Exception {
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        long variantId = getDefaultVariantId(productId);
+        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + quantity + "}"))
@@ -54,10 +55,11 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
         void cacheHit_returnsSameData() throws Exception {
             String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
             long productId = createProduct(adminToken, "캐시상품", "CACHE-SKU-1");
+            long variantId = getDefaultVariantId(productId);
             receive(adminToken, productId, 20);
 
             // 첫 번째 조회 — cache miss (DB → Redis 저장)
-            mockMvc.perform(get("/api/inventory/" + productId)
+            mockMvc.perform(get("/api/inventory/variants/" + variantId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.onHand").value(20))
@@ -65,7 +67,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
 
             // 두 번째 조회 — cache hit (Redis에서 역직렬화)
             // 동일한 값이 반환되면 직렬화/역직렬화가 정상 동작하는 것
-            mockMvc.perform(get("/api/inventory/" + productId)
+            mockMvc.perform(get("/api/inventory/variants/" + variantId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.onHand").value(20))
@@ -77,10 +79,11 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
         void cacheEvict_afterReceive_returnsFreshData() throws Exception {
             String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
             long productId = createProduct(adminToken, "입고캐시상품", "CACHE-SKU-2");
+            long variantId = getDefaultVariantId(productId);
             receive(adminToken, productId, 10);
 
             // 첫 조회 — cache miss: onHand=10 캐싱
-            mockMvc.perform(get("/api/inventory/" + productId)
+            mockMvc.perform(get("/api/inventory/variants/" + variantId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(jsonPath("$.data.onHand").value(10));
 
@@ -88,7 +91,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
             receive(adminToken, productId, 15);
 
             // 재조회 — cache miss (evict됨): 최신 데이터(25) 반환
-            mockMvc.perform(get("/api/inventory/" + productId)
+            mockMvc.perform(get("/api/inventory/variants/" + variantId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.onHand").value(25))
@@ -100,10 +103,11 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
         void cacheEvict_afterReserve_returnsFreshData() throws Exception {
             String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
             long productId = createProduct(adminToken, "주문캐시상품", "CACHE-SKU-3");
+            long variantId = getDefaultVariantId(productId);
             receive(adminToken, productId, 30);
 
             // 첫 조회 — available=30 캐싱
-            mockMvc.perform(get("/api/inventory/" + productId)
+            mockMvc.perform(get("/api/inventory/variants/" + variantId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(jsonPath("$.data.available").value(30));
 
@@ -115,12 +119,12 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
                                     "{\"userId\":%d,\"idempotencyKey\":\"cache-test-001\"," +
-                                    "\"items\":[{\"productId\":%d,\"quantity\":5,\"unitPrice\":10000}]}",
-                                    buyerId, productId)))
+                                    "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":5,\"unitPrice\":10000}]}",
+                                    buyerId, productId, variantId)))
                     .andExpect(status().isCreated());
 
             // 재조회 — cache miss: reserved=5, available=25
-            mockMvc.perform(get("/api/inventory/" + productId)
+            mockMvc.perform(get("/api/inventory/variants/" + variantId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.reserved").value(5))
@@ -139,6 +143,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
         void cacheHit_returnsSameOrder() throws Exception {
             String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
             long productId = createProduct(adminToken, "주문용상품", "CACHE-ORD-1");
+            long variantId = getDefaultVariantId(productId);
             receive(adminToken, productId, 20);
 
             String userToken = signupAndLogin("buyer", "Buyerpass1!", "buyer@example.com");
@@ -150,8 +155,8 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
                                     "{\"userId\":%d,\"idempotencyKey\":\"cache-ord-001\"," +
-                                    "\"items\":[{\"productId\":%d,\"quantity\":2,\"unitPrice\":10000}]}",
-                                    buyerId, productId)))
+                                    "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":2,\"unitPrice\":10000}]}",
+                                    buyerId, productId, variantId)))
                     .andExpect(status().isCreated())
                     .andReturn().getResponse().getContentAsString();
             long orderId = objectMapper.readTree(orderBody).path("data").path("id").asLong();
@@ -176,6 +181,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
         void cacheEvict_afterCancel_returnsCancelledStatus() throws Exception {
             String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
             long productId = createProduct(adminToken, "취소캐시상품", "CACHE-ORD-2");
+            long variantId = getDefaultVariantId(productId);
             receive(adminToken, productId, 20);
 
             String userToken = signupAndLogin("buyer", "Buyerpass1!", "buyer@example.com");
@@ -187,8 +193,8 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
                                     "{\"userId\":%d,\"idempotencyKey\":\"cache-ord-002\"," +
-                                    "\"items\":[{\"productId\":%d,\"quantity\":3,\"unitPrice\":10000}]}",
-                                    buyerId, productId)))
+                                    "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":3,\"unitPrice\":10000}]}",
+                                    buyerId, productId, variantId)))
                     .andExpect(status().isCreated())
                     .andReturn().getResponse().getContentAsString();
             long orderId = objectMapper.readTree(orderBody).path("data").path("id").asLong();

@@ -27,11 +27,11 @@ import org.springframework.web.bind.annotation.*;
  * <p>Base URL: {@code /api/inventory}
  *
  * <pre>
- * GET  /api/inventory                            재고 목록 검색   → 200 OK (Page)
- * GET  /api/inventory/{productId}                재고 현황 조회   → 200 OK
- * GET  /api/inventory/{productId}/transactions   재고 이력 조회   → 200 OK
- * POST /api/inventory/{productId}/receive        입고 처리        → 200 OK
- * POST /api/inventory/{productId}/adjust         수동 조정        → 200 OK
+ * GET  /api/inventory                                     재고 목록 검색   → 200 OK (Page)
+ * GET  /api/inventory/variants/{variantId}                재고 현황 조회   → 200 OK
+ * GET  /api/inventory/variants/{variantId}/transactions   재고 이력 조회   → 200 OK
+ * POST /api/inventory/variants/{variantId}/receive        입고 처리        → 200 OK
+ * POST /api/inventory/variants/{variantId}/adjust         수동 조정        → 200 OK
  * </pre>
  *
  * <p>reserve / releaseReservation / confirmAllocation 은 Order·Payment 도메인에서
@@ -65,9 +65,9 @@ public class InventoryController {
     }
 
     @Operation(summary = "재고 현황 조회", description = "onHand / reserved / allocated / available 반환.")
-    @GetMapping("/{productId}")
-    public ApiResponse<InventoryResponse> getByProductId(@PathVariable Long productId) {
-        return ApiResponse.ok(inventoryService.getByProductId(productId));
+    @GetMapping("/variants/{variantId}")
+    public ApiResponse<InventoryResponse> getByVariantId(@PathVariable Long variantId) {
+        return ApiResponse.ok(inventoryService.getByVariantId(variantId));
     }
 
     @Operation(
@@ -79,27 +79,27 @@ public class InventoryController {
             - hasNext=false이면 마지막 페이지
             """
     )
-    @GetMapping("/{productId}/transactions")
+    @GetMapping("/variants/{variantId}/transactions")
     public ApiResponse<CursorPage<InventoryTransactionResponse>> getTransactions(
-            @PathVariable Long productId,
+            @PathVariable Long variantId,
             @RequestParam(required = false) Long lastId,
             @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(inventoryService.getTransactions(productId, lastId, size));
+        return ApiResponse.ok(inventoryService.getTransactions(variantId, lastId, size));
     }
 
     @Operation(summary = "입고 처리", description = "ADMIN 전용. onHand 증가 → available 증가.")
-    @PostMapping("/{productId}/receive")
+    @PostMapping("/variants/{variantId}/receive")
     public ApiResponse<InventoryResponse> receive(
-            @PathVariable Long productId,
+            @PathVariable Long variantId,
             @RequestBody @Valid InventoryReceiveRequest request) {
-        return ApiResponse.ok(inventoryService.receive(productId, request));
+        return ApiResponse.ok(inventoryService.receive(variantId, request));
     }
 
     @Operation(summary = "재고 수동 조정", description = "ADMIN 전용. quantity 양수=증가, 음수=감소.")
-    @PostMapping("/{productId}/adjust")
+    @PostMapping("/variants/{variantId}/adjust")
     public ApiResponse<InventoryResponse> adjust(
-            @PathVariable Long productId,
+            @PathVariable Long variantId,
             @RequestBody @Valid InventoryAdjustRequest request) {
-        return ApiResponse.ok(inventoryService.adjust(productId, request));
+        return ApiResponse.ok(inventoryService.adjust(variantId, request));
     }
 }

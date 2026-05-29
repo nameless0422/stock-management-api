@@ -5,7 +5,9 @@ import com.stockmanagement.domain.inventory.entity.Inventory;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.inventory.service.InventoryService;
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.product.repository.ProductVariantRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +39,7 @@ class ConcurrencyIntegrationTest extends AbstractIntegrationTest {
     @Autowired InventoryService inventoryService;
     @Autowired InventoryRepository inventoryRepository;
     @Autowired ProductRepository productRepository;
+    @Autowired ProductVariantRepository variantRepository;
 
     /**
      * 재고 10개 상품에 20개 스레드가 동시에 각 1개 예약 시도.
@@ -52,13 +55,16 @@ class ConcurrencyIntegrationTest extends AbstractIntegrationTest {
                 .price(BigDecimal.valueOf(10000))
                 .build());
 
+        ProductVariant variant = variantRepository.save(ProductVariant.builder()
+                .product(product).optionName("기본").sku("SKU-CONCURRENT-001")
+                .price(BigDecimal.valueOf(10000)).build());
+
         int stockQty = 10;
-        // Inventory.builder()는 product만 받고 onHand=0 초기화 → receive()로 재고 추가
-        Inventory inventory = Inventory.builder().product(product).build();
+        Inventory inventory = Inventory.builder().variant(variant).build();
         inventory.receive(stockQty);
         inventoryRepository.save(inventory);
 
-        long productId = product.getId();
+        long variantId = variant.getId();
 
         // ===== 동시 실행 =====
         int threadCount = 20;
@@ -75,7 +81,7 @@ class ConcurrencyIntegrationTest extends AbstractIntegrationTest {
                 readyLatch.countDown();
                 try {
                     startLatch.await(); // 일제히 시작
-                    inventoryService.reserve(productId, 1);
+                    inventoryService.reserve(variantId, 1);
                     successCount.incrementAndGet();
                 } catch (InsufficientStockException e) {
                     failCount.incrementAndGet();
@@ -111,7 +117,7 @@ class ConcurrencyIntegrationTest extends AbstractIntegrationTest {
                 .isGreaterThanOrEqualTo(threadCount - stockQty);
 
         // DB 최종 상태: reserved == 성공 건수, available >= 0 (불변 조건)
-        Inventory finalState = inventoryRepository.findByProductId(productId).orElseThrow();
+        Inventory finalState = inventoryRepository.findByVariantId(variantId).orElseThrow();
         assertThat(finalState.getReserved())
                 .as("최종 reserved는 성공한 예약 건수와 일치해야 한다")
                 .isEqualTo(succeeded);
@@ -136,22 +142,26 @@ class ConcurrencyIntegrationTest extends AbstractIntegrationTest {
                 .price(BigDecimal.valueOf(5000))
                 .build());
 
-        Inventory inventory = Inventory.builder().product(product).build();
+        ProductVariant variant = variantRepository.save(ProductVariant.builder()
+                .product(product).optionName("기본").sku("SKU-ZERO-001")
+                .price(BigDecimal.valueOf(5000)).build());
+
+        Inventory inventory = Inventory.builder().variant(variant).build();
         inventory.receive(2);
         inventoryRepository.save(inventory);
 
-        long productId = product.getId();
+        long variantId = variant.getId();
 
         // 2개 정상 예약
-        inventoryService.reserve(productId, 1);
-        inventoryService.reserve(productId, 1);
+        inventoryService.reserve(variantId, 1);
+        inventoryService.reserve(variantId, 1);
 
         // 재고 소진 상태에서 1개 추가 시도 → 예외 발생 확인
-        assertThatThrownBy(() -> inventoryService.reserve(productId, 1))
+        assertThatThrownBy(() -> inventoryService.reserve(variantId, 1))
                 .isInstanceOf(InsufficientStockException.class);
 
         // available = 0 유지
-        Inventory finalState = inventoryRepository.findByProductId(productId).orElseThrow();
+        Inventory finalState = inventoryRepository.findByVariantId(variantId).orElseThrow();
         assertThat(finalState.getAvailable()).isZero();
         assertThat(finalState.getReserved()).isEqualTo(2);
     }

@@ -14,6 +14,7 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,6 +72,7 @@ class OrderQueryServiceTest {
     private OrderQueryService orderQueryService;
 
     private Product product;
+    private ProductVariant variant;
     private Order order;
 
     @BeforeEach
@@ -83,6 +85,14 @@ class OrderQueryServiceTest {
                 .build();
         ReflectionTestUtils.setField(product, "id", 1L);
 
+        variant = ProductVariant.builder()
+                .product(product)
+                .optionName("기본")
+                .sku("SKU-001")
+                .price(new BigDecimal("10000"))
+                .build();
+        ReflectionTestUtils.setField(variant, "id", 1L);
+
         order = Order.builder()
                 .userId(1L)
                 .totalAmount(new BigDecimal("10000"))
@@ -91,6 +101,7 @@ class OrderQueryServiceTest {
 
         OrderItem orderItem = OrderItem.builder()
                 .product(product)
+                .variant(variant)
                 .quantity(1)
                 .unitPrice(new BigDecimal("10000"))
                 .build();

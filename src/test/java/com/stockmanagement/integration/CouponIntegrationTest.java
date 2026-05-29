@@ -44,8 +44,9 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long productId = objectMapper.readTree(body).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + qty + "}"))
@@ -56,11 +57,12 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     /** 주문 생성 후 orderId 반환. userId는 실제 DB에서 조회한 값을 사용해야 한다. */
     private long createOrder(String userToken, long userId, long productId, int price,
                              String couponCode) throws Exception {
+        long variantId = getDefaultVariantId(productId);
         String couponPart = couponCode != null ? ",\"couponCode\":\"" + couponCode + "\"" : "";
         String json = String.format(
                 "{\"userId\":%d,\"idempotencyKey\":\"%s\"%s," +
-                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":%d}]}",
-                userId, UUID.randomUUID(), couponPart, productId, price);
+                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":%d}]}",
+                userId, UUID.randomUUID(), couponPart, productId, variantId, price);
 
         String body = mockMvc.perform(post("/api/orders")
                         .header("Authorization", "Bearer " + userToken)
@@ -78,6 +80,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     void applyCouponOnOrder() throws Exception {
         String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP1", 30000, 10);
+        long variantId = getDefaultVariantId(productId);
         createCoupon(adminToken, "FIXED5000", "FIXED_AMOUNT", 5000, 100);
 
         String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
@@ -88,8 +91,8 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\",\"couponCode\":\"FIXED5000\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":30000}]}",
-                                userId, UUID.randomUUID(), productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":30000}]}",
+                                userId, UUID.randomUUID(), productId, variantId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.discountAmount").value(5000))
                 .andReturn().getResponse().getContentAsString();
@@ -104,6 +107,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     void percentageCouponWithCap() throws Exception {
         String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP2", 50000, 10);
+        long variantId = getDefaultVariantId(productId);
 
         // 10% 할인, 캡 3000
         String json = "{\"code\":\"PCT10DISC\",\"name\":\"10% 할인\"," +
@@ -126,8 +130,8 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\",\"couponCode\":\"PCT10DISC\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":50000}]}",
-                                userId, UUID.randomUUID(), productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":50000}]}",
+                                userId, UUID.randomUUID(), productId, variantId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.discountAmount").value(3000));
     }
@@ -166,6 +170,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     void exhaustedCoupon() throws Exception {
         String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP4", 10000, 10);
+        long variantId = getDefaultVariantId(productId);
         createCoupon(adminToken, "ONE1TIME", "FIXED_AMOUNT", 1000, 1);
 
         // 첫 번째 사용자 — 성공
@@ -181,8 +186,8 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\",\"couponCode\":\"ONE1TIME\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                user2Id, UUID.randomUUID(), productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                user2Id, UUID.randomUUID(), productId, variantId)))
                 .andExpect(status().isUnprocessableEntity());
     }
 
@@ -191,6 +196,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     void sameUserCouponReuse() throws Exception {
         String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP5", 10000, 10);
+        long variantId = getDefaultVariantId(productId);
         createCoupon(adminToken, "ONCE1USER", "FIXED_AMOUNT", 1000, 100);
 
         String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
@@ -204,8 +210,8 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\",\"couponCode\":\"ONCE1USER\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                userId, UUID.randomUUID(), productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                userId, UUID.randomUUID(), productId, variantId)))
                 .andExpect(status().isUnprocessableEntity());
     }
 
@@ -231,6 +237,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     void deactivateCoupon() throws Exception {
         String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP6", 10000, 10);
+        long variantId = getDefaultVariantId(productId);
         long couponId  = createCoupon(adminToken, "DEACT001", "FIXED_AMOUNT", 1000, 100);
 
         // 비활성화
@@ -247,8 +254,8 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\",\"couponCode\":\"DEACT001\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                userId, UUID.randomUUID(), productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                userId, UUID.randomUUID(), productId, variantId)))
                 .andExpect(status().isUnprocessableEntity());
     }
 
@@ -348,6 +355,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     void orderWithoutCoupon() throws Exception {
         String adminToken = createAdminAndLogin("admin", "Password1!", "a@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-COUP7", 15000, 10);
+        long variantId = getDefaultVariantId(productId);
 
         String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
@@ -357,8 +365,8 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":15000}]}",
-                                userId, UUID.randomUUID(), productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":15000}]}",
+                                userId, UUID.randomUUID(), productId, variantId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.discountAmount").value(0));
     }

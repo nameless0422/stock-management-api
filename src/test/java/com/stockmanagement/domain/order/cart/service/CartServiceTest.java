@@ -12,7 +12,8 @@ import com.stockmanagement.domain.order.cart.repository.CartRepository;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.order.service.OrderCommandService;
 import com.stockmanagement.domain.product.entity.Product;
-import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.product.entity.ProductVariant;
+import com.stockmanagement.domain.product.repository.ProductVariantRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -38,7 +39,7 @@ import static org.mockito.Mockito.verify;
 class CartServiceTest {
 
     @Mock CartRepository cartRepository;
-    @Mock ProductRepository productRepository;
+    @Mock ProductVariantRepository variantRepository;
     @Mock InventoryRepository inventoryRepository;
     @Mock OrderCommandService orderCommandService;
     @Mock SystemSettingService systemSettingService;
@@ -46,6 +47,7 @@ class CartServiceTest {
     @InjectMocks CartService cartService;
 
     private Product product;
+    private ProductVariant variant;
     private CartItem cartItem;
 
     @BeforeEach
@@ -54,8 +56,12 @@ class CartServiceTest {
                 .name("상품A").sku("SKU-A").price(BigDecimal.valueOf(1000))
                 .build();
 
+        variant = ProductVariant.builder()
+                .product(product).optionName("기본").sku("SKU-A").price(BigDecimal.valueOf(1000))
+                .build();
+
         cartItem = CartItem.builder()
-                .userId(1L).product(product).quantity(2)
+                .userId(1L).product(product).variant(variant).quantity(2)
                 .build();
     }
 
@@ -94,11 +100,11 @@ class CartServiceTest {
         @Test
         @DisplayName("기존에 없는 상품 → 새 CartItem 저장")
         void addsNewItem() {
-            CartItemRequest request = mockCartItemRequest(1L, 3);
-            given(productRepository.findById(1L)).willReturn(Optional.of(product));
-            given(cartRepository.findByUserIdAndProductId(anyLong(), any())).willReturn(Optional.empty());
+            CartItemRequest request = mockCartItemRequest(1L, 1L, 3);
+            given(variantRepository.findByIdWithProduct(1L)).willReturn(Optional.of(variant));
+            given(cartRepository.findByUserIdAndVariantId(anyLong(), any())).willReturn(Optional.empty());
             given(cartRepository.saveAndFlush(any())).willReturn(cartItem);
-            given(inventoryRepository.findByProductId(any())).willReturn(Optional.empty());
+            given(inventoryRepository.findByVariantId(any())).willReturn(Optional.empty());
 
             cartService.addOrUpdate(1L, request);
 
@@ -108,10 +114,10 @@ class CartServiceTest {
         @Test
         @DisplayName("이미 담긴 상품 → 수량만 업데이트")
         void updatesExistingItem() {
-            CartItemRequest request = mockCartItemRequest(1L, 5);
-            given(productRepository.findById(1L)).willReturn(Optional.of(product));
-            given(cartRepository.findByUserIdAndProductId(eq(1L), any())).willReturn(Optional.of(cartItem));
-            given(inventoryRepository.findByProductId(any())).willReturn(Optional.empty());
+            CartItemRequest request = mockCartItemRequest(1L, 1L, 5);
+            given(variantRepository.findByIdWithProduct(1L)).willReturn(Optional.of(variant));
+            given(cartRepository.findByUserIdAndVariantId(eq(1L), any())).willReturn(Optional.of(cartItem));
+            given(inventoryRepository.findByVariantId(any())).willReturn(Optional.empty());
 
             cartService.addOrUpdate(1L, request);
 
@@ -120,14 +126,14 @@ class CartServiceTest {
         }
 
         @Test
-        @DisplayName("존재하지 않는 상품 → PRODUCT_NOT_FOUND 예외")
-        void throwsWhenProductNotFound() {
-            CartItemRequest request = mockCartItemRequest(999L, 1);
-            given(productRepository.findById(999L)).willReturn(Optional.empty());
+        @DisplayName("존재하지 않는 변형 → VARIANT_NOT_FOUND 예외")
+        void throwsWhenVariantNotFound() {
+            CartItemRequest request = mockCartItemRequest(999L, 999L, 1);
+            given(variantRepository.findByIdWithProduct(999L)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> cartService.addOrUpdate(1L, request))
                     .isInstanceOf(BusinessException.class)
-                    .hasMessage(ErrorCode.PRODUCT_NOT_FOUND.getMessage());
+                    .hasMessage(ErrorCode.VARIANT_NOT_FOUND.getMessage());
         }
     }
 
@@ -138,7 +144,7 @@ class CartServiceTest {
         @Test
         @DisplayName("담긴 상품 제거 성공")
         void removesExistingItem() {
-            given(cartRepository.findByUserIdAndProductId(1L, 1L)).willReturn(Optional.of(cartItem));
+            given(cartRepository.findByUserIdAndVariantId(1L, 1L)).willReturn(Optional.of(cartItem));
 
             cartService.removeItem(1L, 1L);
 
@@ -148,7 +154,7 @@ class CartServiceTest {
         @Test
         @DisplayName("담기지 않은 상품 제거 → CART_ITEM_NOT_FOUND 예외")
         void throwsWhenItemNotFound() {
-            given(cartRepository.findByUserIdAndProductId(1L, 999L)).willReturn(Optional.empty());
+            given(cartRepository.findByUserIdAndVariantId(1L, 999L)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> cartService.removeItem(1L, 999L))
                     .isInstanceOf(BusinessException.class)
@@ -170,7 +176,7 @@ class CartServiceTest {
             cartService.checkout(1L, request);
 
             verify(orderCommandService).create(any(), anyLong());
-            verify(cartRepository).deleteByUserIdAndProductIdIn(eq(1L), any());
+            verify(cartRepository).deleteByUserIdAndVariantIdIn(eq(1L), any());
         }
 
         @Test
@@ -186,9 +192,10 @@ class CartServiceTest {
 
     // ===== 헬퍼 =====
 
-    private CartItemRequest mockCartItemRequest(Long productId, int quantity) {
+    private CartItemRequest mockCartItemRequest(Long productId, Long variantId, int quantity) {
         CartItemRequest req = new CartItemRequest();
         org.springframework.test.util.ReflectionTestUtils.setField(req, "productId", productId);
+        org.springframework.test.util.ReflectionTestUtils.setField(req, "variantId", variantId);
         org.springframework.test.util.ReflectionTestUtils.setField(req, "quantity", quantity);
         return req;
     }

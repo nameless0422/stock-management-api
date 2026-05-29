@@ -51,6 +51,8 @@ public class ProductResponse {
     private final Long reviewCount;
     /** 상품 이미지 목록 — null이면 이미지 정보 미포함 (상세 조회 시만 포함) */
     private final List<ProductImageResponse> images;
+    /** 상품 변형 목록 — null이면 변형 정보 미포함 (상세 조회 시만 포함) */
+    private final List<ProductVariantResponse> variants;
 
     /**
      * 현재 사용자의 리뷰 작성 가능 여부.
@@ -65,33 +67,36 @@ public class ProductResponse {
 
     /** Product 엔티티만으로 변환 (재고·리뷰 통계 미포함). */
     public static ProductResponse from(Product product) {
-        return from(product, null, null, null, null, null, null, null);
+        return from(product, null, null, null, null, null, null, null, null);
     }
 
     /** Product 엔티티 + 재고·리뷰 통계를 포함한 전체 응답으로 변환 (이미지 미포함). */
     public static ProductResponse from(Product product, Integer availableQuantity, StockStatus stockStatus,
                                        Double avgRating, Long reviewCount) {
-        return from(product, availableQuantity, stockStatus, avgRating, reviewCount, null, null, null);
+        return from(product, availableQuantity, stockStatus, avgRating, reviewCount, null, null, null, null);
     }
 
-    /** Product 엔티티 + 재고·리뷰 통계 + 이미지 목록을 포함한 전체 응답으로 변환. */
+    /** Product 엔티티 + 재고·리뷰 통계 + 이미지 + variants를 포함한 전체 응답으로 변환. */
     public static ProductResponse from(Product product, Integer availableQuantity, StockStatus stockStatus,
                                        Double avgRating, Long reviewCount,
-                                       List<ProductImageResponse> images) {
-        return from(product, availableQuantity, stockStatus, avgRating, reviewCount, images, null, null);
+                                       List<ProductImageResponse> images,
+                                       List<ProductVariantResponse> variants) {
+        return from(product, availableQuantity, stockStatus, avgRating, reviewCount, images, variants, null, null);
     }
 
-    /** Product 엔티티 + 재고·리뷰 통계 + 이미지 + canReview를 포함한 전체 응답으로 변환. */
+    /** Product 엔티티 + 재고·리뷰 통계 + 이미지 + variants + canReview를 포함한 전체 응답으로 변환. */
     public static ProductResponse from(Product product, Integer availableQuantity, StockStatus stockStatus,
                                        Double avgRating, Long reviewCount,
-                                       List<ProductImageResponse> images, Boolean canReview) {
-        return from(product, availableQuantity, stockStatus, avgRating, reviewCount, images, canReview, null);
+                                       List<ProductImageResponse> images,
+                                       List<ProductVariantResponse> variants, Boolean canReview) {
+        return from(product, availableQuantity, stockStatus, avgRating, reviewCount, images, variants, canReview, null);
     }
 
-    /** Product 엔티티 + 전체 필드(재고·리뷰·이미지·canReview·wishlisted)를 포함한 응답으로 변환. */
+    /** Product 엔티티 + 전체 필드(재고·리뷰·이미지·variants·canReview·wishlisted)를 포함한 응답으로 변환. */
     public static ProductResponse from(Product product, Integer availableQuantity, StockStatus stockStatus,
                                        Double avgRating, Long reviewCount,
-                                       List<ProductImageResponse> images, Boolean canReview,
+                                       List<ProductImageResponse> images,
+                                       List<ProductVariantResponse> variants, Boolean canReview,
                                        Boolean wishlisted) {
         return ProductResponse.builder()
                 .id(product.getId())
@@ -110,6 +115,7 @@ public class ProductResponse {
                 .avgRating(avgRating != null ? Math.round(avgRating * 10.0) / 10.0 : null)
                 .reviewCount(reviewCount)
                 .images(images)
+                .variants(variants)
                 .canReview(canReview)
                 .wishlisted(wishlisted)
                 .build();

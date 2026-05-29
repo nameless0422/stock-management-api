@@ -53,11 +53,11 @@ public class CartController {
         return ApiResponse.ok(cartService.addOrUpdate(userId, request));
     }
 
-    @Operation(summary = "특정 상품 제거")
-    @DeleteMapping("/items/{productId}")
+    @Operation(summary = "특정 변형 제거")
+    @DeleteMapping("/items/variants/{variantId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void removeItem(@CurrentUserId Long userId, @PathVariable Long productId) {
-        cartService.removeItem(userId, productId);
+    public void removeItem(@CurrentUserId Long userId, @PathVariable Long variantId) {
+        cartService.removeItem(userId, variantId);
     }
 
     @Operation(summary = "장바구니 전체 비우기")

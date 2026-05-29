@@ -29,6 +29,7 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Statement;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -150,6 +151,7 @@ abstract class AbstractIntegrationTest {
             stmt.execute("DELETE FROM inventory_transactions");
             stmt.execute("DELETE FROM inventory");
             stmt.execute("DELETE FROM product_images");
+            stmt.execute("DELETE FROM product_variants");
             stmt.execute("DELETE FROM products");
             stmt.execute("DELETE FROM daily_order_stats");
             stmt.execute("DELETE FROM daily_inventory_snapshots");
@@ -195,6 +197,14 @@ abstract class AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("data").path("accessToken").asText();
+    }
+
+    /** 상품의 기본 variant ID를 반환한다 (인벤토리 API 호출용). */
+    protected long getDefaultVariantId(long productId) throws Exception {
+        String body = mockMvc.perform(get("/api/products/" + productId + "/variants"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).path("data").get(0).path("id").asLong();
     }
 
     /** ADMIN 사용자를 DB에 직접 저장 후 JWT 토큰을 반환한다. */

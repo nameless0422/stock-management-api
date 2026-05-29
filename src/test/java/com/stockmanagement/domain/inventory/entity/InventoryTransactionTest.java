@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.inventory.entity;
 
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,7 +23,13 @@ class InventoryTransactionTest {
                 .price(new BigDecimal("10000"))
                 .sku("SKU-001")
                 .build();
-        inventory = Inventory.builder().product(product).build();
+        ProductVariant variant = ProductVariant.builder()
+                .product(product)
+                .optionName("기본")
+                .sku("SKU-001")
+                .price(new BigDecimal("10000"))
+                .build();
+        inventory = Inventory.builder().variant(variant).build();
         inventory.receive(10);
         inventory.reserve(3);
     }

@@ -56,8 +56,9 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long productId = objectMapper.readTree(productBody).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":50}"))
@@ -68,8 +69,8 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"key-%s\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":%d,\"unitPrice\":%d}]}",
-                                userId, sku + System.nanoTime(), productId, quantity, price)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":%d,\"unitPrice\":%d}]}",
+                                userId, sku + System.nanoTime(), productId, variantId, quantity, price)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(orderBody).path("data").path("id").asLong();
@@ -199,8 +200,9 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
                     .andExpect(status().isCreated())
                     .andReturn().getResponse().getContentAsString();
             long productId = objectMapper.readTree(productBody).path("data").path("id").asLong();
+            long variantId = getDefaultVariantId(productId);
 
-            mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+            mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"quantity\":10}"))
@@ -211,8 +213,8 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
                                     "{\"userId\":%d,\"idempotencyKey\":\"confirm-test-001\"," +
-                                    "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":5000}]}",
-                                    userId, productId)))
+                                    "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":5000}]}",
+                                    userId, productId, variantId)))
                     .andExpect(status().isCreated())
                     .andReturn().getResponse().getContentAsString();
             long orderId = objectMapper.readTree(orderBody).path("data").path("id").asLong();

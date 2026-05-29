@@ -66,7 +66,7 @@ class InventorySnapshotSchedulerTest {
     // ===== 헬퍼 =====
 
     private Inventory buildInventory(Long id, int onHand, int reserved, int allocated) {
-        Inventory inv = Inventory.builder().product(null).build();
+        Inventory inv = Inventory.builder().variant(null).build();
         ReflectionTestUtils.setField(inv, "id", id);
         ReflectionTestUtils.setField(inv, "onHand", onHand);
         ReflectionTestUtils.setField(inv, "reserved", reserved);

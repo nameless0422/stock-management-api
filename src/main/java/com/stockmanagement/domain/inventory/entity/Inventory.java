@@ -4,6 +4,7 @@ import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.exception.InsufficientStockException;
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -18,7 +19,7 @@ import java.time.LocalDateTime;
 /**
  * 재고 엔티티.
  *
- * <p>상품(Product) 1개당 재고 레코드 1개가 존재한다 (1:1 관계).
+ * <p>상품 변형(ProductVariant) 1개당 재고 레코드 1개가 존재한다 (1:1 관계).
  *
  * <p>재고 수량 모델:
  * <ul>
@@ -45,9 +46,14 @@ public class Inventory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 연관 상품 — 지연 로딩으로 불필요한 JOIN을 방지한다 */
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id", nullable = false, unique = true)
+    /** 연관 변형 — variant당 재고 레코드 1:1 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "variant_id", nullable = false, unique = true)
+    private ProductVariant variant;
+
+    /** 연관 상품 — variant.product와 동일. product_id NOT NULL 제약을 위해 INSERT 시 자동 설정. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
     /** 창고 실물 재고 */
@@ -79,12 +85,13 @@ public class Inventory {
     private LocalDateTime updatedAt;
 
     /**
-     * 상품에 대한 초기 재고 레코드를 생성한다.
+     * 변형에 대한 초기 재고 레코드를 생성한다.
      * 최초 생성 시 모든 수량은 0으로 초기화된다.
      */
     @Builder
-    private Inventory(Product product) {
-        this.product = product;
+    private Inventory(ProductVariant variant) {
+        this.variant = variant;
+        this.product = variant != null ? variant.getProduct() : null;
         this.onHand = 0;
         this.reserved = 0;
         this.allocated = 0;
@@ -163,9 +170,9 @@ public class Inventory {
         }
         if (quantity > this.reserved) {
             throw new BusinessException(ErrorCode.INVENTORY_STATE_INCONSISTENT,
-                    String.format("confirmAllocation 실패: quantity=%d > reserved=%d (productId=%s)",
+                    String.format("confirmAllocation 실패: quantity=%d > reserved=%d (variantId=%s)",
                             quantity, this.reserved,
-                            this.product != null ? this.product.getId() : "unknown"));
+                            this.variant != null ? this.variant.getId() : "unknown"));
         }
         this.reserved -= quantity;
         this.allocated += quantity;

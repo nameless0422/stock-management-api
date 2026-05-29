@@ -19,7 +19,8 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
-import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.product.entity.ProductVariant;
+import com.stockmanagement.domain.product.repository.ProductVariantRepository;
 import com.stockmanagement.common.event.OrderCancelledEvent;
 import com.stockmanagement.common.event.OrderCreatedEvent;
 import com.stockmanagement.common.outbox.OutboxEventStore;
@@ -53,7 +54,7 @@ import java.util.stream.Collectors;
 public class OrderCommandService {
 
     private final OrderRepository orderRepository;
-    private final ProductRepository productRepository;
+    private final ProductVariantRepository variantRepository;
     private final InventoryService inventoryService;
     private final OrderStatusHistoryRepository historyRepository;
     private final CouponService couponService;
@@ -88,34 +89,42 @@ public class OrderCommandService {
         List<OrderItem> items = new ArrayList<>();
         BigDecimal totalAmount = BigDecimal.ZERO;
 
-        List<Long> productIds = request.getItems().stream()
-                .map(OrderItemRequest::getProductId)
+        List<Long> variantIds = request.getItems().stream()
+                .map(OrderItemRequest::getVariantId)
                 .toList();
-        if (new HashSet<>(productIds).size() != productIds.size()) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "동일 상품이 중복으로 포함되어 있습니다. 수량을 합쳐서 제출해주세요.");
+        if (new HashSet<>(variantIds).size() != variantIds.size()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "동일 변형이 중복으로 포함되어 있습니다. 수량을 합쳐서 제출해주세요.");
         }
 
-        Map<Long, Product> productMap = productRepository.findAllById(productIds).stream()
-                .collect(Collectors.toMap(Product::getId, p -> p));
+        Map<Long, ProductVariant> variantMap = variantRepository.findAllByIdInWithProduct(variantIds).stream()
+                .collect(Collectors.toMap(ProductVariant::getId, v -> v));
 
         for (OrderItemRequest itemRequest : request.getItems()) {
-            Product product = Optional.ofNullable(productMap.get(itemRequest.getProductId()))
-                    .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+            ProductVariant variant = Optional.ofNullable(variantMap.get(itemRequest.getVariantId()))
+                    .orElseThrow(() -> new BusinessException(ErrorCode.VARIANT_NOT_FOUND));
+
+            Product product = variant.getProduct();
 
             if (product.getStatus() != ProductStatus.ACTIVE) {
                 throw new BusinessException(ErrorCode.PRODUCT_NOT_AVAILABLE);
             }
 
-            if (product.getPrice().compareTo(itemRequest.getUnitPrice()) != 0) {
+            if (variant.getStatus() != ProductStatus.ACTIVE) {
+                throw new BusinessException(ErrorCode.VARIANT_NOT_AVAILABLE);
+            }
+
+            if (variant.getPrice().compareTo(itemRequest.getUnitPrice()) != 0) {
                 throw new BusinessException(ErrorCode.INVALID_INPUT,
-                        String.format("상품 '%s'의 단가가 일치하지 않습니다. (요청: %s, 현재: %s)",
-                                product.getName(), itemRequest.getUnitPrice(), product.getPrice()));
+                        String.format("상품 '%s (%s)'의 단가가 일치하지 않습니다. (요청: %s, 현재: %s)",
+                                product.getName(), variant.getOptionName(),
+                                itemRequest.getUnitPrice(), variant.getPrice()));
             }
 
             OrderItem item = OrderItem.builder()
                     .product(product)
+                    .variant(variant)
                     .quantity(itemRequest.getQuantity())
-                    .unitPrice(product.getPrice())
+                    .unitPrice(variant.getPrice())
                     .build();
 
             items.add(item);
@@ -168,10 +177,10 @@ public class OrderCommandService {
                     .build());
         }
 
-        // 6. 재고 예약 (productId 오름차순 — 데드락 방지)
+        // 6. 재고 예약 (variantId 오름차순 — 데드락 방지)
         savedOrder.getItems().stream()
-                .sorted(java.util.Comparator.comparing(i -> i.getProduct().getId()))
-                .forEach(item -> inventoryService.reserve(item.getProduct().getId(), item.getQuantity()));
+                .sorted(java.util.Comparator.comparing(i -> i.getVariant().getId()))
+                .forEach(item -> inventoryService.reserve(item.getVariant().getId(), item.getQuantity()));
 
         // 7. 쿠폰 적용
         if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
@@ -217,7 +226,7 @@ public class OrderCommandService {
         order.cancel(reason);
 
         for (OrderItem item : order.getItems()) {
-            inventoryService.releaseReservation(item.getProduct().getId(), item.getQuantity());
+            inventoryService.releaseReservation(item.getVariant().getId(), item.getQuantity());
         }
 
         couponService.releaseCoupon(order.getId());
@@ -241,7 +250,7 @@ public class OrderCommandService {
         order.cancel(null);
 
         for (OrderItem item : order.getItems()) {
-            inventoryService.releaseReservation(item.getProduct().getId(), item.getQuantity());
+            inventoryService.releaseReservation(item.getVariant().getId(), item.getQuantity());
         }
 
         couponService.releaseCoupon(order.getId());

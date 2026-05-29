@@ -8,12 +8,17 @@ public class RestockEvent extends DomainEvent {
 
     private final Long productId;
     private final String productName;
+    private final Long variantId;
+    private final String variantOptionName;
     private final int available;
 
-    public RestockEvent(Long productId, String productName, int available) {
+    public RestockEvent(Long productId, String productName,
+                        Long variantId, String variantOptionName, int available) {
         super();
         this.productId = productId;
         this.productName = productName;
+        this.variantId = variantId;
+        this.variantOptionName = variantOptionName;
         this.available = available;
     }
 }

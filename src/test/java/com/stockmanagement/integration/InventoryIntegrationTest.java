@@ -52,12 +52,28 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
         return objectMapper.readTree(body).path("data").path("id").asLong();
     }
 
+    /** 상품의 기본 variant에 입고한다. */
     private void receive(String adminToken, long productId, int quantity) throws Exception {
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        long variantId = getDefaultVariantId(productId);
+        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + quantity + "}"))
                 .andExpect(status().isOk());
+    }
+
+    /** 주문 생성 — variantId를 포함한 JSON을 전송한다. */
+    private String createOrder(String userToken, long userId, long productId, int quantity, int unitPrice, String idempotencyKey) throws Exception {
+        long variantId = getDefaultVariantId(productId);
+        return mockMvc.perform(post("/api/orders")
+                        .header("Authorization", "Bearer " + userToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format(
+                                "{\"userId\":%d,\"idempotencyKey\":\"%s\"," +
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":%d,\"unitPrice\":%d}]}",
+                                userId, idempotencyKey, productId, variantId, quantity, unitPrice)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
     }
 
     // ===== 입고 처리 =====
@@ -67,8 +83,9 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
     void receive_updatesStock() throws Exception {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
         long productId = createProduct(adminToken, "상품A", "SKU-A", 1000);
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":30}"))
@@ -84,11 +101,12 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
     void receive_accumulates() throws Exception {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
         long productId = createProduct(adminToken, "상품B", "SKU-B", 2000);
+        long variantId = getDefaultVariantId(productId);
 
         receive(adminToken, productId, 10);
         receive(adminToken, productId, 20);
 
-        mockMvc.perform(get("/api/inventory/" + productId)
+        mockMvc.perform(get("/api/inventory/variants/" + variantId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.onHand").value(30))
@@ -100,9 +118,10 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
     void receive_userRole_403() throws Exception {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
         long productId = createProduct(adminToken, "상품C", "SKU-C", 3000);
+        long variantId = getDefaultVariantId(productId);
         String userToken = signupAndLogin("user", "Userpass1!", "user@example.com");
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":10}"))
@@ -114,7 +133,7 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
     void receive_productNotFound_404() throws Exception {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
 
-        mockMvc.perform(post("/api/inventory/99999/receive")
+        mockMvc.perform(post("/api/inventory/variants/99999/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":10}"))
@@ -129,9 +148,10 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
     void getTransactions_afterReceive() throws Exception {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
         long productId = createProduct(adminToken, "상품D", "SKU-D", 5000);
+        long variantId = getDefaultVariantId(productId);
         receive(adminToken, productId, 15);
 
-        mockMvc.perform(get("/api/inventory/" + productId + "/transactions")
+        mockMvc.perform(get("/api/inventory/variants/" + variantId + "/transactions")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content.length()").value(1))
@@ -147,11 +167,12 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
     void getTransactions_multipleReceives_latestFirst() throws Exception {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
         long productId = createProduct(adminToken, "상품E", "SKU-E", 1000);
+        long variantId = getDefaultVariantId(productId);
 
         receive(adminToken, productId, 10); // 첫 번째 입고
         receive(adminToken, productId, 5);  // 두 번째 입고
 
-        mockMvc.perform(get("/api/inventory/" + productId + "/transactions")
+        mockMvc.perform(get("/api/inventory/variants/" + variantId + "/transactions")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content.length()").value(2))
@@ -165,23 +186,17 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
     void getTransactions_afterReserve() throws Exception {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
         long productId = createProduct(adminToken, "상품F", "SKU-F", 2000);
+        long variantId = getDefaultVariantId(productId);
         receive(adminToken, productId, 20);
 
         String userToken = signupAndLogin("buyer", "Buyerpass1!", "buyer@example.com");
         long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         // 주문 생성 → reserve() 호출
-        mockMvc.perform(post("/api/orders")
-                        .header("Authorization", "Bearer " + userToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(String.format(
-                                "{\"userId\":%d,\"idempotencyKey\":\"reserve-test-001\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":4,\"unitPrice\":2000}]}",
-                                buyerId, productId)))
-                .andExpect(status().isCreated());
+        createOrder(userToken, buyerId, productId, 4, 2000, "reserve-test-001");
 
         // 이력: RESERVE(최신), RECEIVE 순
-        mockMvc.perform(get("/api/inventory/" + productId + "/transactions")
+        mockMvc.perform(get("/api/inventory/variants/" + variantId + "/transactions")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content.length()").value(2))
@@ -192,13 +207,11 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("재고 레코드 없는 상품 이력 조회 → 404")
+    @DisplayName("존재하지 않는 variant 이력 조회 → 404")
     void getTransactions_noInventory_404() throws Exception {
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
-        // 상품만 등록하고 입고하지 않음
-        long productId = createProduct(adminToken, "상품G", "SKU-G", 1000);
 
-        mockMvc.perform(get("/api/inventory/" + productId + "/transactions")
+        mockMvc.perform(get("/api/inventory/variants/99999/transactions")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.success").value(false));
@@ -207,7 +220,7 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("미인증 이력 조회 → 401")
     void getTransactions_unauthenticated_403() throws Exception {
-        mockMvc.perform(get("/api/inventory/1/transactions"))
+        mockMvc.perform(get("/api/inventory/variants/1/transactions"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -279,14 +292,7 @@ class InventoryIntegrationTest extends AbstractIntegrationTest {
             // 품절 상품 재고 전량 주문 → reserved=2, available=0
             String userToken = signupAndLogin("buyer", "Buyerpass1!", "buyer@example.com");
             long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
-            mockMvc.perform(post("/api/orders")
-                            .header("Authorization", "Bearer " + userToken)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(String.format(
-                                    "{\"userId\":%d,\"idempotencyKey\":\"outofstock-test\"," +
-                                    "\"items\":[{\"productId\":%d,\"quantity\":2,\"unitPrice\":2000}]}",
-                                    buyerId, soldOut)))
-                    .andExpect(status().isCreated());
+            createOrder(userToken, buyerId, soldOut, 2, 2000, "outofstock-test");
 
             mockMvc.perform(get("/api/inventory")
                             .header("Authorization", "Bearer " + adminToken)

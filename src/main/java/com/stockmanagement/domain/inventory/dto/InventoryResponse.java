@@ -1,6 +1,8 @@
 package com.stockmanagement.domain.inventory.dto;
 
 import com.stockmanagement.domain.inventory.entity.Inventory;
+import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.jackson.Jacksonized;
@@ -26,6 +28,11 @@ public class InventoryResponse {
     private final String productName;
     private final String category;
 
+    /** variant 식별 정보 */
+    private final Long variantId;
+    private final String variantOptionName;
+    private final String variantSku;
+
     /** 창고 실물 재고 */
     private final int onHand;
 
@@ -42,11 +49,16 @@ public class InventoryResponse {
 
     /** Inventory 엔티티를 응답 DTO로 변환하는 정적 팩토리 메서드 */
     public static InventoryResponse from(Inventory inventory) {
+        ProductVariant variant = inventory.getVariant();
+        Product product = variant.getProduct();
         return InventoryResponse.builder()
                 .id(inventory.getId())
-                .productId(inventory.getProduct().getId())
-                .productName(inventory.getProduct().getName())
-                .category(inventory.getProduct().getCategoryName())
+                .productId(product.getId())
+                .productName(product.getName())
+                .category(product.getCategoryName())
+                .variantId(variant.getId())
+                .variantOptionName(variant.getOptionName())
+                .variantSku(variant.getSku())
                 .onHand(inventory.getOnHand())
                 .reserved(inventory.getReserved())
                 .allocated(inventory.getAllocated())

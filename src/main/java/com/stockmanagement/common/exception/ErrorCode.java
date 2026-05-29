@@ -22,6 +22,10 @@ public enum ErrorCode {
     PRODUCT_NOT_AVAILABLE(HttpStatus.UNPROCESSABLE_ENTITY, "판매 중이 아닌 상품은 주문할 수 없습니다."),
     DUPLICATE_SKU(HttpStatus.CONFLICT, "이미 존재하는 SKU입니다."),
 
+    // ===== ProductVariant =====
+    VARIANT_NOT_FOUND(HttpStatus.NOT_FOUND, "상품 변형을 찾을 수 없습니다."),
+    VARIANT_NOT_AVAILABLE(HttpStatus.UNPROCESSABLE_ENTITY, "판매 중이 아닌 변형은 주문할 수 없습니다."),
+
     // ===== Inventory =====
     INVENTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "재고 정보를 찾을 수 없습니다."),
     INSUFFICIENT_STOCK(HttpStatus.CONFLICT, "재고가 부족합니다."),

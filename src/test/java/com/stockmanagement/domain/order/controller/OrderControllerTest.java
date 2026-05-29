@@ -73,7 +73,7 @@ class OrderControllerTest {
 
         private static final String VALID_JSON =
                 "{\"userId\":1,\"idempotencyKey\":\"key-001\"," +
-                "\"items\":[{\"productId\":1,\"quantity\":2,\"unitPrice\":5000}]}";
+                "\"items\":[{\"productId\":1,\"variantId\":1,\"quantity\":2,\"unitPrice\":5000}]}";
 
         @Test
         @WithMockUser

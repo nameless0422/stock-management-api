@@ -32,6 +32,6 @@ public class CartCheckoutRequest {
     /** 배송지 ID — 선택 항목. null이면 배송지 미지정 */
     private Long deliveryAddressId;
 
-    /** 선택 결제할 상품 ID 목록 — null이면 장바구니 전체 결제 */
-    private List<Long> selectedProductIds;
+    /** 선택 결제할 variant ID 목록 — null이면 장바구니 전체 결제 */
+    private List<Long> selectedVariantIds;
 }
