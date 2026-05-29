@@ -7,6 +7,7 @@ package com.stockmanagement.domain.order.entity;
  * PENDING              → 주문 생성 완료, 재고 예약 완료, 결제 대기 중
  * PAYMENT_IN_PROGRESS  → Toss API 승인 요청 중 (만료 스케줄러 접근 불가)
  * CONFIRMED            → 결제 성공 (Payment 도메인에서 전환)
+ * PARTIAL_CANCELLED    → 일부 아이템 취소됨 (부분 환불 완료)
  * CANCEL_IN_PROGRESS   → Toss API 취소 요청 중 (취소 실패 시 CONFIRMED로 복원)
  * CANCELLED            → 주문 취소, 재고 예약 해제 완료
  * </pre>
@@ -18,6 +19,9 @@ package com.stockmanagement.domain.order.entity;
  *   <li>PAYMENT_IN_PROGRESS → PENDING (결제 실패/오류 시 복원)
  *   <li>PENDING → CONFIRMED (가상계좌 Webhook 경로)
  *   <li>PENDING → CANCELLED (주문 취소 / 만료 스케줄러)
+ *   <li>CONFIRMED → PARTIAL_CANCELLED (일부 아이템 취소)
+ *   <li>PARTIAL_CANCELLED → PARTIAL_CANCELLED (추가 아이템 취소)
+ *   <li>PARTIAL_CANCELLED → CANCELLED (모든 아이템 취소)
  *   <li>CONFIRMED → CANCEL_IN_PROGRESS (Toss 취소 API 호출 직전 선점)
  *   <li>CANCEL_IN_PROGRESS → CANCELLED (취소 성공)
  *   <li>CANCEL_IN_PROGRESS → CONFIRMED (Toss 오류 시 복원)
@@ -42,6 +46,9 @@ public enum OrderStatus {
 
     /** 결제 완료 — 출고 확정 상태 */
     CONFIRMED,
+
+    /** 일부 아이템 취소됨 — 부분 환불 완료 상태 */
+    PARTIAL_CANCELLED,
 
     /**
      * Toss API 취소 요청 중.

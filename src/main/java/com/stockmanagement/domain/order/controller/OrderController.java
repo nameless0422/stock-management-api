@@ -8,6 +8,8 @@ import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.order.dto.OrderCancelRequest;
 import com.stockmanagement.domain.order.dto.OrderCreateRequest;
 import com.stockmanagement.domain.order.dto.OrderDetailResponse;
+import com.stockmanagement.domain.order.dto.OrderItemCancelRequest;
+import com.stockmanagement.domain.order.dto.OrderItemCancelResponse;
 import com.stockmanagement.domain.order.dto.OrderPreviewRequest;
 import com.stockmanagement.domain.order.dto.OrderPreviewResponse;
 import com.stockmanagement.domain.order.dto.OrderResponse;
@@ -109,6 +111,18 @@ public class OrderController {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
         String reason = request != null ? request.reason() : null;
         return ApiResponse.ok(orderCommandService.cancel(id, userId, isAdmin, reason));
+    }
+
+    @Operation(summary = "주문 아이템 부분 취소",
+               description = "CONFIRMED/PARTIAL_CANCELLED 주문에서 지정 아이템을 취소한다. Toss 부분 환불 + 재고 해제 + 포인트 비례 반환.")
+    @PostMapping("/{id}/items/cancel")
+    public ApiResponse<OrderItemCancelResponse> cancelItems(
+            @PathVariable Long id,
+            @RequestBody @Valid OrderItemCancelRequest request,
+            @CurrentUserId Long userId,
+            Authentication authentication) {
+        boolean isAdmin = SecurityUtils.isAdmin(authentication);
+        return ApiResponse.ok(orderCommandService.cancelItems(id, userId, isAdmin, request));
     }
 
     @Operation(summary = "주문 상태 변경 이력 조회", description = "생성·취소·확정·환불 등 모든 상태 전이를 시간순으로 반환. ADMIN은 모든 주문, USER는 본인 주문만 가능.")

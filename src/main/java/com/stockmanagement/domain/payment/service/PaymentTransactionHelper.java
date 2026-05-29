@@ -403,6 +403,51 @@ class PaymentTransactionHelper {
                 tossOrderId, payment.getOrderId());
     }
 
+    // ===== 아이템 부분 취소 전용 =====
+
+    /**
+     * 주문 ID로 결제의 paymentKey를 조회한다 (Short TX).
+     *
+     * @param orderId 주문 ID
+     * @return paymentKey
+     * @throws BusinessException 결제 없음 또는 취소 불가 상태
+     */
+    @Transactional
+    String getPaymentKeyForOrder(Long orderId) {
+        Payment payment = paymentRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        if (payment.getStatus() != PaymentStatus.DONE
+                && payment.getStatus() != PaymentStatus.PARTIAL_CANCELLED) {
+            throw new BusinessException(ErrorCode.INVALID_PAYMENT_STATUS);
+        }
+
+        return payment.getPaymentKey();
+    }
+
+    /**
+     * Payment 엔티티만 부분 취소 처리한다 (Short TX).
+     * Order 상태 전이는 수행하지 않는다 — OrderCommandService가 담당.
+     *
+     * @param paymentKey   Toss 결제 키
+     * @param cancelReason 취소 사유
+     * @param cancelAmount 부분 취소 금액
+     */
+    @Transactional
+    void applyPartialCancelOnly(String paymentKey, String cancelReason, BigDecimal cancelAmount) {
+        Payment payment = paymentRepository.findByPaymentKeyWithLock(paymentKey)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        if (payment.getStatus() == PaymentStatus.CANCELLED) {
+            return; // 이미 전액 취소됨
+        }
+
+        payment.cancel(cancelReason, cancelAmount);
+
+        log.info("[Payment] 아이템 부분 취소 완료: paymentKey={}, cancelAmount={}, newStatus={}",
+                paymentKey, cancelAmount, payment.getStatus());
+    }
+
     private LocalDateTime parseDateTime(String dateTimeStr) {
         if (dateTimeStr == null) return null;
         return OffsetDateTime.parse(dateTimeStr).toLocalDateTime();

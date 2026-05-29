@@ -75,16 +75,18 @@ public class OrderPaymentService {
         Order order = orderRepository.findByIdWithItemsForUpdate(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
+        OrderStatus previousStatus = order.getStatus();
         order.refund();
 
-        for (OrderItem item : order.getItems()) {
+        // ACTIVE 아이템만 재고 해제 — 부분 취소로 이미 CANCELLED된 아이템은 건너뜀
+        for (OrderItem item : order.getActiveItems()) {
             inventoryService.releaseAllocation(item.getVariant().getId(), item.getQuantity());
         }
 
         couponService.releaseCoupon(order.getId());
         pointService.refundByOrder(order.getUserId(), order.getId());
 
-        recordHistory(order.getId(), OrderStatus.CONFIRMED, OrderStatus.CANCELLED, null);
+        recordHistory(order.getId(), previousStatus, OrderStatus.CANCELLED, null);
         outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "PAYMENT_REFUNDED"));
     }
 

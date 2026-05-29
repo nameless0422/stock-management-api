@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.extern.jackson.Jacksonized;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
  * 주문 항목 응답 DTO.
@@ -45,6 +46,12 @@ public class OrderItemResponse {
     /** 상품 대표 이미지 URL — null이면 이미지 없음 */
     private final String thumbnailUrl;
 
+    /** 주문 아이템 상태 (ACTIVE, CANCELLED) */
+    private final String status;
+
+    /** 부분 취소 시각 — ACTIVE이면 null */
+    private final LocalDateTime cancelledAt;
+
     /** OrderItem 엔티티를 응답 DTO로 변환 (hasReview 미포함). */
     public static OrderItemResponse from(OrderItem item) {
         return from(item, null);
@@ -63,6 +70,8 @@ public class OrderItemResponse {
                 .subtotal(item.getSubtotal())
                 .hasReview(hasReview)
                 .thumbnailUrl(item.getProduct().getThumbnailUrl())
+                .status(item.getStatus().name())
+                .cancelledAt(item.getCancelledAt())
                 .build();
     }
 }

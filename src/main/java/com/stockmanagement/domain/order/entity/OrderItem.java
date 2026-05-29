@@ -1,5 +1,7 @@
 package com.stockmanagement.domain.order.entity;
 
+import com.stockmanagement.common.exception.BusinessException;
+import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductVariant;
 import jakarta.persistence.*;
@@ -61,6 +63,15 @@ public class OrderItem {
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal subtotal;
 
+    /** 주문 항목 상태 — 부분 취소 시 CANCELLED로 전환 */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private OrderItemStatus status;
+
+    /** 부분 취소 시각 — ACTIVE 상태에서는 null */
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -72,6 +83,27 @@ public class OrderItem {
         this.quantity = quantity;
         this.unitPrice = unitPrice;
         this.subtotal = unitPrice.multiply(BigDecimal.valueOf(quantity));
+        this.status = OrderItemStatus.ACTIVE;
+    }
+
+    // ===== 비즈니스 메서드 =====
+
+    /**
+     * 아이템을 부분 취소한다.
+     *
+     * @throws BusinessException 이미 취소된 아이템일 경우
+     */
+    public void cancel() {
+        if (this.status == OrderItemStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.ORDER_ITEM_ALREADY_CANCELLED);
+        }
+        this.status = OrderItemStatus.CANCELLED;
+        this.cancelledAt = LocalDateTime.now();
+    }
+
+    /** 활성 상태인지 확인한다. */
+    public boolean isActive() {
+        return this.status == OrderItemStatus.ACTIVE;
     }
 
     /**
