@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @Tag(name = "상품 Q&A", description = "상품 질문·답변 관리")
 @RestController
-@RequestMapping("/api/products/{productId}/qna")
+@RequestMapping("/api/v1/products/{productId}/qna")
 @RequiredArgsConstructor
 public class ProductQnaController {
 

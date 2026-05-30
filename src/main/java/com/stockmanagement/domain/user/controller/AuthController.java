@@ -35,7 +35,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @Tag(name = "인증", description = "회원가입 · 로그인 · 토큰 재발급 · 로그아웃 · 비밀번호 재설정")
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController {
 

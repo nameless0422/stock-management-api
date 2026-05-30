@@ -64,7 +64,7 @@ class AdminControllerTest {
         void adminGetsDashboard() throws Exception {
             given(adminService.getDashboard()).willReturn(mock(DashboardResponse.class));
 
-            mockMvc.perform(get("/api/admin/dashboard"))
+            mockMvc.perform(get("/api/v1/admin/dashboard"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -73,14 +73,14 @@ class AdminControllerTest {
         @WithMockUser(roles = "USER")
         @DisplayName("USER — 대시보드 조회 → 403")
         void userForbidden() throws Exception {
-            mockMvc.perform(get("/api/admin/dashboard"))
+            mockMvc.perform(get("/api/v1/admin/dashboard"))
                     .andExpect(status().isForbidden());
         }
 
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/admin/dashboard"))
+            mockMvc.perform(get("/api/v1/admin/dashboard"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -98,7 +98,7 @@ class AdminControllerTest {
             given(adminService.getUsers(any(Pageable.class), isNull()))
                     .willReturn(new PageImpl<>(List.of(mock(UserResponse.class))));
 
-            mockMvc.perform(get("/api/admin/users"))
+            mockMvc.perform(get("/api/v1/admin/users"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -107,7 +107,7 @@ class AdminControllerTest {
         @WithMockUser(roles = "USER")
         @DisplayName("USER — 사용자 목록 조회 → 403")
         void userForbidden() throws Exception {
-            mockMvc.perform(get("/api/admin/users"))
+            mockMvc.perform(get("/api/v1/admin/users"))
                     .andExpect(status().isForbidden());
         }
     }
@@ -126,7 +126,7 @@ class AdminControllerTest {
         void adminUpdatesRole() throws Exception {
             given(adminService.updateRole(any(), any())).willReturn(mock(UserResponse.class));
 
-            mockMvc.perform(patch("/api/admin/users/1/role")
+            mockMvc.perform(patch("/api/v1/admin/users/1/role")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(ROLE_JSON))
                     .andExpect(status().isOk())
@@ -137,7 +137,7 @@ class AdminControllerTest {
         @WithMockUser(roles = "USER")
         @DisplayName("USER — 권한 변경 → 403")
         void userForbidden() throws Exception {
-            mockMvc.perform(patch("/api/admin/users/1/role")
+            mockMvc.perform(patch("/api/v1/admin/users/1/role")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(ROLE_JSON))
                     .andExpect(status().isForbidden());
@@ -157,7 +157,7 @@ class AdminControllerTest {
             given(adminService.getOrders(isNull(), isNull(), any(Pageable.class)))
                     .willReturn(new PageImpl<>(List.of(mock(AdminOrderResponse.class))));
 
-            mockMvc.perform(get("/api/admin/orders"))
+            mockMvc.perform(get("/api/v1/admin/orders"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -176,7 +176,7 @@ class AdminControllerTest {
             given(adminService.getOrderStats(any(), any()))
                     .willReturn(List.of(mock(DailyOrderStatsResponse.class)));
 
-            mockMvc.perform(get("/api/admin/stats/orders")
+            mockMvc.perform(get("/api/v1/admin/stats/orders")
                             .param("from", "2025-01-01")
                             .param("to", "2025-01-31"))
                     .andExpect(status().isOk())
@@ -197,7 +197,7 @@ class AdminControllerTest {
             given(adminService.getInventorySnapshot(any()))
                     .willReturn(List.of(mock(DailyInventorySnapshotResponse.class)));
 
-            mockMvc.perform(get("/api/admin/stats/inventory")
+            mockMvc.perform(get("/api/v1/admin/stats/inventory")
                             .param("date", "2025-01-01"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
@@ -218,7 +218,7 @@ class AdminControllerTest {
                     .willReturn(new ShippingPolicyResponse(
                             new BigDecimal("3000"), new BigDecimal("50000"), "admin", LocalDateTime.now()));
 
-            mockMvc.perform(get("/api/admin/settings/shipping-policy"))
+            mockMvc.perform(get("/api/v1/admin/settings/shipping-policy"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.defaultFee").value(3000));
@@ -228,7 +228,7 @@ class AdminControllerTest {
         @WithMockUser(roles = "USER")
         @DisplayName("USER — 배송비 정책 조회 → 403")
         void userForbidden() throws Exception {
-            mockMvc.perform(get("/api/admin/settings/shipping-policy"))
+            mockMvc.perform(get("/api/v1/admin/settings/shipping-policy"))
                     .andExpect(status().isForbidden());
         }
     }
@@ -245,7 +245,7 @@ class AdminControllerTest {
                     .willReturn(new ShippingPolicyResponse(
                             new BigDecimal("2500"), new BigDecimal("30000"), "admin", LocalDateTime.now()));
 
-            mockMvc.perform(put("/api/admin/settings/shipping-policy")
+            mockMvc.perform(put("/api/v1/admin/settings/shipping-policy")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"defaultFee\":2500,\"freeShippingThreshold\":30000}"))
                     .andExpect(status().isOk())
@@ -256,7 +256,7 @@ class AdminControllerTest {
         @WithMockUser(roles = "USER")
         @DisplayName("USER — 배송비 정책 변경 → 403")
         void userForbidden() throws Exception {
-            mockMvc.perform(put("/api/admin/settings/shipping-policy")
+            mockMvc.perform(put("/api/v1/admin/settings/shipping-policy")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"defaultFee\":2500,\"freeShippingThreshold\":30000}"))
                     .andExpect(status().isForbidden());

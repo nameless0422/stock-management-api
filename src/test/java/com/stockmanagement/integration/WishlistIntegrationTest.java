@@ -13,7 +13,7 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
     // ===== 공통 헬퍼 =====
 
     private long createProduct(String adminToken, String sku, int price) throws Exception {
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format("{\"name\":\"상품_%s\",\"sku\":\"%s\",\"price\":%d}", sku, sku, price)))
@@ -31,7 +31,7 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
         long productId = createProduct(adminToken, "SKU-WL1", 15000);
 
         String userToken = signupAndLogin("user1", "Password1!", "u1@test.com");
-        mockMvc.perform(post("/api/wishlist/" + productId)
+        mockMvc.perform(post("/api/v1/wishlist/" + productId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.productId").value(productId));
@@ -44,12 +44,12 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
         long productId = createProduct(adminToken, "SKU-WL2", 15000);
 
         String userToken = signupAndLogin("user2", "Password1!", "u2@test.com");
-        mockMvc.perform(post("/api/wishlist/" + productId)
+        mockMvc.perform(post("/api/v1/wishlist/" + productId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated());
 
         // 두 번째 추가 → 409
-        mockMvc.perform(post("/api/wishlist/" + productId)
+        mockMvc.perform(post("/api/v1/wishlist/" + productId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isConflict());
     }
@@ -61,11 +61,11 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
         long productId = createProduct(adminToken, "SKU-WL3", 20000);
 
         String userToken = signupAndLogin("user3", "Password1!", "u3@test.com");
-        mockMvc.perform(post("/api/wishlist/" + productId)
+        mockMvc.perform(post("/api/v1/wishlist/" + productId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/wishlist")
+        mockMvc.perform(get("/api/v1/wishlist")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content").isArray())
@@ -80,16 +80,16 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
         long productId = createProduct(adminToken, "SKU-WL4", 25000);
 
         String userToken = signupAndLogin("user4", "Password1!", "u4@test.com");
-        mockMvc.perform(post("/api/wishlist/" + productId)
+        mockMvc.perform(post("/api/v1/wishlist/" + productId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(delete("/api/wishlist/" + productId)
+        mockMvc.perform(delete("/api/v1/wishlist/" + productId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isNoContent());
 
         // 삭제 후 목록 비어 있음 확인
-        mockMvc.perform(get("/api/wishlist")
+        mockMvc.perform(get("/api/v1/wishlist")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content").isArray())
@@ -103,7 +103,7 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
         long productId = createProduct(adminToken, "SKU-WL5", 10000);
 
         String userToken = signupAndLogin("user5", "Password1!", "u5@test.com");
-        mockMvc.perform(delete("/api/wishlist/" + productId)
+        mockMvc.perform(delete("/api/v1/wishlist/" + productId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isNotFound());
     }

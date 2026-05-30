@@ -30,7 +30,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
                 ? String.format("{\"name\":\"%s\",\"parentId\":%d}", name, parentId)
                 : String.format("{\"name\":\"%s\"}", name);
 
-        String body = mockMvc.perform(post("/api/categories")
+        String body = mockMvc.perform(post("/api/v1/categories")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
@@ -41,7 +41,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
 
     /** 상품을 생성하고 ID를 반환한다. */
     private long createProduct(String sku, long categoryId) throws Exception {
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -57,7 +57,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("최상위 카테고리 생성 → 201, parentId=null")
     void createRootCategory() throws Exception {
-        mockMvc.perform(post("/api/categories")
+        mockMvc.perform(post("/api/v1/categories")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"전자\",\"description\":\"전자제품\"}"))
@@ -72,7 +72,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
     void createChildCategory() throws Exception {
         long parentId = createCategory("전자");
 
-        String body = mockMvc.perform(post("/api/categories")
+        String body = mockMvc.perform(post("/api/v1/categories")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format("{\"name\":\"노트북\",\"parentId\":%d}", parentId)))
@@ -80,7 +80,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
 
         objectMapper.readTree(body).path("data").path("parentId").asLong();
-        mockMvc.perform(get("/api/categories"))
+        mockMvc.perform(get("/api/v1/categories"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(2));
     }
@@ -90,7 +90,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
     void createDuplicate_409() throws Exception {
         createCategory("전자");
 
-        mockMvc.perform(post("/api/categories")
+        mockMvc.perform(post("/api/v1/categories")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"전자\"}"))
@@ -101,7 +101,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("존재하지 않는 parentId → 404")
     void createWithInvalidParent_404() throws Exception {
-        mockMvc.perform(post("/api/categories")
+        mockMvc.perform(post("/api/v1/categories")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"노트북\",\"parentId\":99999}"))
@@ -117,7 +117,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
         createCategory("노트북", parentId);
         createCategory("스마트폰", parentId);
 
-        mockMvc.perform(get("/api/categories/tree"))
+        mockMvc.perform(get("/api/v1/categories/tree"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].name").value("전자"))
@@ -130,7 +130,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
         long parentId = createCategory("전자");
         createCategory("노트북", parentId);
 
-        mockMvc.perform(get("/api/categories/" + parentId))
+        mockMvc.perform(get("/api/v1/categories/" + parentId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.name").value("전자"))
                 .andExpect(jsonPath("$.data.children.length()").value(1));
@@ -144,7 +144,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
         long parentId = createCategory("전자");
         createCategory("노트북", parentId);
 
-        mockMvc.perform(delete("/api/categories/" + parentId)
+        mockMvc.perform(delete("/api/v1/categories/" + parentId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isConflict());
     }
@@ -155,7 +155,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
         long categoryId = createCategory("전자");
         createProduct("SKU-C01", categoryId);
 
-        mockMvc.perform(delete("/api/categories/" + categoryId)
+        mockMvc.perform(delete("/api/v1/categories/" + categoryId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isConflict());
     }
@@ -165,7 +165,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
     void deleteCategory_204() throws Exception {
         long categoryId = createCategory("삭제대상");
 
-        mockMvc.perform(delete("/api/categories/" + categoryId)
+        mockMvc.perform(delete("/api/v1/categories/" + categoryId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isNoContent());
     }
@@ -177,7 +177,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
     void createProductWithCategory() throws Exception {
         long categoryId = createCategory("가전");
 
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -186,7 +186,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 
-        mockMvc.perform(get("/api/products/" + objectMapper.readTree(body).path("data").path("id").asLong()))
+        mockMvc.perform(get("/api/v1/products/" + objectMapper.readTree(body).path("data").path("id").asLong()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.category").value("가전"))
                 .andExpect(jsonPath("$.data.categoryId").value(categoryId));
@@ -195,7 +195,7 @@ class CategoryIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("없는 categoryId로 상품 생성 → 404")
     void createProductWithInvalidCategory_404() throws Exception {
-        mockMvc.perform(post("/api/products")
+        mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"상품\",\"sku\":\"INV-001\",\"price\":10000,\"categoryId\":99999}"))

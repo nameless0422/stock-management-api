@@ -39,7 +39,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @Tag(name = "재고", description = "재고 현황 조회 · 이력 조회 · 입고 처리")
 @RestController
-@RequestMapping("/api/inventory")
+@RequestMapping("/api/v1/inventory")
 @RequiredArgsConstructor
 @Validated
 public class InventoryController {

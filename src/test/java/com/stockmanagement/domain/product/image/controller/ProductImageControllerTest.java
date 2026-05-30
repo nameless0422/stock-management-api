@@ -42,7 +42,7 @@ class ProductImageControllerTest {
     @MockBean private JwtBlacklist jwtBlacklist;
     @MockBean private UserService userService;
 
-    private static final String BASE_URL = "/api/products/1/images";
+    private static final String BASE_URL = "/api/v1/products/1/images";
 
     @Nested
     @DisplayName("POST /api/products/{productId}/images/presigned")

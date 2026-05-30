@@ -66,7 +66,7 @@ class DeliveryAddressControllerTest {
         void createsAddress() throws Exception {
             given(deliveryAddressService.create(anyLong(), any())).willReturn(mock(DeliveryAddressResponse.class));
 
-            mockMvc.perform(post("/api/delivery-addresses")
+            mockMvc.perform(post("/api/v1/delivery-addresses")
                             .with(authentication(USER_AUTH))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
@@ -77,7 +77,7 @@ class DeliveryAddressControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(post("/api/delivery-addresses")
+            mockMvc.perform(post("/api/v1/delivery-addresses")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isUnauthorized());
@@ -86,7 +86,7 @@ class DeliveryAddressControllerTest {
         @Test
         @DisplayName("필수 필드 누락 → 400")
         void validationFailure() throws Exception {
-            mockMvc.perform(post("/api/delivery-addresses")
+            mockMvc.perform(post("/api/v1/delivery-addresses")
                             .with(authentication(USER_AUTH))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
@@ -106,7 +106,7 @@ class DeliveryAddressControllerTest {
             given(deliveryAddressService.getList(1L))
                     .willReturn(List.of(mock(DeliveryAddressResponse.class)));
 
-            mockMvc.perform(get("/api/delivery-addresses").with(authentication(USER_AUTH)))
+            mockMvc.perform(get("/api/v1/delivery-addresses").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -114,7 +114,7 @@ class DeliveryAddressControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/delivery-addresses"))
+            mockMvc.perform(get("/api/v1/delivery-addresses"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -128,14 +128,14 @@ class DeliveryAddressControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 배송지 삭제 → 204")
         void deletesAddress() throws Exception {
-            mockMvc.perform(delete("/api/delivery-addresses/1").with(authentication(USER_AUTH)))
+            mockMvc.perform(delete("/api/v1/delivery-addresses/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isNoContent());
         }
 
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(delete("/api/delivery-addresses/1"))
+            mockMvc.perform(delete("/api/v1/delivery-addresses/1"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -152,7 +152,7 @@ class DeliveryAddressControllerTest {
             given(deliveryAddressService.setDefault(anyLong(), anyLong()))
                     .willReturn(mock(DeliveryAddressResponse.class));
 
-            mockMvc.perform(post("/api/delivery-addresses/1/default").with(authentication(USER_AUTH)))
+            mockMvc.perform(post("/api/v1/delivery-addresses/1/default").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }

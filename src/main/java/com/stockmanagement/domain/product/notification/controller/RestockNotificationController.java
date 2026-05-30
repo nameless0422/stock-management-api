@@ -20,7 +20,7 @@ public class RestockNotificationController {
     private final RestockNotificationService restockNotificationService;
 
     @Operation(summary = "재입고 알림 신청")
-    @PostMapping("/api/products/{productId}/restock-notify")
+    @PostMapping("/api/v1/products/{productId}/restock-notify")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<RestockNotificationResponse> subscribe(
             @PathVariable Long productId, @CurrentUserId Long userId) {
@@ -28,7 +28,7 @@ public class RestockNotificationController {
     }
 
     @Operation(summary = "재입고 알림 취소")
-    @DeleteMapping("/api/products/{productId}/restock-notify")
+    @DeleteMapping("/api/v1/products/{productId}/restock-notify")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void unsubscribe(
             @PathVariable Long productId, @CurrentUserId Long userId) {
@@ -36,7 +36,7 @@ public class RestockNotificationController {
     }
 
     @Operation(summary = "내 재입고 알림 목록 조회")
-    @GetMapping("/api/users/me/restock-notifications")
+    @GetMapping("/api/v1/users/me/restock-notifications")
     public ApiResponse<List<RestockNotificationResponse>> getMyNotifications(
             @CurrentUserId Long userId) {
         return ApiResponse.ok(restockNotificationService.getMyNotifications(userId));

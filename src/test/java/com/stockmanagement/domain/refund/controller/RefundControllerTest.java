@@ -62,7 +62,7 @@ class RefundControllerTest {
         void requestsRefund() throws Exception {
             given(refundService.requestRefund(any(), anyLong())).willReturn(mock(RefundResponse.class));
 
-            mockMvc.perform(post("/api/refunds")
+            mockMvc.perform(post("/api/v1/refunds")
                             .with(authentication(USER_AUTH))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(REFUND_JSON))
@@ -73,7 +73,7 @@ class RefundControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(post("/api/refunds")
+            mockMvc.perform(post("/api/v1/refunds")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(REFUND_JSON))
                     .andExpect(status().isUnauthorized());
@@ -85,7 +85,7 @@ class RefundControllerTest {
             given(refundService.requestRefund(any(), anyLong()))
                     .willThrow(new BusinessException(ErrorCode.REFUND_ALREADY_EXISTS));
 
-            mockMvc.perform(post("/api/refunds")
+            mockMvc.perform(post("/api/v1/refunds")
                             .with(authentication(USER_AUTH))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(REFUND_JSON))
@@ -105,7 +105,7 @@ class RefundControllerTest {
         void returnsRefund() throws Exception {
             given(refundService.getById(eq(1L), any(), eq(false))).willReturn(mock(RefundResponse.class));
 
-            mockMvc.perform(get("/api/refunds/1").with(authentication(USER_AUTH)))
+            mockMvc.perform(get("/api/v1/refunds/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -113,7 +113,7 @@ class RefundControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/refunds/1"))
+            mockMvc.perform(get("/api/v1/refunds/1"))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -123,7 +123,7 @@ class RefundControllerTest {
             given(refundService.getById(eq(999L), any(), eq(false)))
                     .willThrow(new BusinessException(ErrorCode.REFUND_NOT_FOUND));
 
-            mockMvc.perform(get("/api/refunds/999").with(authentication(USER_AUTH)))
+            mockMvc.perform(get("/api/v1/refunds/999").with(authentication(USER_AUTH)))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -134,7 +134,7 @@ class RefundControllerTest {
             given(refundService.getById(eq(1L), any(), eq(false)))
                     .willThrow(new BusinessException(ErrorCode.REFUND_ACCESS_DENIED));
 
-            mockMvc.perform(get("/api/refunds/1").with(authentication(USER_AUTH)))
+            mockMvc.perform(get("/api/v1/refunds/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -151,7 +151,7 @@ class RefundControllerTest {
         void returnsRefundByPaymentId() throws Exception {
             given(refundService.getByPaymentId(eq(1L), any(), eq(false))).willReturn(List.of(mock(RefundResponse.class)));
 
-            mockMvc.perform(get("/api/refunds/payments/1").with(authentication(USER_AUTH)))
+            mockMvc.perform(get("/api/v1/refunds/payments/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -159,7 +159,7 @@ class RefundControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/refunds/payments/1"))
+            mockMvc.perform(get("/api/v1/refunds/payments/1"))
                     .andExpect(status().isUnauthorized());
         }
     }

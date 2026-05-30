@@ -58,7 +58,7 @@ class PointControllerTest {
         void returnsBalance() throws Exception {
             given(pointService.getBalance("user1")).willReturn(mock(PointBalanceResponse.class));
 
-            mockMvc.perform(get("/api/points/balance").with(authentication(USER_AUTH)))
+            mockMvc.perform(get("/api/v1/points/balance").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -66,7 +66,7 @@ class PointControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/points/balance"))
+            mockMvc.perform(get("/api/v1/points/balance"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -83,7 +83,7 @@ class PointControllerTest {
             given(pointService.getHistory(anyString(), any(Pageable.class)))
                     .willReturn(new PageImpl<>(List.of(mock(PointTransactionResponse.class))));
 
-            mockMvc.perform(get("/api/points/history").with(authentication(USER_AUTH)))
+            mockMvc.perform(get("/api/v1/points/history").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -91,7 +91,7 @@ class PointControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/points/history"))
+            mockMvc.perform(get("/api/v1/points/history"))
                     .andExpect(status().isUnauthorized());
         }
     }

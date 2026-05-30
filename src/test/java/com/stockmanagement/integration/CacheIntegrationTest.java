@@ -25,7 +25,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
     // ===== 공통 헬퍼 =====
 
     private long createProduct(String adminToken, String name, String sku) throws Exception {
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -37,7 +37,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
 
     private void receive(String adminToken, long productId, int quantity) throws Exception {
         long variantId = getDefaultVariantId(productId);
-        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + quantity + "}"))
@@ -59,7 +59,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
             receive(adminToken, productId, 20);
 
             // 첫 번째 조회 — cache miss (DB → Redis 저장)
-            mockMvc.perform(get("/api/inventory/variants/" + variantId)
+            mockMvc.perform(get("/api/v1/inventory/variants/" + variantId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.onHand").value(20))
@@ -67,7 +67,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
 
             // 두 번째 조회 — cache hit (Redis에서 역직렬화)
             // 동일한 값이 반환되면 직렬화/역직렬화가 정상 동작하는 것
-            mockMvc.perform(get("/api/inventory/variants/" + variantId)
+            mockMvc.perform(get("/api/v1/inventory/variants/" + variantId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.onHand").value(20))
@@ -83,7 +83,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
             receive(adminToken, productId, 10);
 
             // 첫 조회 — cache miss: onHand=10 캐싱
-            mockMvc.perform(get("/api/inventory/variants/" + variantId)
+            mockMvc.perform(get("/api/v1/inventory/variants/" + variantId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(jsonPath("$.data.onHand").value(10));
 
@@ -91,7 +91,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
             receive(adminToken, productId, 15);
 
             // 재조회 — cache miss (evict됨): 최신 데이터(25) 반환
-            mockMvc.perform(get("/api/inventory/variants/" + variantId)
+            mockMvc.perform(get("/api/v1/inventory/variants/" + variantId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.onHand").value(25))
@@ -107,14 +107,14 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
             receive(adminToken, productId, 30);
 
             // 첫 조회 — available=30 캐싱
-            mockMvc.perform(get("/api/inventory/variants/" + variantId)
+            mockMvc.perform(get("/api/v1/inventory/variants/" + variantId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(jsonPath("$.data.available").value(30));
 
             // 주문 생성 → reserve() → @CacheEvict 발동
             String userToken = signupAndLogin("buyer", "Buyerpass1!", "buyer@example.com");
             long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
-            mockMvc.perform(post("/api/orders")
+            mockMvc.perform(post("/api/v1/orders")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
@@ -124,7 +124,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
                     .andExpect(status().isCreated());
 
             // 재조회 — cache miss: reserved=5, available=25
-            mockMvc.perform(get("/api/inventory/variants/" + variantId)
+            mockMvc.perform(get("/api/v1/inventory/variants/" + variantId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.reserved").value(5))
@@ -150,7 +150,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
             long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
             // 주문 생성
-            String orderBody = mockMvc.perform(post("/api/orders")
+            String orderBody = mockMvc.perform(post("/api/v1/orders")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
@@ -162,14 +162,14 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
             long orderId = objectMapper.readTree(orderBody).path("data").path("id").asLong();
 
             // 첫 번째 조회 — cache miss
-            mockMvc.perform(get("/api/orders/" + orderId)
+            mockMvc.perform(get("/api/v1/orders/" + orderId)
                             .header("Authorization", "Bearer " + userToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.status").value("PENDING"))
                     .andExpect(jsonPath("$.data.items.length()").value(1));
 
             // 두 번째 조회 — cache hit (역직렬화 정상 동작 확인)
-            mockMvc.perform(get("/api/orders/" + orderId)
+            mockMvc.perform(get("/api/v1/orders/" + orderId)
                             .header("Authorization", "Bearer " + userToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.status").value("PENDING"))
@@ -188,7 +188,7 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
             long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
             // 주문 생성
-            String orderBody = mockMvc.perform(post("/api/orders")
+            String orderBody = mockMvc.perform(post("/api/v1/orders")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
@@ -200,17 +200,17 @@ class CacheIntegrationTest extends AbstractIntegrationTest {
             long orderId = objectMapper.readTree(orderBody).path("data").path("id").asLong();
 
             // 첫 조회 — PENDING 캐싱
-            mockMvc.perform(get("/api/orders/" + orderId)
+            mockMvc.perform(get("/api/v1/orders/" + orderId)
                             .header("Authorization", "Bearer " + userToken))
                     .andExpect(jsonPath("$.data.status").value("PENDING"));
 
             // 주문 취소 → @CacheEvict 발동
-            mockMvc.perform(post("/api/orders/" + orderId + "/cancel")
+            mockMvc.perform(post("/api/v1/orders/" + orderId + "/cancel")
                             .header("Authorization", "Bearer " + userToken))
                     .andExpect(status().isOk());
 
             // 재조회 — cache miss: 최신 상태(CANCELLED) 반환
-            mockMvc.perform(get("/api/orders/" + orderId)
+            mockMvc.perform(get("/api/v1/orders/" + orderId)
                             .header("Authorization", "Bearer " + userToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.status").value("CANCELLED"));

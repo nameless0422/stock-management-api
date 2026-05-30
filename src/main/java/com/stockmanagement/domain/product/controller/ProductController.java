@@ -27,7 +27,7 @@ import java.util.List;
 
 @Tag(name = "상품", description = "상품 CRUD — 등록·조회·수정·삭제")
 @RestController
-@RequestMapping("/api/products")
+@RequestMapping("/api/v1/products")
 @RequiredArgsConstructor
 public class ProductController {
 

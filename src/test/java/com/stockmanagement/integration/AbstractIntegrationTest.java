@@ -176,7 +176,7 @@ abstract class AbstractIntegrationTest {
         String signupJson = String.format(
                 "{\"username\":\"%s\",\"password\":\"%s\",\"email\":\"%s\"}",
                 username, password, email);
-        mockMvc.perform(post("/api/auth/signup")
+        mockMvc.perform(post("/api/v1/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson))
                 .andExpect(status().isCreated());
@@ -191,7 +191,7 @@ abstract class AbstractIntegrationTest {
     protected String login(String username, String password) throws Exception {
         String loginJson = String.format(
                 "{\"username\":\"%s\",\"password\":\"%s\"}", username, password);
-        String body = mockMvc.perform(post("/api/auth/login")
+        String body = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(loginJson))
                 .andExpect(status().isOk())
@@ -201,7 +201,7 @@ abstract class AbstractIntegrationTest {
 
     /** 상품의 기본 variant ID를 반환한다 (인벤토리 API 호출용). */
     protected long getDefaultVariantId(long productId) throws Exception {
-        String body = mockMvc.perform(get("/api/products/" + productId + "/variants"))
+        String body = mockMvc.perform(get("/api/v1/products/" + productId + "/variants"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("data").get(0).path("id").asLong();

@@ -39,7 +39,7 @@ class InventoryConcurrencyTest extends AbstractIntegrationTest {
 
     /** 상품을 등록하고 초기 입고(seedQuantity)를 수행해 inventory 레코드를 생성한다. 상품 ID를 반환한다. */
     private long setupProduct(String adminToken, String sku, int seedQuantity) throws Exception {
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -50,7 +50,7 @@ class InventoryConcurrencyTest extends AbstractIntegrationTest {
         long variantId = getDefaultVariantId(productId);
 
         // inventory 레코드 사전 생성 — 동시성 테스트에서 첫 INSERT 경합 방지
-        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + seedQuantity + "}"))
@@ -107,7 +107,7 @@ class InventoryConcurrencyTest extends AbstractIntegrationTest {
         long variantId = getDefaultVariantId(productId);
 
         runConcurrently(() ->
-                mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
+                mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                                 .header("Authorization", "Bearer " + adminToken)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"quantity\":1}"))
@@ -115,7 +115,7 @@ class InventoryConcurrencyTest extends AbstractIntegrationTest {
         );
 
         // 최종 onHand = seed(5) + 동시 입고(10 × 1) = 15
-        mockMvc.perform(get("/api/inventory/variants/" + variantId)
+        mockMvc.perform(get("/api/v1/inventory/variants/" + variantId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.onHand").value(15));
@@ -147,7 +147,7 @@ class InventoryConcurrencyTest extends AbstractIntegrationTest {
                             "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":1000}]}",
                             buyerId, idx, productId, variantId);
 
-                    int httpStatus = mockMvc.perform(post("/api/orders")
+                    int httpStatus = mockMvc.perform(post("/api/v1/orders")
                                     .header("Authorization", "Bearer " + userToken)
                                     .contentType(MediaType.APPLICATION_JSON)
                                     .content(orderJson))
@@ -174,7 +174,7 @@ class InventoryConcurrencyTest extends AbstractIntegrationTest {
         assertThat(failCount.get()).isEqualTo(5);
 
         // 최종 재고: reserved=5, available=0 — overselling 없음
-        mockMvc.perform(get("/api/inventory/variants/" + variantId)
+        mockMvc.perform(get("/api/v1/inventory/variants/" + variantId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reserved").value(5))

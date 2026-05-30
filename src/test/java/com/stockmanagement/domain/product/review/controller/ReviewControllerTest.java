@@ -70,7 +70,7 @@ class ReviewControllerTest {
         void createsReview() throws Exception {
             given(reviewService.create(anyLong(), anyLong(), any())).willReturn(mock(ReviewResponse.class));
 
-            mockMvc.perform(post("/api/products/1/reviews")
+            mockMvc.perform(post("/api/v1/products/1/reviews")
                             .with(authentication(USER_AUTH))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(REVIEW_JSON))
@@ -81,7 +81,7 @@ class ReviewControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(post("/api/products/1/reviews")
+            mockMvc.perform(post("/api/v1/products/1/reviews")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(REVIEW_JSON))
                     .andExpect(status().isUnauthorized());
@@ -93,7 +93,7 @@ class ReviewControllerTest {
             given(reviewService.create(anyLong(), anyLong(), any()))
                     .willThrow(new BusinessException(ErrorCode.REVIEW_NOT_PURCHASED));
 
-            mockMvc.perform(post("/api/products/1/reviews")
+            mockMvc.perform(post("/api/v1/products/1/reviews")
                             .with(authentication(USER_AUTH))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(REVIEW_JSON))
@@ -107,7 +107,7 @@ class ReviewControllerTest {
             given(reviewService.create(anyLong(), anyLong(), any()))
                     .willThrow(new BusinessException(ErrorCode.REVIEW_ALREADY_EXISTS));
 
-            mockMvc.perform(post("/api/products/1/reviews")
+            mockMvc.perform(post("/api/v1/products/1/reviews")
                             .with(authentication(USER_AUTH))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(REVIEW_JSON))
@@ -128,7 +128,7 @@ class ReviewControllerTest {
             given(reviewService.getList(anyLong(), any(Pageable.class), any()))
                     .willReturn(new PageImpl<>(List.of(mock(ReviewResponse.class))));
 
-            mockMvc.perform(get("/api/products/1/reviews"))
+            mockMvc.perform(get("/api/v1/products/1/reviews"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -145,7 +145,7 @@ class ReviewControllerTest {
         void returnsStats() throws Exception {
             given(reviewService.getRatingStats(1L)).willReturn(mock(RatingStatsResponse.class));
 
-            mockMvc.perform(get("/api/products/1/reviews/stats"))
+            mockMvc.perform(get("/api/v1/products/1/reviews/stats"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -156,7 +156,7 @@ class ReviewControllerTest {
             given(reviewService.getRatingStats(999L))
                     .willThrow(new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
-            mockMvc.perform(get("/api/products/999/reviews/stats"))
+            mockMvc.perform(get("/api/v1/products/999/reviews/stats"))
                     .andExpect(status().isNotFound());
         }
     }
@@ -170,14 +170,14 @@ class ReviewControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 리뷰 삭제 → 204")
         void deletesReview() throws Exception {
-            mockMvc.perform(delete("/api/products/1/reviews/1").with(authentication(USER_AUTH)))
+            mockMvc.perform(delete("/api/v1/products/1/reviews/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isNoContent());
         }
 
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(delete("/api/products/1/reviews/1"))
+            mockMvc.perform(delete("/api/v1/products/1/reviews/1"))
                     .andExpect(status().isUnauthorized());
         }
     }

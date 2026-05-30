@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Review", description = "상품 리뷰 API")
 @RestController
-@RequestMapping("/api/products/{productId}/reviews")
+@RequestMapping("/api/v1/products/{productId}/reviews")
 @RequiredArgsConstructor
 public class ReviewController {
 

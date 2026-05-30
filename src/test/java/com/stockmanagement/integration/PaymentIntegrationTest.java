@@ -48,7 +48,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
      */
     private long createOrderViaApi(String adminToken, String userToken, long userId,
                                    String sku, int price, int quantity) throws Exception {
-        String productBody = mockMvc.perform(post("/api/products")
+        String productBody = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -58,13 +58,13 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         long productId = objectMapper.readTree(productBody).path("data").path("id").asLong();
         long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":50}"))
                 .andExpect(status().isOk());
 
-        String orderBody = mockMvc.perform(post("/api/orders")
+        String orderBody = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -112,7 +112,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
             long userId = userRepository.findByUsername("buyer1").orElseThrow().getId();
             long orderId = createOrderViaApi(adminToken, userToken, userId, "PREP-001", 10000, 3);
 
-            mockMvc.perform(post("/api/payments/prepare")
+            mockMvc.perform(post("/api/v1/payments/prepare")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format("{\"orderId\":%d,\"amount\":30000}", orderId)))
@@ -131,7 +131,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
             long orderId = createOrderViaApi(adminToken, userToken, userId, "PREP-002", 10000, 3);
 
             // 실제 금액(30000)과 다른 금액(20000) 전송 → 400 (PAYMENT_AMOUNT_MISMATCH)
-            mockMvc.perform(post("/api/payments/prepare")
+            mockMvc.perform(post("/api/v1/payments/prepare")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format("{\"orderId\":%d,\"amount\":20000}", orderId)))
@@ -144,7 +144,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         void prepareOrderNotFound() throws Exception {
             String userToken = signupAndLogin("buyer3", "Password3!", "b3@test.com");
 
-            mockMvc.perform(post("/api/payments/prepare")
+            mockMvc.perform(post("/api/v1/payments/prepare")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"orderId\":99999,\"amount\":10000}"))
@@ -159,14 +159,14 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
             long userId = userRepository.findByUsername("buyer4").orElseThrow().getId();
             long orderId = createOrderViaApi(adminToken, userToken, userId, "PREP-004", 5000, 2);
 
-            String firstBody = mockMvc.perform(post("/api/payments/prepare")
+            String firstBody = mockMvc.perform(post("/api/v1/payments/prepare")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format("{\"orderId\":%d,\"amount\":10000}", orderId)))
                     .andExpect(status().isOk())
                     .andReturn().getResponse().getContentAsString();
 
-            String secondBody = mockMvc.perform(post("/api/payments/prepare")
+            String secondBody = mockMvc.perform(post("/api/v1/payments/prepare")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format("{\"orderId\":%d,\"amount\":10000}", orderId)))
@@ -193,7 +193,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
             long userId = userRepository.findByUsername("buyer5").orElseThrow().getId();
 
             // 상품 등록 + 입고 + 주문 생성
-            String productBody = mockMvc.perform(post("/api/products")
+            String productBody = mockMvc.perform(post("/api/v1/products")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"name\":\"결제상품\",\"sku\":\"PAY-001\",\"price\":5000}"))
@@ -202,13 +202,13 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
             long productId = objectMapper.readTree(productBody).path("data").path("id").asLong();
             long variantId = getDefaultVariantId(productId);
 
-            mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
+            mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"quantity\":10}"))
                     .andExpect(status().isOk());
 
-            String orderBody = mockMvc.perform(post("/api/orders")
+            String orderBody = mockMvc.perform(post("/api/v1/orders")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
@@ -220,7 +220,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
             long orderId = objectMapper.readTree(orderBody).path("data").path("id").asLong();
 
             // Prepare 호출
-            String prepareBody = mockMvc.perform(post("/api/payments/prepare")
+            String prepareBody = mockMvc.perform(post("/api/v1/payments/prepare")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format("{\"orderId\":%d,\"amount\":5000}", orderId)))
@@ -238,7 +238,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
             setField(tossResponse, "approvedAt", "2025-01-01T00:00:01+09:00");
             given(tossPaymentsClient.confirm(any())).willReturn(tossResponse);
 
-            mockMvc.perform(post("/api/payments/confirm")
+            mockMvc.perform(post("/api/v1/payments/confirm")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
@@ -270,7 +270,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
             Order order = createRawOrder(userId, BigDecimal.valueOf(10_000));
 
             // ApiResponse@JsonInclude(NON_NULL): data=null이면 data 필드 자체가 직렬화되지 않음
-            mockMvc.perform(get("/api/payments/order/" + order.getId())
+            mockMvc.perform(get("/api/v1/payments/order/" + order.getId())
                             .header("Authorization", "Bearer " + userToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
@@ -285,7 +285,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
             Order order = createRawOrder(userId, BigDecimal.valueOf(15_000));
             Payment payment = createDonePayment(order.getId(), BigDecimal.valueOf(15_000));
 
-            mockMvc.perform(get("/api/payments/order/" + order.getId())
+            mockMvc.perform(get("/api/v1/payments/order/" + order.getId())
                             .header("Authorization", "Bearer " + userToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.id").value(payment.getId()))
@@ -307,7 +307,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
             Order order = createRawOrder(userId, BigDecimal.valueOf(8_000));
             Payment payment = createDonePayment(order.getId(), BigDecimal.valueOf(8_000));
 
-            mockMvc.perform(get("/api/payments/" + payment.getPaymentKey())
+            mockMvc.perform(get("/api/v1/payments/" + payment.getPaymentKey())
                             .header("Authorization", "Bearer " + userToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.paymentKey").value(payment.getPaymentKey()));
@@ -318,7 +318,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         void getByMissingKey() throws Exception {
             String userToken = signupAndLogin("buyer9", "Password9!", "b9@test.com");
 
-            mockMvc.perform(get("/api/payments/nonexistent-key")
+            mockMvc.perform(get("/api/v1/payments/nonexistent-key")
                             .header("Authorization", "Bearer " + userToken))
                     .andExpect(status().isNotFound());
         }
@@ -335,7 +335,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         void webhookSuccess() throws Exception {
             doNothing().when(tossWebhookVerifier).verify(anyString(), anyString());
 
-            mockMvc.perform(post("/api/payments/webhook")
+            mockMvc.perform(post("/api/v1/payments/webhook")
                             .header("Toss-Signature", "valid-sig")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"eventType\":\"PAYMENT_STATUS_CHANGED\"," +

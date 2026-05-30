@@ -68,7 +68,7 @@ class PaymentControllerTest {
                     new PaymentPrepareResponse("toss-order-001", BigDecimal.valueOf(10000), "상품명", null, null);
             given(paymentService.prepare(any(), any())).willReturn(response);
 
-            mockMvc.perform(post("/api/payments/prepare")
+            mockMvc.perform(post("/api/v1/payments/prepare")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isOk())
@@ -78,7 +78,7 @@ class PaymentControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(post("/api/payments/prepare")
+            mockMvc.perform(post("/api/v1/payments/prepare")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isUnauthorized());
@@ -88,7 +88,7 @@ class PaymentControllerTest {
         @WithMockUser
         @DisplayName("필수 필드(orderId, amount) 누락 → 400")
         void validationFailure() throws Exception {
-            mockMvc.perform(post("/api/payments/prepare")
+            mockMvc.perform(post("/api/v1/payments/prepare")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isBadRequest());
@@ -110,7 +110,7 @@ class PaymentControllerTest {
         void confirmsPayment() throws Exception {
             given(paymentService.confirm(any(), any())).willReturn(mock(PaymentResponse.class));
 
-            mockMvc.perform(post("/api/payments/confirm")
+            mockMvc.perform(post("/api/v1/payments/confirm")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isOk())
@@ -120,7 +120,7 @@ class PaymentControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(post("/api/payments/confirm")
+            mockMvc.perform(post("/api/v1/payments/confirm")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isUnauthorized());
@@ -133,7 +133,7 @@ class PaymentControllerTest {
             given(paymentService.confirm(any(), any()))
                     .willThrow(new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH));
 
-            mockMvc.perform(post("/api/payments/confirm")
+            mockMvc.perform(post("/api/v1/payments/confirm")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isBadRequest())
@@ -155,7 +155,7 @@ class PaymentControllerTest {
         void cancelsPayment() throws Exception {
             given(paymentService.cancel(eq("pk-test"), any(), any(), anyBoolean())).willReturn(mock(PaymentResponse.class));
 
-            mockMvc.perform(post("/api/payments/pk-test/cancel")
+            mockMvc.perform(post("/api/v1/payments/pk-test/cancel")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isOk())
@@ -165,7 +165,7 @@ class PaymentControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(post("/api/payments/pk-test/cancel")
+            mockMvc.perform(post("/api/v1/payments/pk-test/cancel")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isUnauthorized());
@@ -175,7 +175,7 @@ class PaymentControllerTest {
         @WithMockUser
         @DisplayName("cancelReason 누락 → 400")
         void validationFailure() throws Exception {
-            mockMvc.perform(post("/api/payments/pk-test/cancel")
+            mockMvc.perform(post("/api/v1/payments/pk-test/cancel")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isBadRequest());
@@ -195,7 +195,7 @@ class PaymentControllerTest {
         @Test
         @DisplayName("인증 없이도 webhook 수신 가능 (PUBLIC) → 200")
         void receivesWebhookWithoutAuth() throws Exception {
-            mockMvc.perform(post("/api/payments/webhook")
+            mockMvc.perform(post("/api/v1/payments/webhook")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(WEBHOOK_JSON))
                     .andExpect(status().isOk());
@@ -215,7 +215,7 @@ class PaymentControllerTest {
             given(paymentService.getByOrderId(anyLong(), any(), anyBoolean()))
                     .willReturn(java.util.Optional.of(mock(PaymentResponse.class)));
 
-            mockMvc.perform(get("/api/payments/order/1"))
+            mockMvc.perform(get("/api/v1/payments/order/1"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -227,7 +227,7 @@ class PaymentControllerTest {
             given(paymentService.getByOrderId(anyLong(), any(), anyBoolean()))
                     .willReturn(java.util.Optional.empty());
 
-            mockMvc.perform(get("/api/payments/order/1"))
+            mockMvc.perform(get("/api/v1/payments/order/1"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -235,7 +235,7 @@ class PaymentControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(get("/api/payments/order/1"))
+            mockMvc.perform(get("/api/v1/payments/order/1"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -253,7 +253,7 @@ class PaymentControllerTest {
             given(paymentService.getByPaymentKey(eq("pk-test"), any(), anyBoolean()))
                     .willReturn(mock(PaymentResponse.class));
 
-            mockMvc.perform(get("/api/payments/pk-test"))
+            mockMvc.perform(get("/api/v1/payments/pk-test"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -261,7 +261,7 @@ class PaymentControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(get("/api/payments/pk-test"))
+            mockMvc.perform(get("/api/v1/payments/pk-test"))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -272,7 +272,7 @@ class PaymentControllerTest {
             given(paymentService.getByPaymentKey(eq("unknown"), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
-            mockMvc.perform(get("/api/payments/unknown"))
+            mockMvc.perform(get("/api/v1/payments/unknown"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -284,7 +284,7 @@ class PaymentControllerTest {
             given(paymentService.getByPaymentKey(eq("pk-test"), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.ORDER_ACCESS_DENIED));
 
-            mockMvc.perform(get("/api/payments/pk-test"))
+            mockMvc.perform(get("/api/v1/payments/pk-test"))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false));
         }

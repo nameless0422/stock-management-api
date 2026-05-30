@@ -67,7 +67,7 @@ class CategoryControllerTest {
         void createsCategory() throws Exception {
             given(categoryService.create(any())).willReturn(mock(CategoryResponse.class));
 
-            mockMvc.perform(post("/api/categories")
+            mockMvc.perform(post("/api/v1/categories")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_CREATE_JSON))
                     .andExpect(status().isCreated())
@@ -78,7 +78,7 @@ class CategoryControllerTest {
         @WithMockUser
         @DisplayName("USER — ADMIN 전용 → 403")
         void forbiddenForUser() throws Exception {
-            mockMvc.perform(post("/api/categories")
+            mockMvc.perform(post("/api/v1/categories")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_CREATE_JSON))
                     .andExpect(status().isForbidden());
@@ -87,7 +87,7 @@ class CategoryControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void forbiddenWithoutAuth() throws Exception {
-            mockMvc.perform(post("/api/categories")
+            mockMvc.perform(post("/api/v1/categories")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_CREATE_JSON))
                     .andExpect(status().isUnauthorized());
@@ -105,7 +105,7 @@ class CategoryControllerTest {
         void allowsUnauthenticated() throws Exception {
             given(categoryService.getList()).willReturn(List.of());
 
-            mockMvc.perform(get("/api/categories"))
+            mockMvc.perform(get("/api/v1/categories"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -122,7 +122,7 @@ class CategoryControllerTest {
         void allowsUnauthenticated() throws Exception {
             given(categoryService.getTree()).willReturn(List.of());
 
-            mockMvc.perform(get("/api/categories/tree"))
+            mockMvc.perform(get("/api/v1/categories/tree"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -138,7 +138,7 @@ class CategoryControllerTest {
         @WithMockUser(roles = "ADMIN")
         @DisplayName("ADMIN — 카테고리 삭제 → 204")
         void deletesCategory() throws Exception {
-            mockMvc.perform(delete("/api/categories/1"))
+            mockMvc.perform(delete("/api/v1/categories/1"))
                     .andExpect(status().isNoContent());
         }
 
@@ -146,7 +146,7 @@ class CategoryControllerTest {
         @WithMockUser
         @DisplayName("USER — ADMIN 전용 → 403")
         void forbiddenForUser() throws Exception {
-            mockMvc.perform(delete("/api/categories/1"))
+            mockMvc.perform(delete("/api/v1/categories/1"))
                     .andExpect(status().isForbidden());
         }
     }

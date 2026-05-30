@@ -59,7 +59,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
         long orderId = createConfirmedOrder(userId);
         createPreparingShipment(orderId);
 
-        mockMvc.perform(get("/api/shipments/orders/" + orderId)
+        mockMvc.perform(get("/api/v1/shipments/orders/" + orderId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.orderId").value(orderId))
@@ -71,7 +71,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
     void getByOrderId_notFound() throws Exception {
         String userToken = signupAndLogin("user1", "Password1!", "u1@test.com");
 
-        mockMvc.perform(get("/api/shipments/orders/9999")
+        mockMvc.perform(get("/api/v1/shipments/orders/9999")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isNotFound());
     }
@@ -86,7 +86,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
         long orderId = createConfirmedOrder(userId);
         createPreparingShipment(orderId);
 
-        mockMvc.perform(patch("/api/shipments/orders/" + orderId + "/ship")
+        mockMvc.perform(patch("/api/v1/shipments/orders/" + orderId + "/ship")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"carrier\":\"CJ대한통운\",\"trackingNumber\":\"123456789\"}"))
@@ -105,7 +105,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
         long orderId = createConfirmedOrder(userId);
         createPreparingShipment(orderId);
 
-        mockMvc.perform(patch("/api/shipments/orders/" + orderId + "/ship")
+        mockMvc.perform(patch("/api/v1/shipments/orders/" + orderId + "/ship")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"carrier\":\"한진택배\",\"trackingNumber\":\"987654321\"}"))
@@ -123,14 +123,14 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
         createPreparingShipment(orderId);
 
         // 출고 처리
-        mockMvc.perform(patch("/api/shipments/orders/" + orderId + "/ship")
+        mockMvc.perform(patch("/api/v1/shipments/orders/" + orderId + "/ship")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"carrier\":\"로젠택배\",\"trackingNumber\":\"111222333\"}"))
                 .andExpect(status().isOk());
 
         // 완료 처리
-        mockMvc.perform(patch("/api/shipments/orders/" + orderId + "/deliver")
+        mockMvc.perform(patch("/api/v1/shipments/orders/" + orderId + "/deliver")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("DELIVERED"))
@@ -147,7 +147,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
         long orderId = createConfirmedOrder(userId);
         createPreparingShipment(orderId);
 
-        mockMvc.perform(patch("/api/shipments/orders/" + orderId + "/return")
+        mockMvc.perform(patch("/api/v1/shipments/orders/" + orderId + "/return")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("RETURNED"));
@@ -172,7 +172,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
         long orderId = createConfirmedOrder(userId);
         createDeliveredShipment(orderId);
 
-        mockMvc.perform(post("/api/shipments/orders/" + orderId + "/return-request")
+        mockMvc.perform(post("/api/v1/shipments/orders/" + orderId + "/return-request")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"단순 변심\"}"))
@@ -192,7 +192,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
 
         String otherToken = signupAndLogin("other", "Password1!", "other@test.com");
 
-        mockMvc.perform(post("/api/shipments/orders/" + orderId + "/return-request")
+        mockMvc.perform(post("/api/v1/shipments/orders/" + orderId + "/return-request")
                         .header("Authorization", "Bearer " + otherToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"도용 시도\"}"))
@@ -208,7 +208,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
         createDeliveredShipment(orderId);
 
         // 사용자 반품 신청
-        mockMvc.perform(post("/api/shipments/orders/" + orderId + "/return-request")
+        mockMvc.perform(post("/api/v1/shipments/orders/" + orderId + "/return-request")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"사이즈 불일치\"}"))
@@ -216,7 +216,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
 
         // ADMIN 승인
         String adminToken = createAdminAndLogin("admin2", "adminpass1", "admin2@test.com");
-        mockMvc.perform(patch("/api/shipments/orders/" + orderId + "/return-approve")
+        mockMvc.perform(patch("/api/v1/shipments/orders/" + orderId + "/return-approve")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("RETURNED"));
@@ -231,7 +231,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
         createDeliveredShipment(orderId);
 
         // 사용자 반품 신청
-        mockMvc.perform(post("/api/shipments/orders/" + orderId + "/return-request")
+        mockMvc.perform(post("/api/v1/shipments/orders/" + orderId + "/return-request")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"마음이 바뀜\"}"))
@@ -239,7 +239,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
 
         // ADMIN 거부
         String adminToken = createAdminAndLogin("admin3", "adminpass1", "admin3@test.com");
-        mockMvc.perform(patch("/api/shipments/orders/" + orderId + "/return-reject")
+        mockMvc.perform(patch("/api/v1/shipments/orders/" + orderId + "/return-reject")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("DELIVERED"))
@@ -254,7 +254,7 @@ class ShipmentIntegrationTest extends AbstractIntegrationTest {
         long orderId = createConfirmedOrder(userId);
         createDeliveredShipment(orderId);
 
-        mockMvc.perform(patch("/api/shipments/orders/" + orderId + "/return-approve")
+        mockMvc.perform(patch("/api/v1/shipments/orders/" + orderId + "/return-approve")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isForbidden());
     }

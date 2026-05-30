@@ -81,7 +81,7 @@ class UserControllerTest {
             UserResponse response = new UserResponse(1L, "testuser", "test@example.com", null, UserRole.USER, null, null);
             given(userService.getMe("testuser")).willReturn(response);
 
-            mockMvc.perform(get("/api/users/me")
+            mockMvc.perform(get("/api/v1/users/me")
                             .with(authentication(userAuth("testuser"))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
@@ -91,7 +91,7 @@ class UserControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(get("/api/users/me"))
+            mockMvc.perform(get("/api/v1/users/me"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -107,7 +107,7 @@ class UserControllerTest {
         void deactivatesAccount() throws Exception {
             willDoNothing().given(userService).deactivate(eq("testuser"), anyString());
 
-            mockMvc.perform(delete("/api/users/me")
+            mockMvc.perform(delete("/api/v1/users/me")
                             .header("Authorization", "Bearer test-access-token")
                             .with(authentication(userAuth("testuser"))))
                     .andExpect(status().isOk())
@@ -117,7 +117,7 @@ class UserControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(delete("/api/users/me"))
+            mockMvc.perform(delete("/api/v1/users/me"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -134,7 +134,7 @@ class UserControllerTest {
             given(userService.getMyOrders(eq("testuser"), any(Pageable.class)))
                     .willReturn(new PageImpl<>(List.of()));
 
-            mockMvc.perform(get("/api/users/me/orders")
+            mockMvc.perform(get("/api/v1/users/me/orders")
                             .with(authentication(userAuth("testuser"))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
@@ -143,7 +143,7 @@ class UserControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(get("/api/users/me/orders"))
+            mockMvc.perform(get("/api/v1/users/me/orders"))
                     .andExpect(status().isUnauthorized());
         }
     }

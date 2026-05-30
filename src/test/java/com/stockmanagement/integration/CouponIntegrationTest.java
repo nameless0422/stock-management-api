@@ -24,7 +24,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                 "\"validFrom\":\"2020-01-01T00:00:00\",\"validUntil\":\"2099-12-31T23:59:59\"}",
                 code, type, discountValue, maxUsage);
 
-        String body = mockMvc.perform(post("/api/coupons")
+        String body = mockMvc.perform(post("/api/v1/coupons")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
@@ -35,7 +35,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
 
     /** 상품 생성 + 재고 입고 후 productId 반환. */
     private long createProductAndReceive(String adminToken, String sku, int price, int qty) throws Exception {
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -46,7 +46,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         long productId = objectMapper.readTree(body).path("data").path("id").asLong();
         long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + qty + "}"))
@@ -64,7 +64,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                 "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":%d}]}",
                 userId, UUID.randomUUID(), couponPart, productId, variantId, price);
 
-        String body = mockMvc.perform(post("/api/orders")
+        String body = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
@@ -86,7 +86,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
-        String body = mockMvc.perform(post("/api/orders")
+        String body = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -115,7 +115,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
                       "\"maxDiscountAmount\":3000," +
                       "\"maxUsageCount\":100,\"maxUsagePerUser\":1,\"isPublic\":true," +
                       "\"validFrom\":\"2020-01-01T00:00:00\",\"validUntil\":\"2099-12-31T23:59:59\"}";
-        mockMvc.perform(post("/api/coupons")
+        mockMvc.perform(post("/api/v1/coupons")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
@@ -125,7 +125,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         // 50000 × 10% = 5000 → 캡 3000 적용
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -148,18 +148,18 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         long orderId = createOrder(userToken, userId, productId, 20000, "CANCEL10");
 
         // 쿠폰 usageCount=1 확인
-        mockMvc.perform(get("/api/coupons/" + couponId)
+        mockMvc.perform(get("/api/v1/coupons/" + couponId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.usageCount").value(1));
 
         // 주문 취소
-        mockMvc.perform(post("/api/orders/" + orderId + "/cancel")
+        mockMvc.perform(post("/api/v1/orders/" + orderId + "/cancel")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk());
 
         // usageCount 복원 확인
-        mockMvc.perform(get("/api/coupons/" + couponId)
+        mockMvc.perform(get("/api/v1/coupons/" + couponId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.usageCount").value(0));
@@ -181,7 +181,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         // 두 번째 사용자 — COUPON_EXHAUSTED (422)
         String user2Token = signupAndLogin("buyer2", "Password1!", "b2@test.com");
         long user2Id = userRepository.findByUsername("buyer2").orElseThrow().getId();
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + user2Token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -205,7 +205,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         createOrder(userToken, userId, productId, 10000, "ONCE1USER");
 
         // 두 번째 사용 — COUPON_ALREADY_USED (422)
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -223,7 +223,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
 
         String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
 
-        mockMvc.perform(post("/api/coupons/validate")
+        mockMvc.perform(post("/api/v1/coupons/validate")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"couponCode\":\"PREVIEW1\",\"orderAmount\":20000}"))
@@ -241,7 +241,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         long couponId  = createCoupon(adminToken, "DEACT001", "FIXED_AMOUNT", 1000, 100);
 
         // 비활성화
-        mockMvc.perform(patch("/api/coupons/" + couponId + "/deactivate")
+        mockMvc.perform(patch("/api/v1/coupons/" + couponId + "/deactivate")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.active").value(false));
@@ -249,7 +249,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         // 비활성화된 쿠폰 사용 → 422 COUPON_INACTIVE
         String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -271,14 +271,14 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         // 발급
-        mockMvc.perform(post("/api/coupons/" + couponId + "/issue")
+        mockMvc.perform(post("/api/v1/coupons/" + couponId + "/issue")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"userId\":" + userId + "}"))
                 .andExpect(status().isCreated());
 
         // 내 쿠폰 목록 조회 — 발급된 쿠폰 1건, isUsable=true
-        mockMvc.perform(get("/api/coupons/my")
+        mockMvc.perform(get("/api/v1/coupons/my")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())
@@ -297,14 +297,14 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         String body = "{\"userId\":" + userId + "}";
 
         // 첫 번째 발급 — 성공
-        mockMvc.perform(post("/api/coupons/" + couponId + "/issue")
+        mockMvc.perform(post("/api/v1/coupons/" + couponId + "/issue")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
 
         // 두 번째 발급 — 409
-        mockMvc.perform(post("/api/coupons/" + couponId + "/issue")
+        mockMvc.perform(post("/api/v1/coupons/" + couponId + "/issue")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
@@ -322,7 +322,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         // 발급
-        mockMvc.perform(post("/api/coupons/" + couponId + "/issue")
+        mockMvc.perform(post("/api/v1/coupons/" + couponId + "/issue")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"userId\":" + userId + "}"))
@@ -332,7 +332,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         createOrder(userToken, userId, productId, 20000, "USE1ONCE");
 
         // 내 쿠폰 — isUsable = false (maxUsagePerUser=1 이미 사용)
-        mockMvc.perform(get("/api/coupons/my")
+        mockMvc.perform(get("/api/v1/coupons/my")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].isUsable").value(false));
@@ -343,7 +343,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
     void noIssuedCoupons() throws Exception {
         String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
 
-        mockMvc.perform(get("/api/coupons/my")
+        mockMvc.perform(get("/api/v1/coupons/my")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())
@@ -360,7 +360,7 @@ class CouponIntegrationTest extends AbstractIntegrationTest {
         String userToken = signupAndLogin("buyer", "Password1!", "b@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(

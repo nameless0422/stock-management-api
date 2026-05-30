@@ -22,7 +22,7 @@ import java.util.List;
 
 @Tag(name = "Refund", description = "환불 API")
 @RestController
-@RequestMapping("/api/refunds")
+@RequestMapping("/api/v1/refunds")
 @RequiredArgsConstructor
 public class RefundController {
 

@@ -11,7 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class RestockNotificationIntegrationTest extends AbstractIntegrationTest {
 
     private long createProduct(String adminToken, String sku, int price) throws Exception {
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format("{\"name\":\"상품_%s\",\"sku\":\"%s\",\"price\":%d}", sku, sku, price)))
@@ -27,7 +27,7 @@ class RestockNotificationIntegrationTest extends AbstractIntegrationTest {
         long productId = createProduct(adminToken, "SKU-RN1", 15000);
 
         String userToken = signupAndLogin("user1", "Password1!", "u1@test.com");
-        mockMvc.perform(post("/api/products/" + productId + "/restock-notify")
+        mockMvc.perform(post("/api/v1/products/" + productId + "/restock-notify")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.productId").value(productId))
@@ -41,11 +41,11 @@ class RestockNotificationIntegrationTest extends AbstractIntegrationTest {
         long productId = createProduct(adminToken, "SKU-RN2", 15000);
 
         String userToken = signupAndLogin("user2", "Password1!", "u2@test.com");
-        mockMvc.perform(post("/api/products/" + productId + "/restock-notify")
+        mockMvc.perform(post("/api/v1/products/" + productId + "/restock-notify")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(post("/api/products/" + productId + "/restock-notify")
+        mockMvc.perform(post("/api/v1/products/" + productId + "/restock-notify")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isConflict());
     }
@@ -57,11 +57,11 @@ class RestockNotificationIntegrationTest extends AbstractIntegrationTest {
         long productId = createProduct(adminToken, "SKU-RN3", 20000);
 
         String userToken = signupAndLogin("user3", "Password1!", "u3@test.com");
-        mockMvc.perform(post("/api/products/" + productId + "/restock-notify")
+        mockMvc.perform(post("/api/v1/products/" + productId + "/restock-notify")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/users/me/restock-notifications")
+        mockMvc.perform(get("/api/v1/users/me/restock-notifications")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())
@@ -76,15 +76,15 @@ class RestockNotificationIntegrationTest extends AbstractIntegrationTest {
         long productId = createProduct(adminToken, "SKU-RN4", 25000);
 
         String userToken = signupAndLogin("user4", "Password1!", "u4@test.com");
-        mockMvc.perform(post("/api/products/" + productId + "/restock-notify")
+        mockMvc.perform(post("/api/v1/products/" + productId + "/restock-notify")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(delete("/api/products/" + productId + "/restock-notify")
+        mockMvc.perform(delete("/api/v1/products/" + productId + "/restock-notify")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/users/me/restock-notifications")
+        mockMvc.perform(get("/api/v1/users/me/restock-notifications")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())
@@ -94,7 +94,7 @@ class RestockNotificationIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("인증 없이 접근 → 401")
     void unauthenticated() throws Exception {
-        mockMvc.perform(post("/api/products/1/restock-notify"))
+        mockMvc.perform(post("/api/v1/products/1/restock-notify"))
                 .andExpect(status().isUnauthorized());
     }
 }

@@ -39,7 +39,7 @@ import java.util.List;
  */
 @Tag(name = "주문", description = "주문 생성 · 조회 · 취소 · 상태 이력")
 @RestController
-@RequestMapping("/api/orders")
+@RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
 public class OrderController {
 

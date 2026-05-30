@@ -37,7 +37,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @Tag(name = "배송", description = "배송 조회 · 출고 · 완료 · 반품 (상태 전이)")
 @RestController
-@RequestMapping("/api/shipments")
+@RequestMapping("/api/v1/shipments")
 @RequiredArgsConstructor
 public class ShipmentController {
 

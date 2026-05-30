@@ -41,7 +41,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
      * 같은 테스트 내에서 동일 카테고리를 여러 번 사용해도 안전하다.
      */
     private long getOrCreateCategory(String name) throws Exception {
-        String listBody = mockMvc.perform(get("/api/categories"))
+        String listBody = mockMvc.perform(get("/api/v1/categories"))
                 .andReturn().getResponse().getContentAsString();
         com.fasterxml.jackson.databind.JsonNode categories = objectMapper.readTree(listBody).path("data");
         for (com.fasterxml.jackson.databind.JsonNode cat : categories) {
@@ -49,7 +49,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
                 return cat.path("id").asLong();
             }
         }
-        String body = mockMvc.perform(post("/api/categories")
+        String body = mockMvc.perform(post("/api/v1/categories")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format("{\"name\":\"%s\"}", name)))
@@ -66,7 +66,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
                         name, sku, price, categoryId)
                 : String.format("{\"name\":\"%s\",\"sku\":\"%s\",\"price\":%d}", name, sku, price);
 
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(productJson))
@@ -86,7 +86,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
     void noFilter_returnsMysqlResult() throws Exception {
         createProduct("노트북", "NB-001", 1200000, "전자");
 
-        mockMvc.perform(get("/api/products"))
+        mockMvc.perform(get("/api/v1/products"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content").isArray())
                 .andExpect(jsonPath("$.data.content[0].name").value("노트북"));
@@ -100,7 +100,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
         createProduct("노트북 Pro", "NB-002", 1500000, "전자");
         createProduct("마우스", "MS-001", 30000, "전자");
 
-        mockMvc.perform(get("/api/products").param("q", "노트북"))
+        mockMvc.perform(get("/api/v1/products").param("q", "노트북"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.content[0].name").value("노트북 Pro"));
@@ -112,7 +112,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
         createProduct("키보드", "KB-001", 80000, "전자");
         createProduct("바지", "PT-001", 50000, "의류");
 
-        mockMvc.perform(get("/api/products").param("q", "키보드"))
+        mockMvc.perform(get("/api/v1/products").param("q", "키보드"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.content[0].sku").value("KB-001"));
@@ -127,7 +127,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
         createProduct("스마트폰", "SP-001", 1200000, "전자");
         createProduct("USB 허브", "UH-001", 25000, "전자");
 
-        mockMvc.perform(get("/api/products")
+        mockMvc.perform(get("/api/v1/products")
                         .param("minPrice", "50000")
                         .param("maxPrice", "100000"))
                 .andExpect(status().isOk())
@@ -141,7 +141,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
         createProduct("태블릿", "TB-001", 700000, "전자");
         createProduct("충전기", "CG-001", 20000, "전자");
 
-        mockMvc.perform(get("/api/products").param("minPrice", "500000"))
+        mockMvc.perform(get("/api/v1/products").param("minPrice", "500000"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.content[0].sku").value("TB-001"));
@@ -155,7 +155,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
         createProduct("티셔츠", "TS-001", 29000, "의류");
         createProduct("모니터", "MN-001", 350000, "전자");
 
-        mockMvc.perform(get("/api/products").param("category", "의류"))
+        mockMvc.perform(get("/api/v1/products").param("category", "의류"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.content[0].sku").value("TS-001"));
@@ -170,7 +170,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
         createProduct("외장 SSD", "SSD-001", 150000, "전자");
         createProduct("운동화", "SH-001", 80000, "패션");
 
-        mockMvc.perform(get("/api/products")
+        mockMvc.perform(get("/api/v1/products")
                         .param("q", "USB")
                         .param("maxPrice", "100000"))
                 .andExpect(status().isOk())
@@ -186,7 +186,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
         createProduct("고가 상품", "HP-001", 500000, "전자");
         createProduct("저가 상품", "LP-001", 10000, "전자");
 
-        mockMvc.perform(get("/api/products")
+        mockMvc.perform(get("/api/v1/products")
                         .param("category", "전자")
                         .param("sort", "price_asc"))
                 .andExpect(status().isOk())
@@ -200,7 +200,7 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
         createProduct("중가 상품", "MP-001", 100000, "가전");
         createProduct("저가 상품", "LP-002", 5000, "가전");
 
-        mockMvc.perform(get("/api/products")
+        mockMvc.perform(get("/api/v1/products")
                         .param("category", "가전")
                         .param("sort", "price_desc"))
                 .andExpect(status().isOk())
@@ -215,12 +215,12 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
     void delete_removesFromIndex() throws Exception {
         long id = createProduct("삭제될 상품", "DEL-001", 99000, "테스트");
 
-        mockMvc.perform(delete("/api/products/" + id)
+        mockMvc.perform(delete("/api/v1/products/" + id)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isNoContent());
         elasticsearchOperations.indexOps(ProductDocument.class).refresh();
 
-        mockMvc.perform(get("/api/products").param("q", "삭제될 상품"))
+        mockMvc.perform(get("/api/v1/products").param("q", "삭제될 상품"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(0));
     }
@@ -230,14 +230,14 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
     void update_refreshesIndex() throws Exception {
         long id = createProduct("원래 이름", "UP-001", 50000, "잡화");
 
-        mockMvc.perform(put("/api/products/" + id)
+        mockMvc.perform(put("/api/v1/products/" + id)
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"변경된 이름\",\"price\":50000,\"sku\":\"UP-001\"}"))
                 .andExpect(status().isOk());
         elasticsearchOperations.indexOps(ProductDocument.class).refresh();
 
-        mockMvc.perform(get("/api/products").param("q", "변경된 이름"))
+        mockMvc.perform(get("/api/v1/products").param("q", "변경된 이름"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(1));
     }
