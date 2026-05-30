@@ -70,7 +70,7 @@ class ProductControllerTest {
         void createsProduct() throws Exception {
             given(productService.create(any())).willReturn(mock(ProductResponse.class));
 
-            mockMvc.perform(post("/api/products")
+            mockMvc.perform(post("/api/v1/products")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isCreated())
@@ -81,7 +81,7 @@ class ProductControllerTest {
         @WithMockUser
         @DisplayName("USER — ADMIN 전용 → 403")
         void forbiddenForUser() throws Exception {
-            mockMvc.perform(post("/api/products")
+            mockMvc.perform(post("/api/v1/products")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isForbidden());
@@ -90,7 +90,7 @@ class ProductControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(post("/api/products")
+            mockMvc.perform(post("/api/v1/products")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isUnauthorized());
@@ -100,7 +100,7 @@ class ProductControllerTest {
         @WithMockUser(roles = "ADMIN")
         @DisplayName("필수 필드(name, sku, price) 누락 → 400")
         void validationFailure() throws Exception {
-            mockMvc.perform(post("/api/products")
+            mockMvc.perform(post("/api/v1/products")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isBadRequest());
@@ -119,7 +119,7 @@ class ProductControllerTest {
         void returnsProduct() throws Exception {
             given(productService.getByIdForUser(eq(1L), any())).willReturn(mock(ProductResponse.class));
 
-            mockMvc.perform(get("/api/products/1"))
+            mockMvc.perform(get("/api/v1/products/1"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -129,7 +129,7 @@ class ProductControllerTest {
         void allowsUnauthenticatedAccess() throws Exception {
             given(productService.getById(1L)).willReturn(mock(ProductResponse.class));
 
-            mockMvc.perform(get("/api/products/1"))
+            mockMvc.perform(get("/api/v1/products/1"))
                     .andExpect(status().isOk());
         }
 
@@ -140,7 +140,7 @@ class ProductControllerTest {
             given(productService.getByIdForUser(eq(999L), any()))
                     .willThrow(new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
-            mockMvc.perform(get("/api/products/999"))
+            mockMvc.perform(get("/api/v1/products/999"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -159,7 +159,7 @@ class ProductControllerTest {
             given(productService.getList(any(Pageable.class), any(), any()))
                     .willReturn(new PageImpl<>(List.of()));
 
-            mockMvc.perform(get("/api/products"))
+            mockMvc.perform(get("/api/v1/products"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -177,7 +177,7 @@ class ProductControllerTest {
         void updatesProduct() throws Exception {
             given(productService.update(eq(1L), any())).willReturn(mock(ProductResponse.class));
 
-            mockMvc.perform(put("/api/products/1")
+            mockMvc.perform(put("/api/v1/products/1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"name\":\"수정상품\",\"price\":20000}"))
                     .andExpect(status().isOk())
@@ -188,7 +188,7 @@ class ProductControllerTest {
         @WithMockUser
         @DisplayName("USER — ADMIN 전용 → 403")
         void forbiddenForUser() throws Exception {
-            mockMvc.perform(put("/api/products/1")
+            mockMvc.perform(put("/api/v1/products/1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isForbidden());
@@ -205,7 +205,7 @@ class ProductControllerTest {
         @WithMockUser(roles = "ADMIN")
         @DisplayName("ADMIN — 상품 삭제 성공 → 204")
         void deletesProduct() throws Exception {
-            mockMvc.perform(delete("/api/products/1"))
+            mockMvc.perform(delete("/api/v1/products/1"))
                     .andExpect(status().isNoContent());
 
             verify(productService).delete(1L);
@@ -215,7 +215,7 @@ class ProductControllerTest {
         @WithMockUser
         @DisplayName("USER — ADMIN 전용 → 403")
         void forbiddenForUser() throws Exception {
-            mockMvc.perform(delete("/api/products/1"))
+            mockMvc.perform(delete("/api/v1/products/1"))
                     .andExpect(status().isForbidden());
         }
     }
@@ -232,7 +232,7 @@ class ProductControllerTest {
             given(productService.suggest(eq("노트"), eq(10)))
                     .willReturn(List.of("노트북", "노트북 Pro"));
 
-            mockMvc.perform(get("/api/products/search/suggestions").param("q", "노트"))
+            mockMvc.perform(get("/api/v1/products/search/suggestions").param("q", "노트"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.suggestions[0]").value("노트북"))
@@ -242,7 +242,7 @@ class ProductControllerTest {
         @Test
         @DisplayName("검색어 없음 → 400")
         void suggestWithoutQuery() throws Exception {
-            mockMvc.perform(get("/api/products/search/suggestions"))
+            mockMvc.perform(get("/api/v1/products/search/suggestions"))
                     .andExpect(status().isBadRequest());
         }
     }

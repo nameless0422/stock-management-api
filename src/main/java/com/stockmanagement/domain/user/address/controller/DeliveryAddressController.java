@@ -28,7 +28,7 @@ import java.util.List;
  */
 @Tag(name = "배송지", description = "배송지 등록 · 조회 · 수정 · 삭제 · 기본 설정")
 @RestController
-@RequestMapping("/api/delivery-addresses")
+@RequestMapping("/api/v1/delivery-addresses")
 @RequiredArgsConstructor
 public class DeliveryAddressController {
 

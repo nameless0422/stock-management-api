@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Wishlist", description = "위시리스트 API")
 @RestController
-@RequestMapping("/api/wishlist")
+@RequestMapping("/api/v1/wishlist")
 @RequiredArgsConstructor
 public class WishlistController {
 

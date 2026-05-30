@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Coupon", description = "쿠폰 관리 API")
 @RestController
-@RequestMapping("/api/coupons")
+@RequestMapping("/api/v1/coupons")
 @RequiredArgsConstructor
 public class CouponController {
 

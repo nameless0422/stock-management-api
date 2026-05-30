@@ -72,7 +72,7 @@ class AuthControllerTest {
             UserResponse response = new UserResponse(1L, "testuser", "test@example.com", null, UserRole.USER, null, null);
             given(userService.signup(any())).willReturn(response);
 
-            mockMvc.perform(post("/api/auth/signup")
+            mockMvc.perform(post("/api/v1/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isCreated())
@@ -83,7 +83,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("필수 필드(username, password, email) 누락 → 400")
         void validationFailure() throws Exception {
-            mockMvc.perform(post("/api/auth/signup")
+            mockMvc.perform(post("/api/v1/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isBadRequest());
@@ -94,7 +94,7 @@ class AuthControllerTest {
         void usernameTooShort() throws Exception {
             String json = "{\"username\":\"ab\",\"password\":\"Password1@3\",\"email\":\"test@example.com\"}";
 
-            mockMvc.perform(post("/api/auth/signup")
+            mockMvc.perform(post("/api/v1/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(json))
                     .andExpect(status().isBadRequest());
@@ -106,7 +106,7 @@ class AuthControllerTest {
             given(userService.signup(any()))
                     .willThrow(new BusinessException(ErrorCode.DUPLICATE_USERNAME));
 
-            mockMvc.perform(post("/api/auth/signup")
+            mockMvc.perform(post("/api/v1/auth/signup")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isConflict())
@@ -129,7 +129,7 @@ class AuthControllerTest {
             LoginResponse response = LoginResponse.of("jwt-token", 86400L, "refresh-uuid");
             given(userService.login(any())).willReturn(response);
 
-            mockMvc.perform(post("/api/auth/login")
+            mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isOk())
@@ -142,7 +142,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("필수 필드(username, password) 누락 → 400")
         void validationFailure() throws Exception {
-            mockMvc.perform(post("/api/auth/login")
+            mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isBadRequest());
@@ -154,7 +154,7 @@ class AuthControllerTest {
             given(userService.login(any()))
                     .willThrow(new BusinessException(ErrorCode.INVALID_CREDENTIALS));
 
-            mockMvc.perform(post("/api/auth/login")
+            mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isUnauthorized())
@@ -174,7 +174,7 @@ class AuthControllerTest {
             LoginResponse response = LoginResponse.of("new-jwt-token", 86400L, "new-refresh-uuid");
             given(userService.refresh(any())).willReturn(response);
 
-            mockMvc.perform(post("/api/auth/refresh")
+            mockMvc.perform(post("/api/v1/auth/refresh")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"refreshToken\":\"old-refresh-uuid\"}"))
                     .andExpect(status().isOk())
@@ -189,7 +189,7 @@ class AuthControllerTest {
             given(userService.refresh(any()))
                     .willThrow(new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN));
 
-            mockMvc.perform(post("/api/auth/refresh")
+            mockMvc.perform(post("/api/v1/auth/refresh")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"refreshToken\":\"expired-token\"}"))
                     .andExpect(status().isUnauthorized())
@@ -211,7 +211,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("유효한 Bearer 토큰 → 200, 블랙리스트 등록")
         void logoutSuccess() throws Exception {
-            mockMvc.perform(post("/api/auth/logout")
+            mockMvc.perform(post("/api/v1/auth/logout")
                             .header("Authorization", "Bearer valid-jwt-token")
                             .with(authentication(userAuth("testuser"))))
                     .andExpect(status().isOk())
@@ -221,7 +221,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(post("/api/auth/logout"))
+            mockMvc.perform(post("/api/v1/auth/logout"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -235,7 +235,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("유효한 토큰 → 200 (인증 불필요)")
         void verifyEmailSuccess() throws Exception {
-            mockMvc.perform(post("/api/auth/email/verify")
+            mockMvc.perform(post("/api/v1/auth/email/verify")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"token\":\"verify-uuid\"}"))
                     .andExpect(status().isOk())
@@ -250,7 +250,7 @@ class AuthControllerTest {
             doThrow(new BusinessException(ErrorCode.INVALID_VERIFICATION_TOKEN))
                     .when(userService).verifyEmail(anyString());
 
-            mockMvc.perform(post("/api/auth/email/verify")
+            mockMvc.perform(post("/api/v1/auth/email/verify")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"token\":\"bad-token\"}"))
                     .andExpect(status().isUnauthorized())
@@ -260,7 +260,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("토큰 누락 → 400")
         void missingToken() throws Exception {
-            mockMvc.perform(post("/api/auth/email/verify")
+            mockMvc.perform(post("/api/v1/auth/email/verify")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isBadRequest());
@@ -281,7 +281,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("인증된 사용자 → 200")
         void resendSuccess() throws Exception {
-            mockMvc.perform(post("/api/auth/email/resend")
+            mockMvc.perform(post("/api/v1/auth/email/resend")
                             .with(authentication(userAuth("testuser"))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
@@ -295,7 +295,7 @@ class AuthControllerTest {
             doThrow(new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED))
                     .when(userService).resendVerificationEmail(anyString());
 
-            mockMvc.perform(post("/api/auth/email/resend")
+            mockMvc.perform(post("/api/v1/auth/email/resend")
                             .with(authentication(userAuth("testuser"))))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.success").value(false));
@@ -304,7 +304,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("미인증 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(post("/api/auth/email/resend"))
+            mockMvc.perform(post("/api/v1/auth/email/resend"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -318,7 +318,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("유효한 이메일 요청 → 200 (인증 불필요)")
         void forgotPasswordSuccess() throws Exception {
-            mockMvc.perform(post("/api/auth/forgot-password")
+            mockMvc.perform(post("/api/v1/auth/forgot-password")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"email\":\"test@example.com\"}"))
                     .andExpect(status().isOk())
@@ -330,7 +330,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("이메일 형식 불량 → 400")
         void invalidEmailFormat() throws Exception {
-            mockMvc.perform(post("/api/auth/forgot-password")
+            mockMvc.perform(post("/api/v1/auth/forgot-password")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"email\":\"not-an-email\"}"))
                     .andExpect(status().isBadRequest());
@@ -339,7 +339,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("이메일 누락 → 400")
         void missingEmail() throws Exception {
-            mockMvc.perform(post("/api/auth/forgot-password")
+            mockMvc.perform(post("/api/v1/auth/forgot-password")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isBadRequest());
@@ -355,7 +355,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("유효한 토큰 + 비밀번호 → 200 (인증 불필요)")
         void resetPasswordSuccess() throws Exception {
-            mockMvc.perform(post("/api/auth/reset-password")
+            mockMvc.perform(post("/api/v1/auth/reset-password")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"token\":\"reset-uuid\",\"newPassword\":\"NewPassword1!\"}"))
                     .andExpect(status().isOk())
@@ -370,7 +370,7 @@ class AuthControllerTest {
             doThrow(new BusinessException(ErrorCode.INVALID_RESET_TOKEN))
                     .when(userService).resetPassword(anyString(), anyString());
 
-            mockMvc.perform(post("/api/auth/reset-password")
+            mockMvc.perform(post("/api/v1/auth/reset-password")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"token\":\"bad-token\",\"newPassword\":\"NewPassword1!\"}"))
                     .andExpect(status().isUnauthorized())
@@ -380,7 +380,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("비밀번호 정책 미충족 (대문자 없음) → 400")
         void weakPassword() throws Exception {
-            mockMvc.perform(post("/api/auth/reset-password")
+            mockMvc.perform(post("/api/v1/auth/reset-password")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"token\":\"reset-uuid\",\"newPassword\":\"password1!\"}"))
                     .andExpect(status().isBadRequest());
@@ -389,7 +389,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("토큰 누락 → 400")
         void missingToken() throws Exception {
-            mockMvc.perform(post("/api/auth/reset-password")
+            mockMvc.perform(post("/api/v1/auth/reset-password")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"newPassword\":\"NewPassword1!\"}"))
                     .andExpect(status().isBadRequest());

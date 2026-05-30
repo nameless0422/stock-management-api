@@ -62,7 +62,7 @@ class NotificationControllerTest {
             given(notificationService.getNotifications(any(), any(), any(Pageable.class)))
                     .willReturn(new PageImpl<>(List.of(response)));
 
-            mockMvc.perform(get("/api/notifications"))
+            mockMvc.perform(get("/api/v1/notifications"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.content[0].title").value("주문 접수"));
@@ -71,7 +71,7 @@ class NotificationControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/notifications"))
+            mockMvc.perform(get("/api/v1/notifications"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -84,7 +84,7 @@ class NotificationControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 읽음 처리 → 204")
         void marksRead() throws Exception {
-            mockMvc.perform(post("/api/notifications/1/read"))
+            mockMvc.perform(post("/api/v1/notifications/1/read"))
                     .andExpect(status().isNoContent());
         }
     }
@@ -97,7 +97,7 @@ class NotificationControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 전체 읽음 처리 → 204")
         void marksAllRead() throws Exception {
-            mockMvc.perform(post("/api/notifications/read-all"))
+            mockMvc.perform(post("/api/v1/notifications/read-all"))
                     .andExpect(status().isNoContent());
         }
     }
@@ -112,7 +112,7 @@ class NotificationControllerTest {
         void returnsCount() throws Exception {
             given(notificationService.getUnreadCount(any())).willReturn(3L);
 
-            mockMvc.perform(get("/api/notifications/unread-count"))
+            mockMvc.perform(get("/api/v1/notifications/unread-count"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.count").value(3));
@@ -121,7 +121,7 @@ class NotificationControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/notifications/unread-count"))
+            mockMvc.perform(get("/api/v1/notifications/unread-count"))
                     .andExpect(status().isUnauthorized());
         }
     }

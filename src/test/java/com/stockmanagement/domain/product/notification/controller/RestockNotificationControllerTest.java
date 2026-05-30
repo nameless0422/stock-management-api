@@ -66,7 +66,7 @@ class RestockNotificationControllerTest {
                     .createdAt(LocalDateTime.now()).build();
             given(restockNotificationService.subscribe(anyLong(), anyLong())).willReturn(response);
 
-            mockMvc.perform(post("/api/products/1/restock-notify").with(authentication(USER_AUTH)))
+            mockMvc.perform(post("/api/v1/products/1/restock-notify").with(authentication(USER_AUTH)))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.productId").value(1));
@@ -75,7 +75,7 @@ class RestockNotificationControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(post("/api/products/1/restock-notify"))
+            mockMvc.perform(post("/api/v1/products/1/restock-notify"))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -85,7 +85,7 @@ class RestockNotificationControllerTest {
             given(restockNotificationService.subscribe(anyLong(), anyLong()))
                     .willThrow(new BusinessException(ErrorCode.RESTOCK_ALREADY_SUBSCRIBED));
 
-            mockMvc.perform(post("/api/products/1/restock-notify").with(authentication(USER_AUTH)))
+            mockMvc.perform(post("/api/v1/products/1/restock-notify").with(authentication(USER_AUTH)))
                     .andExpect(status().isConflict());
         }
     }
@@ -97,14 +97,14 @@ class RestockNotificationControllerTest {
         @Test
         @DisplayName("인증된 사용자 → 204")
         void unsubscribes() throws Exception {
-            mockMvc.perform(delete("/api/products/1/restock-notify").with(authentication(USER_AUTH)))
+            mockMvc.perform(delete("/api/v1/products/1/restock-notify").with(authentication(USER_AUTH)))
                     .andExpect(status().isNoContent());
         }
 
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(delete("/api/products/1/restock-notify"))
+            mockMvc.perform(delete("/api/v1/products/1/restock-notify"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -122,7 +122,7 @@ class RestockNotificationControllerTest {
                     .createdAt(LocalDateTime.now()).build();
             given(restockNotificationService.getMyNotifications(anyLong())).willReturn(List.of(r));
 
-            mockMvc.perform(get("/api/users/me/restock-notifications").with(authentication(USER_AUTH)))
+            mockMvc.perform(get("/api/v1/users/me/restock-notifications").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data[0].productId").value(1));
@@ -131,7 +131,7 @@ class RestockNotificationControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/users/me/restock-notifications"))
+            mockMvc.perform(get("/api/v1/users/me/restock-notifications"))
                     .andExpect(status().isUnauthorized());
         }
     }

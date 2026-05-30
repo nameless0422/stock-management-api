@@ -13,7 +13,7 @@ class ProductQnaIntegrationTest extends AbstractIntegrationTest {
     // ===== 공통 헬퍼 =====
 
     private long createProduct(String adminToken, String sku) throws Exception {
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format("{\"name\":\"상품_%s\",\"sku\":\"%s\",\"price\":10000}", sku, sku)))
@@ -24,7 +24,7 @@ class ProductQnaIntegrationTest extends AbstractIntegrationTest {
 
     private long createQna(String userToken, long productId, String content, boolean secret) throws Exception {
         String json = String.format("{\"content\":\"%s\",\"secret\":%s}", content, secret);
-        String body = mockMvc.perform(post("/api/products/" + productId + "/qna")
+        String body = mockMvc.perform(post("/api/v1/products/" + productId + "/qna")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
@@ -42,7 +42,7 @@ class ProductQnaIntegrationTest extends AbstractIntegrationTest {
         long productId = createProduct(adminToken, "QNA-1");
         String userToken = signupAndLogin("user1", "Password1!", "user1@test.com");
 
-        mockMvc.perform(post("/api/products/" + productId + "/qna")
+        mockMvc.perform(post("/api/v1/products/" + productId + "/qna")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"content\":\"배송 기간이 얼마나 걸리나요?\",\"secret\":false}"))
@@ -63,7 +63,7 @@ class ProductQnaIntegrationTest extends AbstractIntegrationTest {
         createQna(user1Token, productId, "비밀 문의입니다", true);
 
         // user2가 조회 — 마스킹
-        mockMvc.perform(get("/api/products/" + productId + "/qna")
+        mockMvc.perform(get("/api/v1/products/" + productId + "/qna")
                         .header("Authorization", "Bearer " + user2Token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].content").value("비밀글입니다"))
@@ -80,7 +80,7 @@ class ProductQnaIntegrationTest extends AbstractIntegrationTest {
         createQna(userToken, productId, "비밀 문의입니다", true);
 
         // 작성자 본인 조회 — 원문
-        mockMvc.perform(get("/api/products/" + productId + "/qna")
+        mockMvc.perform(get("/api/v1/products/" + productId + "/qna")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].content").value("비밀 문의입니다"));
@@ -95,7 +95,7 @@ class ProductQnaIntegrationTest extends AbstractIntegrationTest {
 
         long qnaId = createQna(userToken, productId, "사이즈 문의", false);
 
-        mockMvc.perform(post("/api/products/" + productId + "/qna/" + qnaId + "/answer")
+        mockMvc.perform(post("/api/v1/products/" + productId + "/qna/" + qnaId + "/answer")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"answer\":\"M 사이즈를 추천드립니다.\"}"))
@@ -113,12 +113,12 @@ class ProductQnaIntegrationTest extends AbstractIntegrationTest {
 
         long qnaId = createQna(userToken, productId, "삭제할 문의", false);
 
-        mockMvc.perform(delete("/api/products/" + productId + "/qna/" + qnaId)
+        mockMvc.perform(delete("/api/v1/products/" + productId + "/qna/" + qnaId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isNoContent());
 
         // 삭제 후 조회 — 빈 목록
-        mockMvc.perform(get("/api/products/" + productId + "/qna"))
+        mockMvc.perform(get("/api/v1/products/" + productId + "/qna"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content").isEmpty());
     }
@@ -133,7 +133,7 @@ class ProductQnaIntegrationTest extends AbstractIntegrationTest {
 
         long qnaId = createQna(user1Token, productId, "문의", false);
 
-        mockMvc.perform(delete("/api/products/" + productId + "/qna/" + qnaId)
+        mockMvc.perform(delete("/api/v1/products/" + productId + "/qna/" + qnaId)
                         .header("Authorization", "Bearer " + user2Token))
                 .andExpect(status().isForbidden());
     }
@@ -147,7 +147,7 @@ class ProductQnaIntegrationTest extends AbstractIntegrationTest {
 
         long qnaId = createQna(userToken, productId, "문의", false);
 
-        mockMvc.perform(delete("/api/products/" + productId + "/qna/" + qnaId)
+        mockMvc.perform(delete("/api/v1/products/" + productId + "/qna/" + qnaId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isNoContent());
     }
@@ -161,7 +161,7 @@ class ProductQnaIntegrationTest extends AbstractIntegrationTest {
 
         createQna(userToken, productId, "공개 문의", false);
 
-        mockMvc.perform(get("/api/products/" + productId + "/qna"))
+        mockMvc.perform(get("/api/v1/products/" + productId + "/qna"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].content").value("공개 문의"));
     }

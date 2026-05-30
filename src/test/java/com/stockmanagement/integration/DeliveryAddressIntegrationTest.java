@@ -21,7 +21,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     void create_firstAddressIsDefault() throws Exception {
         String token = signupAndLogin("user1", "Password1!", "u1@test.com");
 
-        mockMvc.perform(post("/api/delivery-addresses")
+        mockMvc.perform(post("/api/v1/delivery-addresses")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_REQUEST))
@@ -35,14 +35,14 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     void create_secondAddressNotDefault() throws Exception {
         String token = signupAndLogin("user1", "Password1!", "u1@test.com");
 
-        mockMvc.perform(post("/api/delivery-addresses")
+        mockMvc.perform(post("/api/v1/delivery-addresses")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_REQUEST))
                 .andExpect(status().isCreated());
 
         String officeReq = VALID_REQUEST.replace("\"집\"", "\"회사\"");
-        mockMvc.perform(post("/api/delivery-addresses")
+        mockMvc.perform(post("/api/v1/delivery-addresses")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(officeReq))
@@ -55,7 +55,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     void create_missingRequired_400() throws Exception {
         String token = signupAndLogin("user1", "Password1!", "u1@test.com");
 
-        mockMvc.perform(post("/api/delivery-addresses")
+        mockMvc.perform(post("/api/v1/delivery-addresses")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"alias\":\"집\"}"))
@@ -70,7 +70,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
         String token = signupAndLogin("user1", "Password1!", "u1@test.com");
 
         // 첫 번째: 자동으로 기본
-        mockMvc.perform(post("/api/delivery-addresses")
+        mockMvc.perform(post("/api/v1/delivery-addresses")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_REQUEST))
@@ -78,13 +78,13 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
 
         // 두 번째: 기본 아님
         String officeReq = VALID_REQUEST.replace("\"집\"", "\"회사\"");
-        mockMvc.perform(post("/api/delivery-addresses")
+        mockMvc.perform(post("/api/v1/delivery-addresses")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(officeReq))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/delivery-addresses")
+        mockMvc.perform(get("/api/v1/delivery-addresses")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(2))
@@ -100,7 +100,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
         long id = createAddress(token, "집");
 
         String updateReq = VALID_REQUEST.replace("\"집\"", "\"부모님댁\"");
-        mockMvc.perform(put("/api/delivery-addresses/" + id)
+        mockMvc.perform(put("/api/v1/delivery-addresses/" + id)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(updateReq))
@@ -118,13 +118,13 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
         long id1 = createAddress(token, "집");
         long id2 = createAddress(token, "회사");
 
-        mockMvc.perform(post("/api/delivery-addresses/" + id2 + "/default")
+        mockMvc.perform(post("/api/v1/delivery-addresses/" + id2 + "/default")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.isDefault").value(true));
 
         // 기존 기본 배송지(집) 상태 확인
-        mockMvc.perform(get("/api/delivery-addresses/" + id1)
+        mockMvc.perform(get("/api/v1/delivery-addresses/" + id1)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.isDefault").value(false));
@@ -138,11 +138,11 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
         String token = signupAndLogin("user1", "Password1!", "u1@test.com");
         long id = createAddress(token, "집");
 
-        mockMvc.perform(delete("/api/delivery-addresses/" + id)
+        mockMvc.perform(delete("/api/v1/delivery-addresses/" + id)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/delivery-addresses/" + id)
+        mockMvc.perform(get("/api/v1/delivery-addresses/" + id)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
@@ -154,11 +154,11 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
         long id1 = createAddress(token, "집");   // 기본 배송지
         long id2 = createAddress(token, "회사"); // 일반 배송지
 
-        mockMvc.perform(delete("/api/delivery-addresses/" + id1)
+        mockMvc.perform(delete("/api/v1/delivery-addresses/" + id1)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/delivery-addresses/" + id2)
+        mockMvc.perform(get("/api/v1/delivery-addresses/" + id2)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.isDefault").value(true));
@@ -171,7 +171,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     void orderWithAddress() throws Exception {
         String adminToken = createAdminAndLogin("admin", "pass1", "a@test.com");
         // 상품 등록 + 입고
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"상품\",\"sku\":\"SKU-A1\",\"price\":5000}"))
@@ -179,7 +179,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         long productId = objectMapper.readTree(body).path("data").path("id").asLong();
         long variantId = getDefaultVariantId(productId);
-        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":10}"))
@@ -189,7 +189,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
         long addressId = createAddress(userToken, "집");
 
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -206,7 +206,7 @@ class DeliveryAddressIntegrationTest extends AbstractIntegrationTest {
     /** 배송지를 등록하고 생성된 ID를 반환한다. */
     private long createAddress(String token, String alias) throws Exception {
         String reqBody = VALID_REQUEST.replace("\"집\"", "\"" + alias + "\"");
-        String resp = mockMvc.perform(post("/api/delivery-addresses")
+        String resp = mockMvc.perform(post("/api/v1/delivery-addresses")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(reqBody))

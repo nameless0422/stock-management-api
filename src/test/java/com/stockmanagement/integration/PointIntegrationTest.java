@@ -20,7 +20,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
     // ===== 공통 헬퍼 =====
 
     private long createProductAndReceive(String adminToken, String sku, int price, int qty) throws Exception {
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format("{\"name\":\"상품_%s\",\"sku\":\"%s\",\"price\":%d}", sku, sku, price)))
@@ -29,7 +29,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
         long productId = objectMapper.readTree(body).path("data").path("id").asLong();
         long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/variants/" + variantId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + qty + "}"))
@@ -52,7 +52,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
     void getBalance_initial() throws Exception {
         String userToken = signupAndLogin("user1", "Password1!", "u1@test.com");
 
-        mockMvc.perform(get("/api/points/balance")
+        mockMvc.perform(get("/api/v1/points/balance")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.balance").value(0));
@@ -65,7 +65,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
         long userId = userRepository.findByUsername("user2").orElseThrow().getId();
         seedPoints(userId, 5000);
 
-        mockMvc.perform(get("/api/points/balance")
+        mockMvc.perform(get("/api/v1/points/balance")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.balance").value(5000));
@@ -76,7 +76,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
     void getHistory_empty() throws Exception {
         String userToken = signupAndLogin("user3", "Password1!", "u3@test.com");
 
-        mockMvc.perform(get("/api/points/history")
+        mockMvc.perform(get("/api/v1/points/history")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content").isArray())
@@ -95,7 +95,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
         seedPoints(userId, 3000);
 
         // 3000 포인트 사용하여 20000 상품 주문
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -106,7 +106,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.usedPoints").value(3000));
 
         // 포인트 차감 확인
-        mockMvc.perform(get("/api/points/balance")
+        mockMvc.perform(get("/api/v1/points/balance")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.balance").value(0));
@@ -124,7 +124,7 @@ class PointIntegrationTest extends AbstractIntegrationTest {
         seedPoints(userId, 500);
 
         // 잔액(500)보다 많은 포인트(1000) 사용 시도 → 400
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(

@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @Tag(name = "사용자", description = "내 정보 조회 · 내 주문·리뷰 목록 — JWT 인증 필요")
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
 public class UserController {
 

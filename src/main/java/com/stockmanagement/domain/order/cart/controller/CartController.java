@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @Tag(name = "장바구니", description = "상품 담기 · 수량 변경 · 삭제 · 주문 전환")
 @RestController
-@RequestMapping("/api/cart")
+@RequestMapping("/api/v1/cart")
 @RequiredArgsConstructor
 public class CartController {
 

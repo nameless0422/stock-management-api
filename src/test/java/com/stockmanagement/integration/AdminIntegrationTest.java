@@ -28,7 +28,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         void adminCanGetDashboard() throws Exception {
             String adminToken = createAdminAndLogin("admin1", "adminpass1", "admin1@test.com");
 
-            mockMvc.perform(get("/api/admin/dashboard")
+            mockMvc.perform(get("/api/v1/admin/dashboard")
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
@@ -42,7 +42,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         void userCannotGetDashboard() throws Exception {
             String userToken = signupAndLogin("user1", "Password1!", "user1@test.com");
 
-            mockMvc.perform(get("/api/admin/dashboard")
+            mockMvc.perform(get("/api/v1/admin/dashboard")
                             .header("Authorization", "Bearer " + userToken))
                     .andExpect(status().isForbidden());
         }
@@ -50,7 +50,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticatedForbidden() throws Exception {
-            mockMvc.perform(get("/api/admin/dashboard"))
+            mockMvc.perform(get("/api/v1/admin/dashboard"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -68,7 +68,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
             signupAndLogin("userA", "Password1!", "a@test.com");
             signupAndLogin("userB", "Password2!", "b@test.com");
 
-            mockMvc.perform(get("/api/admin/users")
+            mockMvc.perform(get("/api/v1/admin/users")
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
@@ -83,7 +83,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
             signupAndLogin("findme", "Password1!", "findme@test.com");
             signupAndLogin("other", "Password2!", "other@test.com");
 
-            mockMvc.perform(get("/api/admin/users?search=findme")
+            mockMvc.perform(get("/api/v1/admin/users?search=findme")
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content[0].username").value("findme"))
@@ -104,7 +104,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
             signupAndLogin("promote_me", "Password1!", "promote@test.com");
             long userId = userRepository.findByUsername("promote_me").orElseThrow().getId();
 
-            mockMvc.perform(patch("/api/admin/users/" + userId + "/role")
+            mockMvc.perform(patch("/api/v1/admin/users/" + userId + "/role")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"role\":\"ADMIN\"}"))
@@ -118,7 +118,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         void updateRoleNotFound() throws Exception {
             String adminToken = createAdminAndLogin("admin5", "adminpass5", "admin5@test.com");
 
-            mockMvc.perform(patch("/api/admin/users/99999/role")
+            mockMvc.perform(patch("/api/v1/admin/users/99999/role")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"role\":\"ADMIN\"}"))
@@ -137,7 +137,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         void adminCanGetOrders() throws Exception {
             String adminToken = createAdminAndLogin("admin6", "adminpass6", "admin6@test.com");
 
-            mockMvc.perform(get("/api/admin/orders")
+            mockMvc.perform(get("/api/v1/admin/orders")
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
@@ -149,7 +149,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         void adminCanFilterByStatus() throws Exception {
             String adminToken = createAdminAndLogin("admin7", "adminpass7", "admin7@test.com");
 
-            mockMvc.perform(get("/api/admin/orders?status=PENDING")
+            mockMvc.perform(get("/api/v1/admin/orders?status=PENDING")
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content").isArray());
@@ -168,13 +168,13 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
             String adminToken = createAdminAndLogin("admin8", "adminpass8", "admin8@test.com");
 
             // 상품 등록
-            mockMvc.perform(post("/api/products")
+            mockMvc.perform(post("/api/v1/products")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"name\":\"테스트노트북\",\"sku\":\"NB-001\",\"price\":1000000}"))
                     .andExpect(status().isCreated());
 
-            mockMvc.perform(get("/api/admin/products")
+            mockMvc.perform(get("/api/v1/admin/products")
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
@@ -193,7 +193,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         void adminCanGetOrderStats() throws Exception {
             String adminToken = createAdminAndLogin("admin9", "adminpass9", "admin9@test.com");
 
-            mockMvc.perform(get("/api/admin/stats/orders?from=2025-01-01&to=2025-01-31")
+            mockMvc.perform(get("/api/v1/admin/stats/orders?from=2025-01-01&to=2025-01-31")
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
@@ -212,7 +212,7 @@ class AdminIntegrationTest extends AbstractIntegrationTest {
         void adminCanGetInventorySnapshot() throws Exception {
             String adminToken = createAdminAndLogin("admin10", "adminpass10", "admin10@test.com");
 
-            mockMvc.perform(get("/api/admin/stats/inventory?date=2025-01-01")
+            mockMvc.perform(get("/api/v1/admin/stats/inventory?date=2025-01-01")
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))

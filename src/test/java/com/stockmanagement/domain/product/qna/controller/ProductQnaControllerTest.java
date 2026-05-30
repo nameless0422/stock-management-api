@@ -82,7 +82,7 @@ class ProductQnaControllerTest {
             given(qnaService.getList(anyLong(), any(Pageable.class), isNull(), eq(false)))
                     .willReturn(new PageImpl<>(List.of(sampleResponse())));
 
-            mockMvc.perform(get("/api/products/1/qna"))
+            mockMvc.perform(get("/api/v1/products/1/qna"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.content[0].content").value("배송 문의"));
@@ -100,7 +100,7 @@ class ProductQnaControllerTest {
         void createSuccess() throws Exception {
             given(qnaService.create(anyLong(), anyLong(), any())).willReturn(sampleResponse());
 
-            mockMvc.perform(post("/api/products/1/qna")
+            mockMvc.perform(post("/api/v1/products/1/qna")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"content\":\"배송 문의\",\"secret\":false}")
                             .with(authentication(USER_AUTH)))
@@ -111,7 +111,7 @@ class ProductQnaControllerTest {
         @Test
         @DisplayName("미인증 → 401")
         void createUnauthorized() throws Exception {
-            mockMvc.perform(post("/api/products/1/qna")
+            mockMvc.perform(post("/api/v1/products/1/qna")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"content\":\"배송 문의\"}"))
                     .andExpect(status().isUnauthorized());
@@ -136,7 +136,7 @@ class ProductQnaControllerTest {
             given(userService.resolveUserId("admin1")).willReturn(100L);
             given(qnaService.answer(anyLong(), anyLong(), anyLong(), any())).willReturn(response);
 
-            mockMvc.perform(post("/api/products/1/qna/1/answer")
+            mockMvc.perform(post("/api/v1/products/1/qna/1/answer")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"answer\":\"답변 드립니다\"}")
                             .with(authentication(ADMIN_AUTH)))
@@ -147,7 +147,7 @@ class ProductQnaControllerTest {
         @Test
         @DisplayName("일반 사용자 → 403")
         void answerByUserForbidden() throws Exception {
-            mockMvc.perform(post("/api/products/1/qna/1/answer")
+            mockMvc.perform(post("/api/v1/products/1/qna/1/answer")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"answer\":\"답변 시도\"}")
                             .with(authentication(USER_AUTH)))
@@ -164,7 +164,7 @@ class ProductQnaControllerTest {
         @Test
         @DisplayName("인증된 사용자 → 204")
         void deleteSuccess() throws Exception {
-            mockMvc.perform(delete("/api/products/1/qna/1")
+            mockMvc.perform(delete("/api/v1/products/1/qna/1")
                             .with(authentication(USER_AUTH)))
                     .andExpect(status().isNoContent());
 
@@ -174,7 +174,7 @@ class ProductQnaControllerTest {
         @Test
         @DisplayName("미인증 → 401")
         void deleteUnauthorized() throws Exception {
-            mockMvc.perform(delete("/api/products/1/qna/1"))
+            mockMvc.perform(delete("/api/v1/products/1/qna/1"))
                     .andExpect(status().isUnauthorized());
         }
     }

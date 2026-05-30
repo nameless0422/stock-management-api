@@ -41,7 +41,7 @@ class ShippingPolicyControllerTest {
                 .willReturn(new ShippingPolicyResponse(
                         new BigDecimal("3000"), new BigDecimal("50000"), "SYSTEM", LocalDateTime.now()));
 
-        mockMvc.perform(get("/api/shipping/policy"))
+        mockMvc.perform(get("/api/v1/shipping/policy"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.defaultFee").value(3000))

@@ -60,7 +60,7 @@ class HomeControllerTest {
 
         given(homeService.getHomeScreen()).willReturn(response);
 
-        mockMvc.perform(get("/api/home"))
+        mockMvc.perform(get("/api/v1/home"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.newArrivals").isArray())
@@ -81,7 +81,7 @@ class HomeControllerTest {
 
         given(homeService.getHomeScreen()).willReturn(response);
 
-        mockMvc.perform(get("/api/home"))
+        mockMvc.perform(get("/api/v1/home"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.newArrivals").isEmpty())
