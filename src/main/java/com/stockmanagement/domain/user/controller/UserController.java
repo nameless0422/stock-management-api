@@ -47,8 +47,8 @@ public class UserController {
 
     @Operation(summary = "내 정보 조회", description = "포인트 잔액(pointBalance) 포함.")
     @GetMapping("/me")
-    public ApiResponse<UserResponse> getMe(@AuthenticationPrincipal String username) {
-        return ApiResponse.ok(userService.getMe(username));
+    public ApiResponse<UserResponse> getMe(@CurrentUserId Long userId) {
+        return ApiResponse.ok(userService.getMe(userId));
     }
 
     @Operation(summary = "회원 탈퇴", description = "논리 삭제 처리. 탈퇴 후 동일 계정으로 로그인 불가.")
@@ -64,9 +64,9 @@ public class UserController {
     @Operation(summary = "프로필 수정", description = "이메일 변경. 중복 이메일이면 409.")
     @PatchMapping("/me")
     public ApiResponse<UserResponse> updateProfile(
-            @AuthenticationPrincipal String username,
+            @CurrentUserId Long userId,
             @Valid @RequestBody UpdateProfileRequest request) {
-        return ApiResponse.ok(userService.updateProfile(username, request));
+        return ApiResponse.ok(userService.updateProfile(userId, request));
     }
 
     @Operation(summary = "비밀번호 변경", description = "현재 비밀번호 확인 후 새 비밀번호로 변경. 기존 Access/Refresh Token 일괄 무효화.")
@@ -83,10 +83,10 @@ public class UserController {
     @Operation(summary = "내 주문 목록 (커서 기반)", description = "기본: 최신순, 20건.")
     @GetMapping("/me/orders")
     public ApiResponse<CursorPage<OrderResponse>> getMyOrders(
-            @AuthenticationPrincipal String username,
+            @CurrentUserId Long userId,
             @RequestParam(required = false) Long lastId,
             @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(userService.getMyOrders(username, lastId, size));
+        return ApiResponse.ok(userService.getMyOrders(userId, lastId, size));
     }
 
     @Operation(summary = "내 리뷰 목록 (커서 기반)",

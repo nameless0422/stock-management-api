@@ -198,10 +198,10 @@ public class UserService {
     }
 
     /** 현재 인증된 사용자 정보 조회 (포인트 잔액 포함). */
-    public UserResponse getMe(String username) {
-        User user = userRepository.findByUsername(username)
+    public UserResponse getMe(Long userId) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        Long pointBalance = userPointRepository.findByUserId(user.getId())
+        Long pointBalance = userPointRepository.findByUserId(userId)
                 .map(up -> up.getBalance()).orElse(null);
         return UserResponse.from(user, pointBalance);
     }
@@ -234,8 +234,8 @@ public class UserService {
 
     /** 프로필(이메일) 수정. 이메일 변경 시 중복 여부 검증. */
     @Transactional
-    public UserResponse updateProfile(String username, UpdateProfileRequest request) {
-        User user = userRepository.findByUsername(username)
+    public UserResponse updateProfile(Long userId, UpdateProfileRequest request) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         if (request.getEmail() != null && !request.getEmail().equals(user.getEmail())) {
             if (userRepository.existsByEmail(request.getEmail())) {
@@ -273,20 +273,18 @@ public class UserService {
     }
 
     /** 현재 인증된 사용자의 주문 목록 커서 기반 조회. hasReview + shipmentStatus 정보 포함. */
-    public CursorPage<OrderResponse> getMyOrders(String username, Long lastId, int size) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    public CursorPage<OrderResponse> getMyOrders(Long userId, Long lastId, int size) {
         PageRequest limit = PageRequest.of(0, size + 1);
         List<Order> items = lastId == null
-                ? orderRepository.findByUserIdOrderByIdDesc(user.getId(), limit)
-                : orderRepository.findByUserIdAndIdLessThanOrderByIdDesc(user.getId(), lastId, limit);
+                ? orderRepository.findByUserIdOrderByIdDesc(userId, limit)
+                : orderRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, lastId, limit);
         // 목록 내 전체 상품 ID를 한 번에 조회 (N+1 방지)
         List<Long> allProductIds = items.stream()
                 .flatMap(o -> o.getItems().stream().map(i -> i.getProduct().getId()))
                 .collect(Collectors.toList());
         Set<Long> reviewedIds = allProductIds.isEmpty()
                 ? Set.of()
-                : new HashSet<>(reviewRepository.findReviewedProductIdsByUserId(user.getId(), allProductIds));
+                : new HashSet<>(reviewRepository.findReviewedProductIdsByUserId(userId, allProductIds));
         // 배송 상태 배치 조회 (N+1 방지)
         List<Long> orderIds = items.stream().map(Order::getId).toList();
         Map<Long, com.stockmanagement.domain.shipment.entity.ShipmentStatus> statusMap =

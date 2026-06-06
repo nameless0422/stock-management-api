@@ -81,6 +81,7 @@ class ShipmentControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 배송 조회 → 200")
         void returnsShipment() throws Exception {
+            given(userService.resolveUserId(any())).willReturn(1L);
             given(shipmentService.getByOrderId(anyLong(), any(), anyBoolean())).willReturn(mock(ShipmentResponse.class));
 
             mockMvc.perform(get("/api/v1/shipments/orders/1"))
@@ -99,6 +100,7 @@ class ShipmentControllerTest {
         @WithMockUser
         @DisplayName("존재하지 않는 주문 → 404")
         void notFound() throws Exception {
+            given(userService.resolveUserId(any())).willReturn(1L);
             given(shipmentService.getByOrderId(anyLong(), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
