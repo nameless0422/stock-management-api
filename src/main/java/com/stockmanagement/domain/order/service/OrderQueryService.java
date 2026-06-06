@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.order.service;
 
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.coupon.dto.CouponValidateRequest;
@@ -26,7 +27,9 @@ import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -98,18 +101,23 @@ public class OrderQueryService {
      *   <li>USER: userId를 강제 적용 (request.userId 무시)
      * </ul>
      */
-    public Page<OrderResponse> getList(Long userId, boolean isAdmin,
-                                       OrderSearchRequest request, Pageable pageable) {
+    public CursorPage<OrderResponse> getList(Long userId, boolean isAdmin,
+                                              OrderSearchRequest request, Long lastId, int size) {
         Long forceUserId = isAdmin ? null : userId;
-        Page<Order> page = orderRepository.findAll(OrderSpecification.of(request, forceUserId), pageable);
+        PageRequest limit = PageRequest.of(0, size + 1, Sort.by(Sort.Direction.DESC, "id"));
+        List<Order> items = orderRepository.findAll(
+                OrderSpecification.of(request, forceUserId, lastId), limit).getContent();
 
         // 배송 상태 + 배송지 스냅샷 배치 조회 (N+1 방지)
-        List<Long> orderIds = page.map(Order::getId).toList();
+        List<Long> orderIds = items.stream().map(Order::getId).toList();
         Map<Long, ShipmentStatus> statusMap = shipmentRepository.findStatusMapByOrderIds(orderIds);
         Map<Long, OrderDeliverySnapshot> snapshotMap = deliverySnapshotRepository.findByOrderIdIn(orderIds)
                 .stream().collect(Collectors.toMap(OrderDeliverySnapshot::getOrderId, s -> s));
 
-        return page.map(o -> OrderResponse.from(o, null, statusMap.get(o.getId()), snapshotMap.get(o.getId())));
+        List<OrderResponse> responses = items.stream()
+                .map(o -> OrderResponse.from(o, null, statusMap.get(o.getId()), snapshotMap.get(o.getId())))
+                .toList();
+        return CursorPage.of(responses, size, OrderResponse::getId);
     }
 
     /**

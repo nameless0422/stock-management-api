@@ -33,7 +33,7 @@ class UserIntegrationTest extends AbstractIntegrationTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.content").isArray())
-                    .andExpect(jsonPath("$.data.totalElements").value(0));
+                    .andExpect(jsonPath("$.data.content.length()").value(0));
         }
 
         @Test

@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.product.review.controller;
 
 import com.stockmanagement.common.config.SecurityConfig;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.security.JwtBlacklist;
@@ -17,8 +18,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -26,9 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -125,8 +122,8 @@ class ReviewControllerTest {
         @Test
         @DisplayName("비로그인 사용자 — 리뷰 목록 조회 → 200")
         void publicGetsList() throws Exception {
-            given(reviewService.getList(anyLong(), any(Pageable.class), any()))
-                    .willReturn(new PageImpl<>(List.of(mock(ReviewResponse.class))));
+            given(reviewService.getList(anyLong(), any(), anyInt(), any()))
+                    .willReturn(CursorPage.of(List.of(mock(ReviewResponse.class)), 20, ReviewResponse::getId));
 
             mockMvc.perform(get("/api/v1/products/1/reviews"))
                     .andExpect(status().isOk())

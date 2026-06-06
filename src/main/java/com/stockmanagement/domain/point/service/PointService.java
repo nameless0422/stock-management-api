@@ -18,8 +18,10 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import com.stockmanagement.common.dto.CursorPage;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -85,19 +87,30 @@ public class PointService {
         return PointBalanceResponse.of(user.getId(), balance);
     }
 
-    /** 포인트 변동 이력을 최신순 페이징 조회한다. */
-    public Page<PointTransactionResponse> getHistory(String username, Pageable pageable) {
+    /** 포인트 변동 이력을 커서 기반으로 조회한다. */
+    public CursorPage<PointTransactionResponse> getHistory(String username, Long lastId, int size) {
         User user = findUser(username);
-        return pointTransactionRepository.findByUserIdOrderByCreatedAtDesc(user.getId(), pageable)
-                .map(PointTransactionResponse::from);
+        PageRequest limit = PageRequest.of(0, size + 1);
+        var items = lastId == null
+                ? pointTransactionRepository.findByUserIdOrderByIdDesc(user.getId(), limit)
+                : pointTransactionRepository.findByUserIdAndIdLessThanOrderByIdDesc(user.getId(), lastId, limit);
+        return CursorPage.of(
+                items.stream().map(PointTransactionResponse::from).toList(),
+                size,
+                PointTransactionResponse::getId);
     }
 
-    /** 적립 예정 (PENDING) 포인트 이력을 최신순 페이징 조회한다. */
-    public Page<PointTransactionResponse> getPendingHistory(String username, Pageable pageable) {
+    /** 적립 예정 (PENDING) 포인트 이력을 커서 기반으로 조회한다. */
+    public CursorPage<PointTransactionResponse> getPendingHistory(String username, Long lastId, int size) {
         User user = findUser(username);
-        return pointTransactionRepository.findByUserIdAndStatusOrderByCreatedAtDesc(
-                        user.getId(), PointTransactionStatus.PENDING, pageable)
-                .map(PointTransactionResponse::from);
+        PageRequest limit = PageRequest.of(0, size + 1);
+        var items = lastId == null
+                ? pointTransactionRepository.findByUserIdAndStatusOrderByIdDesc(user.getId(), PointTransactionStatus.PENDING, limit)
+                : pointTransactionRepository.findByUserIdAndStatusAndIdLessThanOrderByIdDesc(user.getId(), PointTransactionStatus.PENDING, lastId, limit);
+        return CursorPage.of(
+                items.stream().map(PointTransactionResponse::from).toList(),
+                size,
+                PointTransactionResponse::getId);
     }
 
     /** 만료 예정 CONFIRMED 포인트를 만료일 가까운 순으로 페이징 조회한다. */

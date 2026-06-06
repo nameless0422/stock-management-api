@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.order.controller;
 
 import com.stockmanagement.common.config.SecurityConfig;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.dto.OrderResponse;
@@ -19,8 +20,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -181,8 +180,8 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 주문 목록 페이징 조회 → 200")
         void returnsList() throws Exception {
-            given(orderQueryService.getList(any(), anyBoolean(), any(), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of()));
+            given(orderQueryService.getList(any(), anyBoolean(), any(), any(), anyInt()))
+                    .willReturn(CursorPage.of(List.of(), 20, OrderResponse::getId));
 
             mockMvc.perform(get("/api/v1/orders"))
                     .andExpect(status().isOk())

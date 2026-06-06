@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface CouponRepository extends JpaRepository<Coupon, Long> {
@@ -30,6 +31,32 @@ public interface CouponRepository extends JpaRepository<Coupon, Long> {
             """)
     Page<Coupon> findAvailablePublicCoupons(@Param("now") LocalDateTime now, Pageable pageable);
 
+
+    /** 커서 기반 공개 쿠폰 조회 — 첫 페이지. */
+    @Query("""
+            SELECT c FROM Coupon c
+            WHERE c.isPublic = true
+              AND c.active = true
+              AND c.validFrom <= :now
+              AND c.validUntil > :now
+              AND (c.maxUsageCount IS NULL OR c.usageCount < c.maxUsageCount)
+            ORDER BY c.id DESC
+            """)
+    List<Coupon> findAvailablePublicCouponsCursor(@Param("now") LocalDateTime now, Pageable pageable);
+
+    /** 커서 기반 공개 쿠폰 조회 — 다음 페이지 (id < lastId). */
+    @Query("""
+            SELECT c FROM Coupon c
+            WHERE c.isPublic = true
+              AND c.active = true
+              AND c.validFrom <= :now
+              AND c.validUntil > :now
+              AND (c.maxUsageCount IS NULL OR c.usageCount < c.maxUsageCount)
+              AND c.id < :lastId
+            ORDER BY c.id DESC
+            """)
+    List<Coupon> findAvailablePublicCouponsCursorAfter(@Param("now") LocalDateTime now,
+                                                       @Param("lastId") Long lastId, Pageable pageable);
 
     /**
      * 만료된 활성 쿠폰을 단일 벌크 UPDATE로 비활성화한다.

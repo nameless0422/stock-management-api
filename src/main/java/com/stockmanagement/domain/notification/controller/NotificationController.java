@@ -1,18 +1,18 @@
 package com.stockmanagement.domain.notification.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.domain.notification.dto.NotificationResponse;
 import com.stockmanagement.domain.notification.dto.UnreadCountResponse;
 import com.stockmanagement.domain.notification.service.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
  * </pre>
  */
 @Tag(name = "알림", description = "인앱 알림 — 목록 조회 · 읽음 처리")
+@Validated
 @RestController
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor
@@ -33,14 +34,14 @@ public class NotificationController {
 
     private final NotificationService notificationService;
 
-    @Operation(summary = "내 알림 목록", description = "?read=true|false 로 필터. 미지정 시 전체. 기본: 최신순, 20건.")
+    @Operation(summary = "내 알림 목록", description = "?read=true|false 로 필터. 미지정 시 전체. 커서 기반 페이지네이션.")
     @GetMapping
-    public ApiResponse<Page<NotificationResponse>> getNotifications(
+    public ApiResponse<CursorPage<NotificationResponse>> getNotifications(
             @RequestParam(required = false) Boolean read,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
-            Pageable pageable,
+            @RequestParam(required = false) Long lastId,
+            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size,
             @CurrentUserId Long userId) {
-        return ApiResponse.ok(notificationService.getNotifications(userId, read, pageable));
+        return ApiResponse.ok(notificationService.getNotifications(userId, read, lastId, size));
     }
 
     @Operation(summary = "알림 읽음 처리", description = "단건 알림을 읽음 처리한다.")

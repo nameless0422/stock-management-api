@@ -21,4 +21,10 @@ public interface RefundRepository extends JpaRepository<Refund, Long> {
 
     /** 특정 사용자의 환불 목록을 최신순으로 페이징 조회한다. */
     Page<Refund> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
+
+    /** 커서 기반 조회 — 첫 페이지. */
+    List<Refund> findByUserIdOrderByIdDesc(Long userId, Pageable pageable);
+
+    /** 커서 기반 조회 — 다음 페이지 (id < lastId). */
+    List<Refund> findByUserIdAndIdLessThanOrderByIdDesc(Long userId, Long lastId, Pageable pageable);
 }

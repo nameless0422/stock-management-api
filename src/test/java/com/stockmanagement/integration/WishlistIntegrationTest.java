@@ -93,7 +93,7 @@ class WishlistIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content").isArray())
-                .andExpect(jsonPath("$.data.totalElements").value(0));
+                .andExpect(jsonPath("$.data.content.length()").value(0));
     }
 
     @Test

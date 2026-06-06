@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.product.qna.controller;
 
 import com.stockmanagement.common.config.SecurityConfig;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.security.EmailVerificationTokenStore;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.JwtTokenProvider;
@@ -15,8 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -79,8 +78,8 @@ class ProductQnaControllerTest {
         @Test
         @DisplayName("비로그인 조회 → 200")
         void getListWithoutAuth() throws Exception {
-            given(qnaService.getList(anyLong(), any(Pageable.class), isNull(), eq(false)))
-                    .willReturn(new PageImpl<>(List.of(sampleResponse())));
+            given(qnaService.getList(anyLong(), any(), anyInt(), isNull(), eq(false)))
+                    .willReturn(CursorPage.of(List.of(sampleResponse()), 20, QnaResponse::getId));
 
             mockMvc.perform(get("/api/v1/products/1/qna"))
                     .andExpect(status().isOk())

@@ -37,10 +37,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
+import com.stockmanagement.common.dto.CursorPage;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
@@ -326,18 +323,17 @@ class UserServiceTest {
     class GetMyOrders {
 
         @Test
-        @DisplayName("인증된 사용자의 주문 목록을 페이징하여 반환한다")
+        @DisplayName("인증된 사용자의 주문 목록을 커서 기반으로 반환한다")
         void returnsPagedOrders() {
-            Pageable pageable = PageRequest.of(0, 10);
             given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
             // user.getId()는 미영속 상태라 null이므로 any() 매처 사용
-            given(orderRepository.findByUserId(any(), eq(pageable)))
-                    .willReturn(new PageImpl<>(List.of(), pageable, 0));
+            given(orderRepository.findByUserIdOrderByIdDesc(any(), any()))
+                    .willReturn(List.of());
 
-            Page<OrderResponse> result = userService.getMyOrders("testuser", pageable);
+            CursorPage<OrderResponse> result = userService.getMyOrders("testuser", null, 10);
 
-            assertThat(result).isEmpty();
-            verify(orderRepository).findByUserId(any(), eq(pageable));
+            assertThat(result.getContent()).isEmpty();
+            verify(orderRepository).findByUserIdOrderByIdDesc(any(), any());
         }
 
         @Test
@@ -345,7 +341,7 @@ class UserServiceTest {
         void throwsWhenUserNotFound() {
             given(userRepository.findByUsername("ghost")).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> userService.getMyOrders("ghost", PageRequest.of(0, 10)))
+            assertThatThrownBy(() -> userService.getMyOrders("ghost", null, 10))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.USER_NOT_FOUND));

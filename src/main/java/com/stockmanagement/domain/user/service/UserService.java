@@ -35,7 +35,9 @@ import com.stockmanagement.common.security.JwtTokenProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
+import com.stockmanagement.common.dto.CursorPage;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -270,23 +272,29 @@ public class UserService {
         jwtBlacklist.revoke(accessToken);
     }
 
-    /** 현재 인증된 사용자의 주문 목록 페이징 조회. hasReview + shipmentStatus 정보 포함. */
-    public Page<OrderResponse> getMyOrders(String username, Pageable pageable) {
+    /** 현재 인증된 사용자의 주문 목록 커서 기반 조회. hasReview + shipmentStatus 정보 포함. */
+    public CursorPage<OrderResponse> getMyOrders(String username, Long lastId, int size) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        Page<Order> orders = orderRepository.findByUserId(user.getId(), pageable);
-        // 페이지 내 전체 상품 ID를 한 번에 조회 (N+1 방지)
-        List<Long> allProductIds = orders.getContent().stream()
+        PageRequest limit = PageRequest.of(0, size + 1);
+        List<Order> items = lastId == null
+                ? orderRepository.findByUserIdOrderByIdDesc(user.getId(), limit)
+                : orderRepository.findByUserIdAndIdLessThanOrderByIdDesc(user.getId(), lastId, limit);
+        // 목록 내 전체 상품 ID를 한 번에 조회 (N+1 방지)
+        List<Long> allProductIds = items.stream()
                 .flatMap(o -> o.getItems().stream().map(i -> i.getProduct().getId()))
                 .collect(Collectors.toList());
         Set<Long> reviewedIds = allProductIds.isEmpty()
                 ? Set.of()
                 : new HashSet<>(reviewRepository.findReviewedProductIdsByUserId(user.getId(), allProductIds));
         // 배송 상태 배치 조회 (N+1 방지)
-        List<Long> orderIds = orders.map(Order::getId).toList();
+        List<Long> orderIds = items.stream().map(Order::getId).toList();
         Map<Long, com.stockmanagement.domain.shipment.entity.ShipmentStatus> statusMap =
                 shipmentRepository.findStatusMapByOrderIds(orderIds);
-        return orders.map(o -> OrderResponse.from(o, reviewedIds, statusMap.get(o.getId())));
+        List<OrderResponse> responses = items.stream()
+                .map(o -> OrderResponse.from(o, reviewedIds, statusMap.get(o.getId())))
+                .toList();
+        return CursorPage.of(responses, size, OrderResponse::getId);
     }
 
     /**

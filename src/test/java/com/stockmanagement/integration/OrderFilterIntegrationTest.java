@@ -86,7 +86,7 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken1))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.content.length()").value(2))
                 .andExpect(jsonPath("$.data.content[0].userId").value(userId1));
     }
 
@@ -101,7 +101,7 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + userToken1)
                         .param("userId", String.valueOf(userId2)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
                 .andExpect(jsonPath("$.data.content[0].userId").value(userId1));
     }
 
@@ -122,7 +122,7 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + userToken1)
                         .param("status", "PENDING"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
                 .andExpect(jsonPath("$.data.content[0].status").value("PENDING"));
     }
 
@@ -140,7 +140,7 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + userToken1)
                         .param("status", "CANCELLED"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
                 .andExpect(jsonPath("$.data.content[0].status").value("CANCELLED"));
     }
 
@@ -156,7 +156,7 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + adminToken)
                         .param("userId", String.valueOf(userId1)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
                 .andExpect(jsonPath("$.data.content[0].userId").value(userId1));
     }
 
@@ -169,7 +169,7 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/v1/orders")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(2));
+                .andExpect(jsonPath("$.data.content.length()").value(2));
     }
 
     @Test
@@ -188,7 +188,7 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
                         .param("userId", String.valueOf(userId1))
                         .param("status", "PENDING"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
                 .andExpect(jsonPath("$.data.content[0].status").value("PENDING"));
     }
 
@@ -206,7 +206,7 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
                         .param("startDate", today)
                         .param("endDate", today))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(1));
+                .andExpect(jsonPath("$.data.content.length()").value(1));
     }
 
     @Test
@@ -220,6 +220,6 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + userToken1)
                         .param("endDate", yesterday))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(0));
+                .andExpect(jsonPath("$.data.content.length()").value(0));
     }
 }

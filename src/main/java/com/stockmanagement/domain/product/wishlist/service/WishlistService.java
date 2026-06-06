@@ -11,9 +11,9 @@ import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.product.wishlist.dto.WishlistResponse;
 import com.stockmanagement.domain.product.wishlist.entity.WishlistItem;
 import com.stockmanagement.domain.product.wishlist.repository.WishlistRepository;
+import com.stockmanagement.common.dto.CursorPage;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -79,19 +79,22 @@ public class WishlistService {
     }
 
     /**
-     * 사용자의 위시리스트 목록을 페이징 조회한다.
+     * 사용자의 위시리스트 목록을 커서 기반으로 조회한다.
      *
      * <p>userId는 JWT claim에서 추출한 값을 컨트롤러에서 전달받아 DB users 조회를 생략한다.
      */
-    public Page<WishlistResponse> getList(Long userId, Pageable pageable) {
-        // DB 레벨에서 존재하는 상품만 조회 — totalElements 정확도 보장
-        Page<WishlistItem> page = wishlistRepository.findByUserIdWithExistingProduct(userId, pageable);
-        if (page.isEmpty()) {
-            return page.map(item -> null); // 빈 페이지 반환
+    public CursorPage<WishlistResponse> getList(Long userId, Long lastId, int size) {
+        PageRequest limit = PageRequest.of(0, size + 1);
+        var items = lastId == null
+                ? wishlistRepository.findByUserIdWithExistingProductCursor(userId, limit)
+                : wishlistRepository.findByUserIdWithExistingProductCursorAfter(userId, lastId, limit);
+
+        if (items.isEmpty()) {
+            return CursorPage.of(List.of(), size, WishlistResponse::getId);
         }
 
         // N+1 방지: 상품 + 재고를 한 번에 배치 조회
-        List<Long> productIds = page.map(WishlistItem::getProductId).toList();
+        List<Long> productIds = items.stream().map(WishlistItem::getProductId).toList();
         int threshold = systemSettingService.getLowStockThreshold();
         Map<Long, Product> productMap = productRepository.findAllById(productIds).stream()
                 .collect(Collectors.toMap(Product::getId, Function.identity()));
@@ -100,12 +103,14 @@ public class WishlistService {
                         i -> i.getVariant().getProduct().getId(),
                         Collectors.summingInt(Inventory::getAvailable)));
 
-        return page.map(item -> {
+        List<WishlistResponse> responses = items.stream().map(item -> {
             int avail = availableMap.getOrDefault(item.getProductId(), 0);
             return WishlistResponse.of(
                     item,
                     productMap.get(item.getProductId()),
                     StockStatus.of(avail, threshold));
-        });
+        }).toList();
+
+        return CursorPage.of(responses, size, WishlistResponse::getId);
     }
 }

@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.refund.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.refund.dto.RefundRequest;
@@ -9,18 +10,18 @@ import com.stockmanagement.domain.refund.service.RefundService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @Tag(name = "Refund", description = "환불 API")
+@Validated
 @RestController
 @RequestMapping("/api/v1/refunds")
 @RequiredArgsConstructor
@@ -37,12 +38,13 @@ public class RefundController {
         return ApiResponse.ok(refundService.requestRefund(request, userId));
     }
 
-    @Operation(summary = "내 환불 목록", description = "현재 로그인 사용자의 환불 내역을 최신순으로 페이징 조회한다.")
+    @Operation(summary = "내 환불 목록", description = "현재 로그인 사용자의 환불 내역을 최신순으로 커서 기반 조회한다.")
     @GetMapping("/my")
-    public ApiResponse<Page<RefundResponse>> getMyRefunds(
+    public ApiResponse<CursorPage<RefundResponse>> getMyRefunds(
             @CurrentUserId Long userId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ApiResponse.ok(refundService.getMyRefunds(userId, pageable));
+            @RequestParam(required = false) Long lastId,
+            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(refundService.getMyRefunds(userId, lastId, size));
     }
 
     @Operation(summary = "환불 단건 조회", description = "ADMIN은 모든 환불 조회 가능. USER는 본인 주문의 환불만 가능.")

@@ -169,7 +169,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         // 삭제 후 목록 비어 있음 확인
         mockMvc.perform(get("/api/v1/products/" + productId + "/reviews"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(0));
+                .andExpect(jsonPath("$.data.content.length()").value(0));
     }
 
     @Test

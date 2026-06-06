@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.notification.controller;
 
 import com.stockmanagement.common.config.SecurityConfig;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.JwtTokenProvider;
 import com.stockmanagement.domain.notification.dto.NotificationResponse;
@@ -14,16 +15,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -59,8 +57,8 @@ class NotificationControllerTest {
                     .read(false)
                     .createdAt(LocalDateTime.now())
                     .build();
-            given(notificationService.getNotifications(any(), any(), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of(response)));
+            given(notificationService.getNotifications(any(), any(), any(), anyInt()))
+                    .willReturn(CursorPage.of(List.of(response), 20, NotificationResponse::getId));
 
             mockMvc.perform(get("/api/v1/notifications"))
                     .andExpect(status().isOk())
