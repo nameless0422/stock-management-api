@@ -54,7 +54,8 @@ class PointControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 잔액 조회 → 200")
         void returnsBalance() throws Exception {
-            given(pointService.getBalance("user1")).willReturn(mock(PointBalanceResponse.class));
+            given(userService.resolveUserId(any())).willReturn(1L);
+            given(pointService.getBalance(any())).willReturn(mock(PointBalanceResponse.class));
 
             mockMvc.perform(get("/api/v1/points/balance").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())
@@ -78,7 +79,8 @@ class PointControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 이력 조회 → 200")
         void returnsHistory() throws Exception {
-            given(pointService.getHistory(anyString(), any(), anyInt()))
+            given(userService.resolveUserId(any())).willReturn(1L);
+            given(pointService.getHistory(any(), any(), anyInt()))
                     .willReturn(CursorPage.of(List.of(mock(PointTransactionResponse.class)), 20, PointTransactionResponse::getId));
 
             mockMvc.perform(get("/api/v1/points/history").with(authentication(USER_AUTH)))

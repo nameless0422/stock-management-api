@@ -9,8 +9,6 @@ import com.stockmanagement.domain.point.entity.PointTransactionType;
 import com.stockmanagement.domain.point.entity.UserPoint;
 import com.stockmanagement.domain.point.repository.PointTransactionRepository;
 import com.stockmanagement.domain.point.repository.UserPointRepository;
-import com.stockmanagement.domain.user.entity.User;
-import com.stockmanagement.domain.user.repository.UserRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,7 +37,6 @@ class PointServiceTest {
 
     @Mock private UserPointRepository userPointRepository;
     @Mock private PointTransactionRepository pointTransactionRepository;
-    @Mock private UserRepository userRepository;
     @Spy  private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @InjectMocks private PointService pointService;
@@ -47,12 +44,6 @@ class PointServiceTest {
     @BeforeEach
     void setUp() {
         pointService.initMetrics();
-    }
-
-    private User mockUser(Long id, String username) {
-        User u = User.builder().username(username).password("pw").email("e@e.com").build();
-        ReflectionTestUtils.setField(u, "id", id);
-        return u;
     }
 
     private UserPoint mockUserPoint(Long userId, long balance) {
@@ -68,10 +59,9 @@ class PointServiceTest {
         @Test
         @DisplayName("포인트 계정 있음 → 잔액 반환")
         void withAccount() {
-            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L, "user1")));
             given(userPointRepository.findByUserId(1L)).willReturn(Optional.of(mockUserPoint(1L, 5000)));
 
-            PointBalanceResponse response = pointService.getBalance("user1");
+            PointBalanceResponse response = pointService.getBalance(1L);
 
             assertThat(response.getBalance()).isEqualTo(5000);
         }
@@ -79,10 +69,9 @@ class PointServiceTest {
         @Test
         @DisplayName("포인트 계정 없음 → 0 반환")
         void withoutAccount() {
-            given(userRepository.findByUsername("user1")).willReturn(Optional.of(mockUser(1L, "user1")));
             given(userPointRepository.findByUserId(1L)).willReturn(Optional.empty());
 
-            PointBalanceResponse response = pointService.getBalance("user1");
+            PointBalanceResponse response = pointService.getBalance(1L);
 
             assertThat(response.getBalance()).isEqualTo(0);
         }

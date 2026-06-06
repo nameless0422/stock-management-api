@@ -10,8 +10,6 @@ import com.stockmanagement.domain.point.entity.PointTransactionType;
 import com.stockmanagement.domain.point.entity.UserPoint;
 import com.stockmanagement.domain.point.repository.PointTransactionRepository;
 import com.stockmanagement.domain.point.repository.UserPointRepository;
-import com.stockmanagement.domain.user.entity.User;
-import com.stockmanagement.domain.user.repository.UserRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
@@ -63,7 +61,6 @@ public class PointService {
 
     private final UserPointRepository userPointRepository;
     private final PointTransactionRepository pointTransactionRepository;
-    private final UserRepository userRepository;
     private final MeterRegistry meterRegistry;
 
     /** 적립금 부분 회수 발생 횟수 카운터 — 잔액 부족으로 전액 회수 불가 시 증가 */
@@ -79,21 +76,19 @@ public class PointService {
     // ===== 조회 =====
 
     /** 포인트 잔액을 조회한다. 포인트 계정이 없으면 0을 반환한다. */
-    public PointBalanceResponse getBalance(String username) {
-        User user = findUser(username);
-        long balance = userPointRepository.findByUserId(user.getId())
+    public PointBalanceResponse getBalance(Long userId) {
+        long balance = userPointRepository.findByUserId(userId)
                 .map(UserPoint::getBalance)
                 .orElse(0L);
-        return PointBalanceResponse.of(user.getId(), balance);
+        return PointBalanceResponse.of(userId, balance);
     }
 
     /** 포인트 변동 이력을 커서 기반으로 조회한다. */
-    public CursorPage<PointTransactionResponse> getHistory(String username, Long lastId, int size) {
-        User user = findUser(username);
+    public CursorPage<PointTransactionResponse> getHistory(Long userId, Long lastId, int size) {
         PageRequest limit = PageRequest.of(0, size + 1);
         var items = lastId == null
-                ? pointTransactionRepository.findByUserIdOrderByIdDesc(user.getId(), limit)
-                : pointTransactionRepository.findByUserIdAndIdLessThanOrderByIdDesc(user.getId(), lastId, limit);
+                ? pointTransactionRepository.findByUserIdOrderByIdDesc(userId, limit)
+                : pointTransactionRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, lastId, limit);
         return CursorPage.of(
                 items.stream().map(PointTransactionResponse::from).toList(),
                 size,
@@ -101,12 +96,11 @@ public class PointService {
     }
 
     /** 적립 예정 (PENDING) 포인트 이력을 커서 기반으로 조회한다. */
-    public CursorPage<PointTransactionResponse> getPendingHistory(String username, Long lastId, int size) {
-        User user = findUser(username);
+    public CursorPage<PointTransactionResponse> getPendingHistory(Long userId, Long lastId, int size) {
         PageRequest limit = PageRequest.of(0, size + 1);
         var items = lastId == null
-                ? pointTransactionRepository.findByUserIdAndStatusOrderByIdDesc(user.getId(), PointTransactionStatus.PENDING, limit)
-                : pointTransactionRepository.findByUserIdAndStatusAndIdLessThanOrderByIdDesc(user.getId(), PointTransactionStatus.PENDING, lastId, limit);
+                ? pointTransactionRepository.findByUserIdAndStatusOrderByIdDesc(userId, PointTransactionStatus.PENDING, limit)
+                : pointTransactionRepository.findByUserIdAndStatusAndIdLessThanOrderByIdDesc(userId, PointTransactionStatus.PENDING, lastId, limit);
         return CursorPage.of(
                 items.stream().map(PointTransactionResponse::from).toList(),
                 size,
@@ -114,11 +108,10 @@ public class PointService {
     }
 
     /** 만료 예정 CONFIRMED 포인트를 만료일 가까운 순으로 페이징 조회한다. */
-    public Page<PointTransactionResponse> getExpiringSoon(String username, int withinDays, Pageable pageable) {
-        User user = findUser(username);
+    public Page<PointTransactionResponse> getExpiringSoon(Long userId, int withinDays, Pageable pageable) {
         LocalDateTime deadline = LocalDateTime.now().plusDays(withinDays);
         return pointTransactionRepository.findByUserIdAndStatusAndExpiresAtBeforeOrderByExpiresAtAsc(
-                        user.getId(), PointTransactionStatus.CONFIRMED, deadline, pageable)
+                        userId, PointTransactionStatus.CONFIRMED, deadline, pageable)
                 .map(PointTransactionResponse::from);
     }
 
@@ -383,8 +376,4 @@ public class PointService {
                 });
     }
 
-    private User findUser(String username) {
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-    }
 }

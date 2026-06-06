@@ -13,12 +13,9 @@ import com.stockmanagement.domain.shipment.dto.ShipmentUpdateRequest;
 import com.stockmanagement.domain.shipment.entity.Shipment;
 import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
-import com.stockmanagement.domain.user.repository.UserRepository;
 import com.stockmanagement.common.dto.CursorPage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,7 +41,6 @@ public class ShipmentService {
 
     private final ShipmentRepository shipmentRepository;
     private final OrderRepository orderRepository;
-    private final UserRepository userRepository;
     private final OutboxEventStore outboxEventStore;
 
     /**
@@ -78,7 +74,7 @@ public class ShipmentService {
      *
      * @throws BusinessException 배송 정보가 없는 경우, 또는 소유자가 아닌 경우
      */
-    public ShipmentResponse getByOrderId(Long orderId, String username, boolean isAdmin) {
+    public ShipmentResponse getByOrderId(Long orderId, Long userId, boolean isAdmin) {
         Shipment shipment = shipmentRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND));
 
@@ -86,7 +82,7 @@ public class ShipmentService {
             // userId 스칼라 프로젝션 — Order 전체 엔티티 로드 불필요
             Long orderUserId = orderRepository.findUserIdById(orderId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND));
-            if (!orderUserId.equals(resolveUserId(username))) {
+            if (!orderUserId.equals(userId)) {
                 // 타인 배송 존재 여부 노출 방지 — ACCESS_DENIED 대신 NOT_FOUND 반환
                 throw new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND);
             }
@@ -195,17 +191,6 @@ public class ShipmentService {
         Shipment shipment = findByOrderIdOrThrow(orderId);
         shipment.rejectReturn();
         return ShipmentResponse.from(shipment);
-    }
-
-    /** JWT details에서 userId를 꺼낸다. details가 없으면 DB fallback (구 토큰·테스트 환경 호환). */
-    private Long resolveUserId(String username) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getDetails() instanceof Long userId) {
-            return userId;
-        }
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND))
-                .getId();
     }
 
     private Shipment findByOrderIdOrThrow(Long orderId) {

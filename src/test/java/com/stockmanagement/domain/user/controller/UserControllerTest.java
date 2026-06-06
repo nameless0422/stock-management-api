@@ -75,8 +75,9 @@ class UserControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 내 정보 조회 → 200")
         void returnsMyInfo() throws Exception {
+            given(userService.resolveUserId(any())).willReturn(1L);
             UserResponse response = new UserResponse(1L, "testuser", "test@example.com", null, UserRole.USER, null, null);
-            given(userService.getMe("testuser")).willReturn(response);
+            given(userService.getMe(any())).willReturn(response);
 
             mockMvc.perform(get("/api/v1/users/me")
                             .with(authentication(userAuth("testuser"))))
@@ -128,7 +129,8 @@ class UserControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 내 주문 목록 페이징 조회 → 200")
         void returnsMyOrders() throws Exception {
-            given(userService.getMyOrders(eq("testuser"), any(), anyInt()))
+            given(userService.resolveUserId(any())).willReturn(1L);
+            given(userService.getMyOrders(any(), any(), anyInt()))
                     .willReturn(CursorPage.of(List.of(), 20, OrderResponse::getId));
 
             mockMvc.perform(get("/api/v1/users/me/orders")

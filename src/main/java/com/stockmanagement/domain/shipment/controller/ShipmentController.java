@@ -15,7 +15,6 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -57,10 +56,10 @@ public class ShipmentController {
     @GetMapping("/orders/{orderId}")
     public ApiResponse<ShipmentResponse> getByOrderId(
             @PathVariable Long orderId,
-            @AuthenticationPrincipal String username,
+            @CurrentUserId Long userId,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(shipmentService.getByOrderId(orderId, username, isAdmin));
+        return ApiResponse.ok(shipmentService.getByOrderId(orderId, userId, isAdmin));
     }
 
     @Operation(summary = "배송 출고 처리 (ADMIN)",

@@ -296,9 +296,9 @@ class UserServiceTest {
         @Test
         @DisplayName("인증된 사용자 정보를 반환한다")
         void returnsUserResponse() {
-            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+            given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
-            UserResponse response = userService.getMe("testuser");
+            UserResponse response = userService.getMe(1L);
 
             assertThat(response.username()).isEqualTo("testuser");
             assertThat(response.email()).isEqualTo("test@example.com");
@@ -307,9 +307,9 @@ class UserServiceTest {
         @Test
         @DisplayName("사용자가 존재하지 않으면 USER_NOT_FOUND 예외 발생")
         void throwsWhenUserNotFound() {
-            given(userRepository.findByUsername("ghost")).willReturn(Optional.empty());
+            given(userRepository.findById(999L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> userService.getMe("ghost"))
+            assertThatThrownBy(() -> userService.getMe(999L))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.USER_NOT_FOUND));
@@ -325,28 +325,13 @@ class UserServiceTest {
         @Test
         @DisplayName("인증된 사용자의 주문 목록을 커서 기반으로 반환한다")
         void returnsPagedOrders() {
-            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
-            // user.getId()는 미영속 상태라 null이므로 any() 매처 사용
             given(orderRepository.findByUserIdOrderByIdDesc(any(), any()))
                     .willReturn(List.of());
 
-            CursorPage<OrderResponse> result = userService.getMyOrders("testuser", null, 10);
+            CursorPage<OrderResponse> result = userService.getMyOrders(1L, null, 10);
 
             assertThat(result.getContent()).isEmpty();
             verify(orderRepository).findByUserIdOrderByIdDesc(any(), any());
-        }
-
-        @Test
-        @DisplayName("사용자가 존재하지 않으면 USER_NOT_FOUND 예외 발생")
-        void throwsWhenUserNotFound() {
-            given(userRepository.findByUsername("ghost")).willReturn(Optional.empty());
-
-            assertThatThrownBy(() -> userService.getMyOrders("ghost", null, 10))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                            .isEqualTo(ErrorCode.USER_NOT_FOUND));
-
-            verifyNoInteractions(orderRepository);
         }
     }
 
