@@ -35,7 +35,7 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
      * 주문과 항목을 한 번의 쿼리로 조회한다 (N+1 방지).
      * 단건 상세 조회 시 사용한다.
      */
-    @Query("SELECT o FROM Order o JOIN FETCH o.items i JOIN FETCH i.product WHERE o.id = :id")
+    @Query("SELECT o FROM Order o JOIN FETCH o.items i JOIN FETCH i.product JOIN FETCH i.variant WHERE o.id = :id")
     Optional<Order> findByIdWithItems(@Param("id") Long id);
 
     /**
@@ -45,7 +45,7 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
-    @Query("SELECT o FROM Order o JOIN FETCH o.items i JOIN FETCH i.product WHERE o.id = :id")
+    @Query("SELECT o FROM Order o JOIN FETCH o.items i JOIN FETCH i.product JOIN FETCH i.variant WHERE o.id = :id")
     Optional<Order> findByIdWithItemsForUpdate(@Param("id") Long id);
 
     /**
@@ -61,7 +61,7 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     List<Order> findByUserIdAndIdLessThanOrderByIdDesc(Long userId, Long lastId, Pageable pageable);
 
     /** 여러 주문을 항목+상품 포함하여 한 번에 조회한다 (결제 목록 주문 요약용). */
-    @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.items i LEFT JOIN FETCH i.product WHERE o.id IN :ids")
+    @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.items i LEFT JOIN FETCH i.product LEFT JOIN FETCH i.variant WHERE o.id IN :ids")
     List<Order> findByIdsWithItems(@Param("ids") List<Long> ids);
 
     /** 주문 목록 전체 페이징 조회 (관리자용) */
