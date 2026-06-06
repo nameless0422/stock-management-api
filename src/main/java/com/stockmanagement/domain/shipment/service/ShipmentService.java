@@ -14,9 +14,9 @@ import com.stockmanagement.domain.shipment.entity.Shipment;
 import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import com.stockmanagement.domain.user.repository.UserRepository;
+import com.stockmanagement.common.dto.CursorPage;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -96,14 +96,21 @@ public class ShipmentService {
     }
 
     /**
-     * 로그인한 사용자의 배송 목록을 최신순 페이징 조회한다.
+     * 로그인한 사용자의 배송 목록을 커서 기반으로 조회한다.
      *
-     * @param userId   요청자 ID (JWT claim 기반)
-     * @param pageable 페이지 요청
+     * @param userId 요청자 ID (JWT claim 기반)
+     * @param lastId 커서 (이전 페이지 마지막 ID), null이면 첫 페이지
+     * @param size   페이지 크기
      */
-    public Page<ShipmentResponse> getMyShipments(Long userId, Pageable pageable) {
-        return shipmentRepository.findByUserId(userId, pageable)
-                .map(ShipmentResponse::from);
+    public CursorPage<ShipmentResponse> getMyShipments(Long userId, Long lastId, int size) {
+        PageRequest limit = PageRequest.of(0, size + 1);
+        var items = lastId == null
+                ? shipmentRepository.findByUserIdCursor(userId, limit)
+                : shipmentRepository.findByUserIdCursorAfter(userId, lastId, limit);
+        return CursorPage.of(
+                items.stream().map(ShipmentResponse::from).toList(),
+                size,
+                ShipmentResponse::getId);
     }
 
     /**

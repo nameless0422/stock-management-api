@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.shipment.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.shipment.dto.ReturnRequestDto;
@@ -10,13 +11,12 @@ import com.stockmanagement.domain.shipment.service.ShipmentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -36,6 +36,7 @@ import org.springframework.web.bind.annotation.*;
  * 외부 API로 노출하지 않는다.
  */
 @Tag(name = "배송", description = "배송 조회 · 출고 · 완료 · 반품 (상태 전이)")
+@Validated
 @RestController
 @RequestMapping("/api/v1/shipments")
 @RequiredArgsConstructor
@@ -43,12 +44,13 @@ public class ShipmentController {
 
     private final ShipmentService shipmentService;
 
-    @Operation(summary = "내 배송 목록 조회", description = "로그인한 사용자의 배송 목록을 최신순으로 반환한다.")
+    @Operation(summary = "내 배송 목록 조회", description = "로그인한 사용자의 배송 목록을 커서 기반으로 반환한다.")
     @GetMapping("/my")
-    public ApiResponse<Page<ShipmentResponse>> getMyShipments(
+    public ApiResponse<CursorPage<ShipmentResponse>> getMyShipments(
             @CurrentUserId Long userId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ApiResponse.ok(shipmentService.getMyShipments(userId, pageable));
+            @RequestParam(required = false) Long lastId,
+            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(shipmentService.getMyShipments(userId, lastId, size));
     }
 
     @Operation(summary = "주문별 배송 조회", description = "본인 주문의 배송 정보만 조회 가능. ADMIN은 전체 조회 가능.")

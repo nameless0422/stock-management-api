@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.user.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.product.dto.ProductResponse;
@@ -15,13 +16,12 @@ import com.stockmanagement.domain.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,6 +35,7 @@ import org.springframework.web.bind.annotation.*;
  * </pre>
  */
 @Tag(name = "사용자", description = "내 정보 조회 · 내 주문·리뷰 목록 — JWT 인증 필요")
+@Validated
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
@@ -79,24 +80,24 @@ public class UserController {
         userService.changePassword(username, request, accessToken);
     }
 
-    @Operation(summary = "내 주문 목록 (페이징)", description = "기본: 최신순, 20건.")
+    @Operation(summary = "내 주문 목록 (커서 기반)", description = "기본: 최신순, 20건.")
     @GetMapping("/me/orders")
-    public ApiResponse<Page<OrderResponse>> getMyOrders(
+    public ApiResponse<CursorPage<OrderResponse>> getMyOrders(
             @AuthenticationPrincipal String username,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
-            Pageable pageable) {
-        return ApiResponse.ok(userService.getMyOrders(username, pageable));
+            @RequestParam(required = false) Long lastId,
+            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(userService.getMyOrders(username, lastId, size));
     }
 
-    @Operation(summary = "내 리뷰 목록 (페이징)",
-               description = "별점 필터 지원 (?rating=1~5). sort 파라미터로 정렬 지정 (createdAt DESC 기본).")
+    @Operation(summary = "내 리뷰 목록 (커서 기반)",
+               description = "별점 필터 지원 (?rating=1~5).")
     @GetMapping("/me/reviews")
-    public ApiResponse<Page<ReviewResponse>> getMyReviews(
+    public ApiResponse<CursorPage<ReviewResponse>> getMyReviews(
             @CurrentUserId Long userId,
             @RequestParam(required = false) Integer rating,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
-            Pageable pageable) {
-        return ApiResponse.ok(reviewService.getMyReviews(userId, pageable, rating));
+            @RequestParam(required = false) Long lastId,
+            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(reviewService.getMyReviews(userId, lastId, size, rating));
     }
 
     @Operation(summary = "최근 본 상품 기록", description = "상품 조회 시 자동 호출. Redis ZSet에 저장.")

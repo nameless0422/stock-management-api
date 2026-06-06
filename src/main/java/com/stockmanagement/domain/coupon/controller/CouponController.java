@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.coupon.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.domain.coupon.dto.CouponClaimRequest;
 import com.stockmanagement.domain.coupon.dto.CouponCreateRequest;
@@ -13,16 +14,20 @@ import com.stockmanagement.domain.coupon.service.CouponService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 
 import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Coupon", description = "쿠폰 관리 API")
+@Validated
 @RestController
 @RequestMapping("/api/v1/coupons")
 @RequiredArgsConstructor
@@ -39,9 +44,10 @@ public class CouponController {
 
     @Operation(summary = "공개 쿠폰 목록 — 다운로드 가능한 쿠폰 (인증 불필요)")
     @GetMapping("/public")
-    public ApiResponse<Page<CouponResponse>> getPublicCoupons(
-            @PageableDefault(size = 20) Pageable pageable) {
-        return ApiResponse.ok(couponService.getPublicCoupons(pageable));
+    public ApiResponse<CursorPage<CouponResponse>> getPublicCoupons(
+            @RequestParam(required = false) Long lastId,
+            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(couponService.getPublicCoupons(lastId, size));
     }
 
     @Operation(summary = "쿠폰 목록 [ADMIN]")

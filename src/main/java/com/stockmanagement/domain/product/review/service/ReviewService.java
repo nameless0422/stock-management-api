@@ -12,9 +12,11 @@ import com.stockmanagement.domain.product.review.entity.Review;
 import com.stockmanagement.domain.product.review.repository.ReviewRepository;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.repository.UserRepository;
+import com.stockmanagement.common.dto.CursorPage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -72,23 +74,45 @@ public class ReviewService {
      * Pageable의 sort로 정렬을 지원한다 (기본: createdAt desc).
      * 작성자 username을 마스킹하여 포함한다.
      */
-    public Page<ReviewResponse> getList(Long productId, Pageable pageable, Integer rating) {
+    public CursorPage<ReviewResponse> getList(Long productId, Long lastId, int size, Integer rating) {
         if (!productRepository.existsById(productId)) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
         }
-        Page<Review> reviews = (rating != null)
-                ? reviewRepository.findByProductIdAndRating(productId, rating, pageable)
-                : reviewRepository.findByProductId(productId, pageable);
-        Map<Long, String> usernameMap = buildUsernameMap(reviews.map(Review::getUserId).toList());
-        return reviews.map(r -> ReviewResponse.from(r, usernameMap.getOrDefault(r.getUserId(), "[탈퇴사용자]")));
+        PageRequest limit = PageRequest.of(0, size + 1);
+        List<Review> reviews;
+        if (rating != null) {
+            reviews = lastId == null
+                    ? reviewRepository.findByProductIdAndRatingOrderByIdDesc(productId, rating, limit)
+                    : reviewRepository.findByProductIdAndRatingAndIdLessThanOrderByIdDesc(productId, rating, lastId, limit);
+        } else {
+            reviews = lastId == null
+                    ? reviewRepository.findByProductIdOrderByIdDesc(productId, limit)
+                    : reviewRepository.findByProductIdAndIdLessThanOrderByIdDesc(productId, lastId, limit);
+        }
+        Map<Long, String> usernameMap = buildUsernameMap(reviews.stream().map(Review::getUserId).toList());
+        List<ReviewResponse> responses = reviews.stream()
+                .map(r -> ReviewResponse.from(r, usernameMap.getOrDefault(r.getUserId(), "[탈퇴사용자]")))
+                .toList();
+        return CursorPage.of(responses, size, ReviewResponse::getId);
     }
 
-    /** 특정 사용자의 리뷰 목록을 페이징 조회한다. 별점 필터 지원. */
-    public Page<ReviewResponse> getMyReviews(Long userId, Pageable pageable, Integer rating) {
-        Page<Review> reviews = (rating != null)
-                ? reviewRepository.findByUserIdAndRating(userId, rating, pageable)
-                : reviewRepository.findByUserId(userId, pageable);
-        return reviews.map(ReviewResponse::from);
+    /** 특정 사용자의 리뷰 목록을 커서 기반으로 조회한다. 별점 필터 지원. */
+    public CursorPage<ReviewResponse> getMyReviews(Long userId, Long lastId, int size, Integer rating) {
+        PageRequest limit = PageRequest.of(0, size + 1);
+        List<Review> reviews;
+        if (rating != null) {
+            reviews = lastId == null
+                    ? reviewRepository.findByUserIdAndRatingOrderByIdDesc(userId, rating, limit)
+                    : reviewRepository.findByUserIdAndRatingAndIdLessThanOrderByIdDesc(userId, rating, lastId, limit);
+        } else {
+            reviews = lastId == null
+                    ? reviewRepository.findByUserIdOrderByIdDesc(userId, limit)
+                    : reviewRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, lastId, limit);
+        }
+        return CursorPage.of(
+                reviews.stream().map(ReviewResponse::from).toList(),
+                size,
+                ReviewResponse::getId);
     }
 
     /**

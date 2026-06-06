@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.point.controller;
 
 import com.stockmanagement.common.config.SecurityConfig;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.user.service.UserService;
 import com.stockmanagement.domain.point.dto.PointBalanceResponse;
@@ -14,16 +15,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -80,8 +78,8 @@ class PointControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 이력 조회 → 200")
         void returnsHistory() throws Exception {
-            given(pointService.getHistory(anyString(), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of(mock(PointTransactionResponse.class))));
+            given(pointService.getHistory(anyString(), any(), anyInt()))
+                    .willReturn(CursorPage.of(List.of(mock(PointTransactionResponse.class)), 20, PointTransactionResponse::getId));
 
             mockMvc.perform(get("/api/v1/points/history").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())

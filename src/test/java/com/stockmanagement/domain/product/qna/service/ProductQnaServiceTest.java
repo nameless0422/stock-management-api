@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.product.qna.service;
 
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.product.qna.dto.QnaAnswerRequest;
@@ -18,10 +19,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
@@ -115,34 +112,32 @@ class ProductQnaServiceTest {
     class GetList {
 
         @Test
-        @DisplayName("정상 조회 — 페이지 반환")
+        @DisplayName("정상 조회 — 커서 페이지 반환")
         void returnsPaged() {
-            Pageable pageable = PageRequest.of(0, 20);
             ProductQna qna = createQna(1L, 1L, 10L, "문의합니다", false);
             given(productRepository.existsById(1L)).willReturn(true);
-            given(qnaRepository.findByProductId(1L, pageable))
-                    .willReturn(new PageImpl<>(List.of(qna), pageable, 1));
+            given(qnaRepository.findByProductIdOrderByIdDesc(any(), any()))
+                    .willReturn(List.of(qna));
             given(userRepository.findAllById(List.of(10L)))
                     .willReturn(List.of(createUser(10L, "buyer")));
 
-            Page<QnaResponse> result = qnaService.getList(1L, pageable, null, false);
+            CursorPage<QnaResponse> result = qnaService.getList(1L, null, 20, null, false);
 
-            assertThat(result.getTotalElements()).isEqualTo(1);
+            assertThat(result.getContent()).hasSize(1);
             assertThat(result.getContent().get(0).getContent()).isEqualTo("문의합니다");
         }
 
         @Test
         @DisplayName("비밀글 — 타인이면 마스킹 처리")
         void masksSecretForOthers() {
-            Pageable pageable = PageRequest.of(0, 20);
             ProductQna qna = createQna(1L, 1L, 10L, "비밀 내용", true);
             given(productRepository.existsById(1L)).willReturn(true);
-            given(qnaRepository.findByProductId(1L, pageable))
-                    .willReturn(new PageImpl<>(List.of(qna), pageable, 1));
+            given(qnaRepository.findByProductIdOrderByIdDesc(any(), any()))
+                    .willReturn(List.of(qna));
             given(userRepository.findAllById(List.of(10L)))
                     .willReturn(List.of(createUser(10L, "buyer")));
 
-            Page<QnaResponse> result = qnaService.getList(1L, pageable, 99L, false);
+            CursorPage<QnaResponse> result = qnaService.getList(1L, null, 20, 99L, false);
 
             assertThat(result.getContent().get(0).getContent()).isEqualTo("비밀글입니다");
         }
@@ -150,15 +145,14 @@ class ProductQnaServiceTest {
         @Test
         @DisplayName("비밀글 — 작성자 본인이면 원문 노출")
         void showsSecretToAuthor() {
-            Pageable pageable = PageRequest.of(0, 20);
             ProductQna qna = createQna(1L, 1L, 10L, "비밀 내용", true);
             given(productRepository.existsById(1L)).willReturn(true);
-            given(qnaRepository.findByProductId(1L, pageable))
-                    .willReturn(new PageImpl<>(List.of(qna), pageable, 1));
+            given(qnaRepository.findByProductIdOrderByIdDesc(any(), any()))
+                    .willReturn(List.of(qna));
             given(userRepository.findAllById(List.of(10L)))
                     .willReturn(List.of(createUser(10L, "buyer")));
 
-            Page<QnaResponse> result = qnaService.getList(1L, pageable, 10L, false);
+            CursorPage<QnaResponse> result = qnaService.getList(1L, null, 20, 10L, false);
 
             assertThat(result.getContent().get(0).getContent()).isEqualTo("비밀 내용");
         }
@@ -166,15 +160,14 @@ class ProductQnaServiceTest {
         @Test
         @DisplayName("비밀글 — ADMIN이면 원문 노출")
         void showsSecretToAdmin() {
-            Pageable pageable = PageRequest.of(0, 20);
             ProductQna qna = createQna(1L, 1L, 10L, "비밀 내용", true);
             given(productRepository.existsById(1L)).willReturn(true);
-            given(qnaRepository.findByProductId(1L, pageable))
-                    .willReturn(new PageImpl<>(List.of(qna), pageable, 1));
+            given(qnaRepository.findByProductIdOrderByIdDesc(any(), any()))
+                    .willReturn(List.of(qna));
             given(userRepository.findAllById(List.of(10L)))
                     .willReturn(List.of(createUser(10L, "buyer")));
 
-            Page<QnaResponse> result = qnaService.getList(1L, pageable, 99L, true);
+            CursorPage<QnaResponse> result = qnaService.getList(1L, null, 20, 99L, true);
 
             assertThat(result.getContent().get(0).getContent()).isEqualTo("비밀 내용");
         }

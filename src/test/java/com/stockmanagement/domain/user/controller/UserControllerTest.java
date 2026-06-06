@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.user.controller;
 
 import com.stockmanagement.common.config.SecurityConfig;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.domain.order.dto.OrderResponse;
 import com.stockmanagement.domain.user.dto.UserResponse;
 import com.stockmanagement.domain.user.entity.UserRole;
@@ -15,17 +16,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -131,8 +128,8 @@ class UserControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 내 주문 목록 페이징 조회 → 200")
         void returnsMyOrders() throws Exception {
-            given(userService.getMyOrders(eq("testuser"), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of()));
+            given(userService.getMyOrders(eq("testuser"), any(), anyInt()))
+                    .willReturn(CursorPage.of(List.of(), 20, OrderResponse::getId));
 
             mockMvc.perform(get("/api/v1/users/me/orders")
                             .with(authentication(userAuth("testuser"))))

@@ -6,9 +6,9 @@ import com.stockmanagement.domain.notification.dto.NotificationResponse;
 import com.stockmanagement.domain.notification.entity.Notification;
 import com.stockmanagement.domain.notification.entity.NotificationType;
 import com.stockmanagement.domain.notification.repository.NotificationRepository;
+import com.stockmanagement.common.dto.CursorPage;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,21 +27,35 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
 
     /**
-     * 내 알림 목록을 조회한다.
+     * 내 알림 목록을 커서 기반으로 조회한다.
      *
      * @param userId 사용자 ID
      * @param read   null이면 전체, true이면 읽음만, false이면 미읽음만
+     * @param lastId 커서 (이전 페이지 마지막 ID), null이면 첫 페이지
+     * @param size   페이지 크기
      */
-    public Page<NotificationResponse> getNotifications(Long userId, Boolean read, Pageable pageable) {
-        Page<Notification> page;
+    public CursorPage<NotificationResponse> getNotifications(Long userId, Boolean read, Long lastId, int size) {
+        PageRequest limit = PageRequest.of(0, size + 1);
+        java.util.List<Notification> items;
+
         if (read == null) {
-            page = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
+            items = lastId == null
+                    ? notificationRepository.findByUserIdOrderByIdDesc(userId, limit)
+                    : notificationRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, lastId, limit);
         } else if (read) {
-            page = notificationRepository.findByUserIdAndReadAtIsNotNullOrderByCreatedAtDesc(userId, pageable);
+            items = lastId == null
+                    ? notificationRepository.findByUserIdAndReadAtIsNotNullOrderByIdDesc(userId, limit)
+                    : notificationRepository.findByUserIdAndReadAtIsNotNullAndIdLessThanOrderByIdDesc(userId, lastId, limit);
         } else {
-            page = notificationRepository.findByUserIdAndReadAtIsNullOrderByCreatedAtDesc(userId, pageable);
+            items = lastId == null
+                    ? notificationRepository.findByUserIdAndReadAtIsNullOrderByIdDesc(userId, limit)
+                    : notificationRepository.findByUserIdAndReadAtIsNullAndIdLessThanOrderByIdDesc(userId, lastId, limit);
         }
-        return page.map(NotificationResponse::from);
+
+        return CursorPage.of(
+                items.stream().map(NotificationResponse::from).toList(),
+                size,
+                NotificationResponse::getId);
     }
 
     /** 알림 단건 읽음 처리. 소유권 검증 포함. */

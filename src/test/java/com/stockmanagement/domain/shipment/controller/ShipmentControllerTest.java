@@ -17,7 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageImpl;
+import com.stockmanagement.common.dto.CursorPage;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -55,8 +55,8 @@ class ShipmentControllerTest {
         @DisplayName("인증된 사용자 — 내 배송 목록 → 200")
         void returnsMyShipments() throws Exception {
             given(userService.resolveUserId(any())).willReturn(1L);
-            given(shipmentService.getMyShipments(anyLong(), any()))
-                    .willReturn(new PageImpl<>(List.of(mock(ShipmentResponse.class))));
+            given(shipmentService.getMyShipments(anyLong(), any(), anyInt()))
+                    .willReturn(CursorPage.of(List.of(mock(ShipmentResponse.class)), 20, ShipmentResponse::getId));
 
             mockMvc.perform(get("/api/v1/shipments/my"))
                     .andExpect(status().isOk())

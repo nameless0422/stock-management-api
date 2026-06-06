@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.product.qna.service;
 
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.product.qna.dto.QnaAnswerRequest;
@@ -11,8 +12,7 @@ import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,22 +30,24 @@ public class ProductQnaService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
 
-    /** Q&A 목록 조회 (비밀글 마스킹 포함) */
-    public Page<QnaResponse> getList(Long productId, Pageable pageable, Long currentUserId, boolean isAdmin) {
+    /** Q&A 목록 조회 (비밀글 마스킹 포함, 커서 기반) */
+    public CursorPage<QnaResponse> getList(Long productId, Long lastId, int size, Long currentUserId, boolean isAdmin) {
         validateProductExists(productId);
-        Page<ProductQna> qnas = qnaRepository.findByProductId(productId, pageable);
+        PageRequest limit = PageRequest.of(0, size + 1);
+        List<ProductQna> items = lastId == null
+                ? qnaRepository.findByProductIdOrderByIdDesc(productId, limit)
+                : qnaRepository.findByProductIdAndIdLessThanOrderByIdDesc(productId, lastId, limit);
 
-        List<Long> userIds = qnas.getContent().stream()
+        List<Long> userIds = items.stream()
                 .map(ProductQna::getUserId)
                 .distinct()
                 .toList();
         Map<Long, String> usernameMap = buildUsernameMap(userIds);
 
-        return qnas.map(q -> QnaResponse.from(
-                q,
-                usernameMap.get(q.getUserId()),
-                currentUserId,
-                isAdmin));
+        List<QnaResponse> responses = items.stream()
+                .map(q -> QnaResponse.from(q, usernameMap.get(q.getUserId()), currentUserId, isAdmin))
+                .toList();
+        return CursorPage.of(responses, size, QnaResponse::getId);
     }
 
     /** 질문 작성 */

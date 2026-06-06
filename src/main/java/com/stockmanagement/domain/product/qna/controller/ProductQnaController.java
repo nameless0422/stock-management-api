@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.product.qna.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.common.security.SecurityUtils;
 import com.stockmanagement.domain.product.qna.dto.QnaAnswerRequest;
@@ -10,13 +11,12 @@ import com.stockmanagement.domain.product.qna.service.ProductQnaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
  * </pre>
  */
 @Tag(name = "상품 Q&A", description = "상품 질문·답변 관리")
+@Validated
 @RestController
 @RequestMapping("/api/v1/products/{productId}/qna")
 @RequiredArgsConstructor
@@ -39,13 +40,14 @@ public class ProductQnaController {
 
     @Operation(summary = "Q&A 목록 조회", description = "비밀글은 작성자 본인과 ADMIN에게만 원문 노출.")
     @GetMapping
-    public ApiResponse<Page<QnaResponse>> getList(
+    public ApiResponse<CursorPage<QnaResponse>> getList(
             @PathVariable Long productId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
+            @RequestParam(required = false) Long lastId,
+            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size,
             @CurrentUserId(required = false) Long userId,
             Authentication authentication) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
-        return ApiResponse.ok(qnaService.getList(productId, pageable, userId, isAdmin));
+        return ApiResponse.ok(qnaService.getList(productId, lastId, size, userId, isAdmin));
     }
 
     @Operation(summary = "질문 작성", description = "구매 여부 무관, 인증된 사용자만 작성 가능.")

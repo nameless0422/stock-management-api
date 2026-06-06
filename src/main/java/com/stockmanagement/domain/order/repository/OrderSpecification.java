@@ -35,8 +35,22 @@ public class OrderSpecification {
      * @param forceUserId null이면 request.userId 사용, non-null이면 강제 덮어쓰기
      */
     public static Specification<Order> of(OrderSearchRequest request, Long forceUserId) {
+        return of(request, forceUserId, null);
+    }
+
+    /**
+     * 검색 요청 + 강제 userId + 커서 기반 페이지네이션 Specification을 생성한다.
+     *
+     * @param lastId 커서 — null이면 첫 페이지, non-null이면 id < lastId 조건 추가
+     */
+    public static Specification<Order> of(OrderSearchRequest request, Long forceUserId, Long lastId) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+
+            // 커서 조건 (id < lastId)
+            if (lastId != null) {
+                predicates.add(cb.lessThan(root.get("id"), lastId));
+            }
 
             // 주문 상태 필터
             if (request.getStatus() != null) {

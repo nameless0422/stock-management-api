@@ -2,6 +2,7 @@ package com.stockmanagement.domain.order.controller;
 
 import com.stockmanagement.common.annotation.RequireEmailVerified;
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.common.security.SecurityUtils;
@@ -19,15 +20,14 @@ import com.stockmanagement.domain.order.service.OrderCommandService;
 import com.stockmanagement.domain.order.service.OrderDetailService;
 import com.stockmanagement.domain.order.service.OrderQueryService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -38,6 +38,7 @@ import java.util.List;
  * <p>Base URL: {@code /api/orders}
  */
 @Tag(name = "주문", description = "주문 생성 · 조회 · 취소 · 상태 이력")
+@Validated
 @RestController
 @RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
@@ -87,18 +88,18 @@ public class OrderController {
         return ApiResponse.ok(orderDetailService.getDetail(id, userId, isAdmin));
     }
 
-    @Operation(summary = "주문 목록 조회 (필터 + 페이징)",
+    @Operation(summary = "주문 목록 조회 (필터 + 커서 페이징)",
                description = "status / startDate / endDate 필터 지원. ADMIN은 userId 파라미터로 특정 사용자 주문 조회 가능. USER는 본인 주문만 조회된다.")
     @GetMapping
-    public ApiResponse<Page<OrderResponse>> getList(
+    public ApiResponse<CursorPage<OrderResponse>> getList(
             @CurrentUserId(required = false) Long userId,
             Authentication authentication,
             @ModelAttribute OrderSearchRequest request,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
-            Pageable pageable) {
+            @RequestParam(required = false) Long lastId,
+            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
         boolean isAdmin = SecurityUtils.isAdmin(authentication);
         Long effectiveUserId = isAdmin ? null : userId;
-        return ApiResponse.ok(orderQueryService.getList(effectiveUserId, isAdmin, request, pageable));
+        return ApiResponse.ok(orderQueryService.getList(effectiveUserId, isAdmin, request, lastId, size));
     }
 
     @Operation(summary = "주문 취소", description = "PENDING 상태만 취소 가능. 재고 예약 해제(reserved--). ADMIN은 모든 주문 취소 가능.")

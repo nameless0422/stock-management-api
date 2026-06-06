@@ -34,4 +34,12 @@ public interface ShipmentRepository extends JpaRepository<Shipment, Long> {
     /** 특정 사용자의 배송 목록을 최신순 페이징 조회한다. */
     @Query("SELECT s FROM Shipment s WHERE s.orderId IN (SELECT o.id FROM Order o WHERE o.userId = :userId) ORDER BY s.createdAt DESC")
     Page<Shipment> findByUserId(@Param("userId") Long userId, Pageable pageable);
+
+    /** 커서 기반 조회 — 첫 페이지. */
+    @Query("SELECT s FROM Shipment s WHERE s.orderId IN (SELECT o.id FROM Order o WHERE o.userId = :userId) ORDER BY s.id DESC")
+    List<Shipment> findByUserIdCursor(@Param("userId") Long userId, Pageable pageable);
+
+    /** 커서 기반 조회 — 다음 페이지 (id < lastId). */
+    @Query("SELECT s FROM Shipment s WHERE s.id < :lastId AND s.orderId IN (SELECT o.id FROM Order o WHERE o.userId = :userId) ORDER BY s.id DESC")
+    List<Shipment> findByUserIdCursorAfter(@Param("userId") Long userId, @Param("lastId") Long lastId, Pageable pageable);
 }

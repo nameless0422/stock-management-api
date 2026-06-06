@@ -15,11 +15,11 @@ import com.stockmanagement.domain.refund.dto.RefundResponse;
 import com.stockmanagement.domain.refund.entity.Refund;
 import com.stockmanagement.domain.refund.entity.RefundStatus;
 import com.stockmanagement.domain.refund.repository.RefundRepository;
+import com.stockmanagement.common.dto.CursorPage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -131,10 +131,16 @@ public class RefundService {
         return RefundResponse.from(refund);
     }
 
-    /** 현재 인증 사용자의 환불 목록을 최신순으로 페이징 조회한다. */
-    public Page<RefundResponse> getMyRefunds(Long userId, Pageable pageable) {
-        return refundRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
-                .map(RefundResponse::from);
+    /** 현재 인증 사용자의 환불 목록을 커서 기반으로 조회한다. */
+    public CursorPage<RefundResponse> getMyRefunds(Long userId, Long lastId, int size) {
+        PageRequest limit = PageRequest.of(0, size + 1);
+        var items = lastId == null
+                ? refundRepository.findByUserIdOrderByIdDesc(userId, limit)
+                : refundRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, lastId, limit);
+        return CursorPage.of(
+                items.stream().map(RefundResponse::from).toList(),
+                size,
+                RefundResponse::getId);
     }
 
     /** 결제 ID로 환불 목록을 조회한다. 부분 취소 시 다건 반환. 본인 또는 ADMIN만 가능. */

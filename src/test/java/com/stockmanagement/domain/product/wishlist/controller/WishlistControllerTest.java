@@ -20,13 +20,11 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
-import org.springframework.data.domain.PageImpl;
+import com.stockmanagement.common.dto.CursorPage;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -120,8 +118,8 @@ class WishlistControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 위시리스트 조회 → 200")
         void returnsList() throws Exception {
-            given(wishlistService.getList(anyLong(), any()))
-                    .willReturn(new PageImpl<>(List.of(mock(WishlistResponse.class))));
+            given(wishlistService.getList(anyLong(), any(), anyInt()))
+                    .willReturn(CursorPage.of(List.of(mock(WishlistResponse.class)), 20, WishlistResponse::getId));
 
             mockMvc.perform(get("/api/v1/wishlist").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())

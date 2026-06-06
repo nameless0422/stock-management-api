@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.order.service;
 
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
@@ -25,9 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -148,26 +147,24 @@ class OrderQueryServiceTest {
         @Test
         @DisplayName("ADMIN — 필터 없이 전체 주문 반환")
         void admin_returnsAllOrders() {
-            Pageable pageable = PageRequest.of(0, 10);
             given(orderRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of(order), pageable, 1));
+                    .willReturn(new PageImpl<>(List.of(order)));
 
-            Page<OrderResponse> result = orderQueryService.getList(null, true, new OrderSearchRequest(), pageable);
+            CursorPage<OrderResponse> result = orderQueryService.getList(null, true, new OrderSearchRequest(), null, 10);
 
-            assertThat(result.getTotalElements()).isEqualTo(1);
+            assertThat(result.getContent()).hasSize(1);
             assertThat(result.getContent().get(0).getIdempotencyKey()).isEqualTo("idem-key-001");
         }
 
         @Test
         @DisplayName("USER — 컨트롤러에서 전달된 userId로 강제 필터링")
         void user_filtersOwnOrdersOnly() {
-            Pageable pageable = PageRequest.of(0, 10);
             given(orderRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of(order), pageable, 1));
+                    .willReturn(new PageImpl<>(List.of(order)));
 
-            Page<OrderResponse> result = orderQueryService.getList(1L, false, new OrderSearchRequest(), pageable);
+            CursorPage<OrderResponse> result = orderQueryService.getList(1L, false, new OrderSearchRequest(), null, 10);
 
-            assertThat(result.getTotalElements()).isEqualTo(1);
+            assertThat(result.getContent()).hasSize(1);
         }
     }
 }
