@@ -37,12 +37,17 @@ Client
 
 ## Open Issues
 
+### ✅ 완료
+
+| Issue | 항목 | 완료 시점 |
+|-------|------|-----------|
+| [#15](https://github.com/nameless0422/stock-management-api/issues/15) | 오프셋 페이지네이션 → 커서 기반 전환 | PR #192 |
+
 ### 🟡 중장기 개선
 
 | Issue | 항목 |
 |-------|------|
 | [#14](https://github.com/nameless0422/stock-management-api/issues/14) | OrderService God Object 분리 |
-| [#15](https://github.com/nameless0422/stock-management-api/issues/15) | 오프셋 페이지네이션 → 커서 기반 전환 |
 | [#22](https://github.com/nameless0422/stock-management-api/issues/22) | API 버전 관리 부재 — /api/v1/ prefix 도입 |
 
 ### ⚪ 보류
