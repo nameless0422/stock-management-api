@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Management API — Flow Visualizer</title>
+<style>
+  :root {
+    --bg: #0d1017; --surface: #151921; --surface2: #1c2130;
+    --border: #252a38; --border-hi: #3a4060;
+    --text: #d4d8e8; --muted: #6b7394; --dim: #3a3f55;
+    --accent: #5b8def; --accent2: #4a7ae0; --accent-glow: rgba(91,141,239,0.15);
+    --green: #3ddc84; --orange: #f5a623; --red: #f25c5c;
+    --purple: #b07af0; --cyan: #4ecdc4; --pink: #f06595;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; }
+
+  /* ── Header ── */
+  .header {
+    height:52px; display:flex; align-items:center; padding:0 24px;
+    border-bottom:1px solid var(--border); background:var(--surface);
+    gap:16px; z-index:100;
+  }
+  .header h1 { font-size:15px; font-weight:700; letter-spacing:-0.3px; }
+  .header .sep { width:1px; height:20px; background:var(--border); }
+  .header .sub { font-size:12px; color:var(--muted); }
+  .header .kbd-hint { margin-left:auto; font-size:11px; color:var(--dim); display:flex; gap:12px; }
+  .header .kbd-hint kbd {
+    display:inline-block; padding:1px 6px; border-radius:3px; font-size:10px;
+    background:var(--surface2); border:1px solid var(--border); color:var(--muted); font-family:inherit;
+  }
+
+  /* ── Layout ── */
+  .main { display:flex; height:calc(100vh - 52px); }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width:260px; min-width:260px; background:var(--surface); border-right:1px solid var(--border);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .sidebar-scroll { flex:1; overflow-y:auto; padding:12px; }
+  .sidebar-scroll::-webkit-scrollbar { width:4px; }
+  .sidebar-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+  .flow-group-title {
+    font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px;
+    color:var(--dim); padding:12px 8px 6px; display:flex; align-items:center; gap:6px;
+  }
+  .flow-group-title::before { content:''; flex:0 0 3px; height:3px; border-radius:2px; }
+  .flow-group-title.g-auth::before { background:var(--green); }
+  .flow-group-title.g-order::before { background:var(--accent); }
+  .flow-group-title.g-payment::before { background:var(--purple); }
+  .flow-group-title.g-product::before { background:var(--cyan); }
+  .flow-group-title.g-inventory::before { background:var(--orange); }
+  .flow-group-title.g-admin::before { background:var(--red); }
+
+  .flow-btn {
+    display:flex; align-items:center; width:100%; text-align:left; padding:8px 10px;
+    margin-bottom:2px; background:transparent; border:none; border-radius:6px;
+    color:var(--text); font-size:12.5px; cursor:pointer; transition:all .12s; gap:8px;
+  }
+  .flow-btn:hover { background:var(--surface2); }
+  .flow-btn.active { background:var(--accent-glow); color:#fff; }
+  .flow-btn .flow-icon { font-size:14px; opacity:0.6; width:20px; text-align:center; }
+  .flow-btn.active .flow-icon { opacity:1; }
+
+  /* ── Canvas area ── */
+  .canvas-area { flex:1; display:flex; flex-direction:column; overflow:hidden; position:relative; }
+
+  /* ── SVG canvas ── */
+  .diagram-wrap { flex:1; position:relative; overflow:auto; }
+  .diagram-wrap::-webkit-scrollbar { width:6px; height:6px; }
+  .diagram-wrap::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+
+  .diagram {
+    position:relative; min-width:100%; min-height:100%;
+    padding:32px 40px 120px;
+  }
+  .diagram svg.arrows {
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    pointer-events:none; z-index:10;
+  }
+
+  /* ── Layer labels ── */
+  .layer-row { margin-bottom:20px; }
+  .layer-label {
+    font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px;
+    color:var(--dim); margin-bottom:10px; padding-left:4px;
+  }
+  .layer-cards { display:flex; flex-wrap:wrap; gap:10px; }
+
+  /* ── Package cards ── */
+  .pkg {
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    padding:10px 14px; min-width:160px; max-width:220px; flex:1;
+    transition:all .25s ease; position:relative;
+  }
+  .pkg::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    border-radius:8px 8px 0 0; opacity:0; transition:opacity .25s;
+  }
+  .pkg.highlighted { border-color:var(--accent); background:var(--surface2); }
+  .pkg.highlighted::before { opacity:1; background:var(--accent); }
+  .pkg.dimmed { opacity:0.12; }
+  .pkg.step-active { border-color:#fff; box-shadow:0 0 16px rgba(91,141,239,0.3); }
+  .pkg.step-active::before { opacity:1; background:#fff; }
+
+  .pkg-header { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+  .pkg-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .pkg-name { font-size:12px; font-weight:600; white-space:nowrap; }
+  .pkg-classes { list-style:none; }
+  .pkg-classes li {
+    font-size:10.5px; color:var(--dim); padding:1px 0; transition:color .2s;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .pkg-classes li.hi { color:var(--text); font-weight:500; }
+
+  /* ── Step panel (bottom) ── */
+  .step-panel {
+    background:var(--surface); border-top:1px solid var(--border);
+    transition:max-height .3s, padding .3s; overflow:hidden;
+    max-height:0; padding:0 24px;
+  }
+  .step-panel.open { max-height:300px; padding:16px 24px; overflow-y:auto; }
+  .step-panel::-webkit-scrollbar { width:4px; }
+  .step-panel::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+
+  .step-panel-header {
+    display:flex; align-items:center; gap:12px; margin-bottom:12px;
+  }
+  .step-panel-title { font-size:14px; font-weight:700; }
+  .step-controls { display:flex; gap:4px; margin-left:auto; }
+  .step-controls button {
+    width:28px; height:28px; border-radius:6px; border:1px solid var(--border);
+    background:var(--surface2); color:var(--text); cursor:pointer; font-size:12px;
+    display:flex; align-items:center; justify-content:center; transition:all .12s;
+  }
+  .step-controls button:hover { border-color:var(--accent); color:var(--accent); }
+  .step-controls button:disabled { opacity:0.3; cursor:default; }
+  .step-counter { font-size:11px; color:var(--muted); min-width:50px; text-align:center; }
+
+  .steps-timeline { display:flex; flex-direction:column; gap:2px; }
+  .step-row {
+    display:flex; align-items:flex-start; gap:10px; padding:6px 10px;
+    border-radius:6px; transition:all .15s; cursor:pointer; font-size:12px;
+  }
+  .step-row:hover { background:rgba(255,255,255,0.03); }
+  .step-row.active { background:var(--accent-glow); }
+  .step-row.past { opacity:0.45; }
+
+  .step-badge {
+    min-width:22px; height:22px; border-radius:50%; font-size:10px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    background:var(--surface2); border:1px solid var(--border); color:var(--muted);
+    transition:all .15s;
+  }
+  .step-row.active .step-badge { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .step-body { flex:1; min-width:0; }
+  .step-route { font-weight:600; color:var(--accent); font-size:11.5px; }
+  .step-row.active .step-route { color:#fff; }
+  .step-desc { color:var(--muted); margin-top:1px; font-size:11.5px; line-height:1.4; }
+  .step-row.active .step-desc { color:var(--text); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Stock Management API</h1>
+  <div class="sep"></div>
+  <span class="sub">Flow Visualizer</span>
+  <div class="kbd-hint">
+    <span><kbd>&#8593;</kbd><kbd>&#8595;</kbd> step</span>
+    <span><kbd>Esc</kbd> reset</span>
+  </div>
+</div>
+
+<div class="main">
+  <aside class="sidebar"><div class="sidebar-scroll" id="sidebar"></div></aside>
+  <div class="canvas-area">
+    <div class="diagram-wrap" id="diagramWrap">
+      <div class="diagram" id="diagram"></div>
+    </div>
+    <div class="step-panel" id="stepPanel">
+      <div class="step-panel-header">
+        <div class="step-panel-title" id="panelTitle"></div>
+        <div class="step-controls">
+          <button id="btnPrev" onclick="stepNav(-1)">&#9664;</button>
+          <div class="step-counter" id="stepCounter">-</div>
+          <button id="btnNext" onclick="stepNav(1)">&#9654;</button>
+          <button onclick="stepNav(0)" title="All steps">&#9632;</button>
+          <button onclick="resetView()" title="Reset">&#10005;</button>
+        </div>
+      </div>
+      <div class="steps-timeline" id="stepsTimeline"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════
+const FLOW_DATA = {
+  // Packages grouped by architectural layer
+  layers: [
+    { name: "External", pkgs: ["client"] },
+    { name: "Security", pkgs: ["security"] },
+    { name: "Domain — User & Product", pkgs: ["auth","product","category","review","wishlist"] },
+    { name: "Domain — Commerce", pkgs: ["cart","order","payment","refund"] },
+    { name: "Domain — Fulfillment & Rewards", pkgs: ["shipment","coupon","point"] },
+    { name: "Infrastructure", pkgs: ["inventory","admin","notification","outbox","redis","email"] },
+  ],
+
+  packages: {
+    client:       { label:"Client",           color:"#6b7394", icon:"&#9678;",  classes:["HTTP Request","Browser"] },
+    security:     { label:"Security / JWT",   color:"#3ddc84", icon:"&#9919;",  classes:["JwtAuthenticationFilter","JwtTokenProvider","JwtBlacklist","SecurityConfig"] },
+    auth:         { label:"Auth (User)",      color:"#3ddc84", icon:"&#9823;",  classes:["AuthController","UserService","RefreshTokenStore","LoginRateLimiter"] },
+    product:      { label:"Product",          color:"#4ecdc4", icon:"&#9635;",  classes:["ProductController","ProductService","ProductSearchService","HomeService"] },
+    category:     { label:"Category",         color:"#4ecdc4", icon:"&#9783;",  classes:["CategoryController","CategoryService"] },
+    review:       { label:"Review / QnA",     color:"#4ecdc4", icon:"&#9733;",  classes:["ReviewController","ReviewService","ProductQnaService"] },
+    wishlist:     { label:"Wishlist",          color:"#4ecdc4", icon:"&#9825;",  classes:["WishlistController","WishlistService"] },
+    cart:         { label:"Cart",             color:"#5b8def", icon:"&#128722;", classes:["CartController","CartService","CartItem"] },
+    order:        { label:"Order",            color:"#5b8def", icon:"&#9776;",  classes:["OrderController","OrderCommandService","OrderQueryService","OrderPaymentService","OrderExpiryScheduler"] },
+    payment:      { label:"Payment",          color:"#b07af0", icon:"&#9733;",  classes:["PaymentController","PaymentService","PaymentTransactionHelper","TossPaymentsClient"] },
+    refund:       { label:"Refund",           color:"#b07af0", icon:"&#8634;",  classes:["RefundController","RefundService"] },
+    shipment:     { label:"Shipment",         color:"#f06595", icon:"&#9992;",  classes:["ShipmentController","ShipmentService"] },
+    coupon:       { label:"Coupon",           color:"#f5a623", icon:"&#9988;",  classes:["CouponController","CouponService","CouponExpiryScheduler"] },
+    point:        { label:"Point",            color:"#f5a623", icon:"&#9679;",  classes:["PointController","PointService","PointExpiryScheduler"] },
+    inventory:    { label:"Inventory",        color:"#f5a623", icon:"&#9638;",  classes:["InventoryController","InventoryService","InventorySnapshotScheduler"] },
+    admin:        { label:"Admin",            color:"#f25c5c", icon:"&#9881;",  classes:["AdminController","AdminService","SystemSettingService"] },
+    notification: { label:"Notification",     color:"#6b7394", icon:"&#9993;",  classes:["NotificationController","NotificationService","NotificationEventListener"] },
+    outbox:       { label:"Outbox Events",    color:"#6b7394", icon:"&#9993;",  classes:["OutboxEventStore","OutboxEventProcessor","OutboxEventRelayScheduler"] },
+    redis:        { label:"Redis",            color:"#f25c5c", icon:"&#9672;",  classes:["Cache","Distributed Lock","Rate Limit","Token Stores"] },
+    email:        { label:"Email Service",    color:"#6b7394", icon:"&#9993;",  classes:["EmailService","EmailEventListener"] },
+  },
+
+  flows: [
+    {
+      id:"signup", name:"회원가입", tag:"auth", icon:"&#128100;",
+      steps:[
+        { from:"client",   to:"security",  desc:"POST /api/v1/auth/signup (permitAll)" },
+        { from:"security", to:"auth",      desc:"JwtAuthenticationFilter 통과 (공개 엔드포인트)" },
+        { from:"auth",     to:"redis",     desc:"RateLimitAspect — IP 기반 Rate Limit (Lua INCR)" },
+        { from:"auth",     to:"auth",      desc:"UserService.signup() — BCrypt 해시, User 저장" },
+        { from:"auth",     to:"redis",     desc:"EmailVerificationTokenStore.issue() — 인증 토큰 (24h TTL)" },
+        { from:"auth",     to:"email",     desc:"EmailService.sendVerificationEmail() — 인증 링크 발송" },
+        { from:"auth",     to:"client",    desc:"ApiResponse<UserResponse> 반환" },
+      ]
+    },
+    {
+      id:"login", name:"로그인", tag:"auth", icon:"&#128273;",
+      steps:[
+        { from:"client",   to:"security",  desc:"POST /api/v1/auth/login (permitAll)" },
+        { from:"security", to:"auth",      desc:"AuthController.login() 진입" },
+        { from:"auth",     to:"redis",     desc:"LoginRateLimiter — username+IP 브루트포스 방어 (15분/5회)" },
+        { from:"auth",     to:"auth",      desc:"AuthenticationManager 자격증명 검증" },
+        { from:"auth",     to:"redis",     desc:"LoginRateLimiter.reset() — 성공 시 카운터 초기화" },
+        { from:"auth",     to:"auth",      desc:"JwtTokenProvider.createToken() — Access Token 생성" },
+        { from:"auth",     to:"redis",     desc:"RefreshTokenStore.issue() — UUID, Redis 30일 TTL" },
+        { from:"auth",     to:"client",    desc:"LoginResponse(accessToken, refreshToken) 반환" },
+      ]
+    },
+    {
+      id:"logout", name:"로그아웃", tag:"auth", icon:"&#128682;",
+      steps:[
+        { from:"client",   to:"security",  desc:"POST /api/v1/auth/logout (Bearer Token)" },
+        { from:"security", to:"security",  desc:"JwtAuthenticationFilter — 토큰 검증 + SecurityContext" },
+        { from:"security", to:"auth",      desc:"AuthController.logout()" },
+        { from:"auth",     to:"redis",     desc:"JwtBlacklist.revoke() — blacklist:jwt:{jti} (남은 TTL)" },
+        { from:"auth",     to:"redis",     desc:"RefreshTokenStore.revoke() — 토큰 삭제" },
+        { from:"auth",     to:"client",    desc:"로그아웃 완료" },
+      ]
+    },
+    {
+      id:"token-refresh", name:"토큰 갱신", tag:"auth", icon:"&#128260;",
+      steps:[
+        { from:"client",   to:"security",  desc:"POST /api/v1/auth/refresh (permitAll)" },
+        { from:"security", to:"auth",      desc:"AuthController.refresh()" },
+        { from:"auth",     to:"redis",     desc:"RefreshTokenStore.consume() — 토큰 소비 + 탈취 감지" },
+        { from:"auth",     to:"redis",     desc:"consumed 마커 존재 시 → revokeAll() (전체 세션 무효화)" },
+        { from:"auth",     to:"auth",      desc:"새 Access Token 발급" },
+        { from:"auth",     to:"redis",     desc:"새 Refresh Token 발급 (Rotation)" },
+        { from:"auth",     to:"client",    desc:"LoginResponse 반환" },
+      ]
+    },
+    {
+      id:"browse-products", name:"상품 목록 조회", tag:"product", icon:"&#128270;",
+      steps:[
+        { from:"client",   to:"security",  desc:"GET /api/v1/products (permitAll)" },
+        { from:"security", to:"product",   desc:"ProductController.getList()" },
+        { from:"product",  to:"redis",     desc:"@Cacheable(\"products\") — 캐시 히트 시 바로 반환 (10분 TTL)" },
+        { from:"product",  to:"product",   desc:"hasSearchCondition() → ES 검색 or MySQL 조회" },
+        { from:"product",  to:"client",    desc:"ApiResponse<Page<ProductResponse>> 반환" },
+      ]
+    },
+    {
+      id:"view-product", name:"상품 상세 조회", tag:"product", icon:"&#128196;",
+      steps:[
+        { from:"client",   to:"security",  desc:"GET /api/v1/products/{id} (permitAll)" },
+        { from:"security", to:"product",   desc:"ProductController.getById()" },
+        { from:"product",  to:"redis",     desc:"@Cacheable — 캐시 조회" },
+        { from:"product",  to:"inventory", desc:"InventoryRepository — variant별 재고 수량" },
+        { from:"product",  to:"redis",     desc:"RecentlyViewedService.record() — Sorted Set (인증 사용자)" },
+        { from:"product",  to:"client",    desc:"ApiResponse<ProductDetailResponse> 반환" },
+      ]
+    },
+    {
+      id:"add-to-cart", name:"장바구니 추가", tag:"order", icon:"&#128722;",
+      steps:[
+        { from:"client",   to:"security",  desc:"POST /api/v1/cart/items (Bearer Token)" },
+        { from:"security", to:"cart",      desc:"CartController.addItem()" },
+        { from:"cart",     to:"inventory", desc:"InventoryRepository — available 수량 체크" },
+        { from:"cart",     to:"cart",      desc:"기존 아이템 수량 합산 또는 새 CartItem 생성" },
+        { from:"cart",     to:"client",    desc:"ApiResponse<CartResponse> 반환" },
+      ]
+    },
+    {
+      id:"create-order", name:"주문 생성", tag:"order", icon:"&#128203;",
+      steps:[
+        { from:"client",   to:"security",  desc:"POST /api/v1/orders (Bearer Token)" },
+        { from:"security", to:"order",     desc:"OrderController.create()" },
+        { from:"order",    to:"order",     desc:"멱등성 키 중복 체크" },
+        { from:"order",    to:"auth",      desc:"DeliveryAddressService — 배송지 소유권 검증" },
+        { from:"order",    to:"inventory", desc:"InventoryService.reserve() — @DistributedLock + PESSIMISTIC_WRITE" },
+        { from:"inventory",to:"redis",     desc:"Redisson 분산 락: lock:inventory:{variantId}" },
+        { from:"order",    to:"coupon",    desc:"CouponService.applyCoupon() — 쿠폰 할인 적용" },
+        { from:"order",    to:"point",     desc:"PointService.use() — 포인트 차감" },
+        { from:"order",    to:"outbox",    desc:"OutboxEventStore.save(OrderCreatedEvent)" },
+        { from:"order",    to:"cart",      desc:"주문된 CartItem 삭제" },
+        { from:"order",    to:"client",    desc:"ApiResponse<OrderResponse> (PENDING)" },
+      ]
+    },
+    {
+      id:"payment-confirm", name:"결제 확정", tag:"payment", icon:"&#128179;",
+      steps:[
+        { from:"client",   to:"security",  desc:"POST /api/v1/payments/confirm (Bearer Token)" },
+        { from:"security", to:"payment",   desc:"PaymentController.confirm()" },
+        { from:"payment",  to:"redis",     desc:"PaymentIdempotencyManager.tryAcquire() — SETNX (60초)" },
+        { from:"payment",  to:"payment",   desc:"[Short TX] loadAndValidateForConfirm() — 주문·금액 검증" },
+        { from:"payment",  to:"payment",   desc:"[TX 외부] TossPaymentsClient.confirm() — 외부 API" },
+        { from:"payment",  to:"order",     desc:"OrderPaymentService.confirm() — CONFIRMED 전이" },
+        { from:"order",    to:"inventory", desc:"InventoryService.confirmAllocation() — reserved→allocated" },
+        { from:"payment",  to:"outbox",    desc:"Outbox: PaymentConfirmed, ShipmentCreate, PointEarn" },
+        { from:"payment",  to:"redis",     desc:"멱등성 결과 캐싱 (24h TTL)" },
+        { from:"payment",  to:"client",    desc:"ApiResponse<PaymentResponse> 반환" },
+      ]
+    },
+    {
+      id:"cancel-order", name:"주문 취소 (PENDING)", tag:"order", icon:"&#10060;",
+      steps:[
+        { from:"client",   to:"security",  desc:"POST /api/v1/orders/{id}/cancel (Bearer Token)" },
+        { from:"security", to:"order",     desc:"OrderController.cancel()" },
+        { from:"order",    to:"order",     desc:"소유권 + PENDING 상태 검증" },
+        { from:"order",    to:"inventory", desc:"InventoryService.releaseReservation() — reserved -= qty" },
+        { from:"order",    to:"coupon",    desc:"CouponService.releaseCoupon() — 쿠폰 반환" },
+        { from:"order",    to:"point",     desc:"PointService.refundByOrder() — 포인트 환불" },
+        { from:"order",    to:"point",     desc:"PointService.expirePending() — 적립 예정 만료" },
+        { from:"order",    to:"outbox",    desc:"Outbox: OrderCancelledEvent" },
+        { from:"order",    to:"client",    desc:"ApiResponse<OrderResponse> (CANCELLED)" },
+      ]
+    },
+    {
+      id:"cancel-order-item", name:"부분 취소", tag:"order", icon:"&#9986;",
+      steps:[
+        { from:"client",   to:"security",  desc:"POST /api/v1/orders/{id}/items/cancel" },
+        { from:"security", to:"order",     desc:"OrderController.cancelItems()" },
+        { from:"order",    to:"order",     desc:"@DistributedLock(lock:order-item-cancel:{orderId})" },
+        { from:"order",    to:"inventory", desc:"InventoryService.releaseAllocation() — allocated -= qty" },
+        { from:"order",    to:"payment",   desc:"PaymentService.cancelPartialForItems() — Toss 부분 환불" },
+        { from:"order",    to:"point",     desc:"PointService.refundPartial() — 비례 포인트 환불" },
+        { from:"order",    to:"client",    desc:"ApiResponse (PARTIAL_CANCELLED)" },
+      ]
+    },
+    {
+      id:"payment-cancel", name:"결제 취소 (환불)", tag:"payment", icon:"&#128181;",
+      steps:[
+        { from:"client",   to:"security",  desc:"POST /api/v1/payments/{id}/cancel" },
+        { from:"security", to:"payment",   desc:"PaymentController.cancel()" },
+        { from:"payment",  to:"redis",     desc:"멱등성 중복 취소 방지" },
+        { from:"payment",  to:"payment",   desc:"TossPaymentsClient.cancel() — Toss API" },
+        { from:"payment",  to:"order",     desc:"OrderPaymentService.refund() — CANCELLED" },
+        { from:"order",    to:"inventory", desc:"InventoryService.releaseAllocation()" },
+        { from:"order",    to:"coupon",    desc:"CouponService.releaseCoupon()" },
+        { from:"order",    to:"point",     desc:"PointService.refundByOrder()" },
+        { from:"payment",  to:"client",    desc:"ApiResponse<PaymentResponse> (CANCELLED)" },
+      ]
+    },
+    {
+      id:"outbox-relay", name:"Outbox 릴레이", tag:"order", icon:"&#128228;",
+      steps:[
+        { from:"outbox",   to:"redis",        desc:"@DistributedLock(lock:outbox:relay, skipOnFailure=true)" },
+        { from:"outbox",   to:"outbox",       desc:"OutboxEventProcessor.processOne() — REQUIRES_NEW TX" },
+        { from:"outbox",   to:"shipment",     desc:"SHIPMENT_CREATE → ShipmentService.createForOrder()" },
+        { from:"outbox",   to:"point",        desc:"POINT_EARN → PointService.earn() (PENDING)" },
+        { from:"outbox",   to:"notification", desc:"NotificationEventListener — 알림 생성" },
+        { from:"outbox",   to:"email",        desc:"EmailEventListener — 이메일 발송 (비동기)" },
+      ]
+    },
+    {
+      id:"shipment-flow", name:"배송 처리", tag:"admin", icon:"&#128666;",
+      steps:[
+        { from:"outbox",   to:"shipment",     desc:"Outbox → ShipmentService.createForOrder() — PREPARING" },
+        { from:"client",   to:"security",     desc:"PATCH /api/v1/shipments/{id}/ship (ADMIN)" },
+        { from:"security", to:"shipment",     desc:"ShipmentController.ship() — SHIPPED 전이" },
+        { from:"shipment", to:"outbox",       desc:"Outbox: ShipmentShippedEvent → 알림" },
+        { from:"client",   to:"shipment",     desc:"PATCH deliver (ADMIN) — DELIVERED" },
+        { from:"shipment", to:"outbox",       desc:"Outbox: ShipmentDeliveredEvent" },
+        { from:"outbox",   to:"point",        desc:"PointService.confirmPending() — 적립 확정" },
+        { from:"outbox",   to:"notification", desc:"배송 완료 알림" },
+      ]
+    },
+    {
+      id:"inventory-receive", name:"입고 처리", tag:"inventory", icon:"&#128230;",
+      steps:[
+        { from:"client",    to:"security",    desc:"POST /api/v1/inventory/variants/{id}/receive (ADMIN)" },
+        { from:"security",  to:"inventory",   desc:"InventoryController.receive()" },
+        { from:"inventory", to:"redis",       desc:"@DistributedLock(lock:inventory:{variantId})" },
+        { from:"inventory", to:"inventory",   desc:"onHand += qty, InventoryTransaction 기록" },
+        { from:"inventory", to:"redis",       desc:"@CacheEvict — 캐시 무효화" },
+        { from:"inventory", to:"notification",desc:"저재고 해소 → RestockEvent → 알림" },
+        { from:"inventory", to:"email",       desc:"재입고 구독자 이메일 발송" },
+      ]
+    },
+    {
+      id:"order-expiry", name:"주문 만료 자동 취소", tag:"order", icon:"&#9200;",
+      steps:[
+        { from:"order",    to:"order",     desc:"OrderExpiryScheduler (5분 주기) — PENDING 30분 초과 조회" },
+        { from:"order",    to:"order",     desc:"PAYMENT_IN_PROGRESS 10분 초과 → PENDING 복원" },
+        { from:"order",    to:"inventory", desc:"InventoryService.releaseReservation() — reserved 해제" },
+        { from:"order",    to:"coupon",    desc:"CouponService.releaseCoupon()" },
+        { from:"order",    to:"point",     desc:"PointService.refundByOrder()" },
+        { from:"order",    to:"outbox",    desc:"Outbox: OrderCancelledEvent" },
+      ]
+    },
+    {
+      id:"admin-dashboard", name:"관리자 대시보드", tag:"admin", icon:"&#128202;",
+      steps:[
+        { from:"client",   to:"security",  desc:"GET /api/v1/admin/dashboard (ADMIN)" },
+        { from:"security", to:"security",  desc:"ROLE_ADMIN 권한 검증" },
+        { from:"security", to:"admin",     desc:"AdminController.getDashboard()" },
+        { from:"admin",    to:"redis",     desc:"@Cacheable(\"dashboard\") — 5분 캐시" },
+        { from:"admin",    to:"order",     desc:"주문 통계 조회" },
+        { from:"admin",    to:"inventory", desc:"저재고 상품 목록" },
+        { from:"admin",    to:"client",    desc:"ApiResponse<DashboardResponse> 반환" },
+      ]
+    },
+    {
+      id:"write-review", name:"리뷰 작성", tag:"product", icon:"&#9997;",
+      steps:[
+        { from:"client",   to:"security",  desc:"POST /api/v1/products/{id}/reviews" },
+        { from:"security", to:"review",    desc:"ReviewController.create()" },
+        { from:"review",   to:"order",     desc:"실구매자 검증 (OrderRepository)" },
+        { from:"review",   to:"review",    desc:"Review 엔티티 저장" },
+        { from:"review",   to:"redis",     desc:"@CacheEvict(\"products\") — 별점 반영" },
+        { from:"review",   to:"client",    desc:"ApiResponse<ReviewResponse> 반환" },
+      ]
+    },
+  ]
+};
+
+const TAG_CONFIG = {
+  auth:      { label:"Auth",      css:"g-auth" },
+  order:     { label:"Order",     css:"g-order" },
+  payment:   { label:"Payment",   css:"g-payment" },
+  product:   { label:"Product",   css:"g-product" },
+  inventory: { label:"Inventory", css:"g-inventory" },
+  admin:     { label:"Admin",     css:"g-admin" },
+};
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let currentFlow = null;
+let currentStep = -1; // -1 = all steps
+
+// ═══════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════
+function renderSidebar() {
+  const el = document.getElementById('sidebar');
+  const groups = {};
+  FLOW_DATA.flows.forEach(f => { (groups[f.tag] ??= []).push(f); });
+  el.innerHTML = Object.entries(groups).map(([tag, flows]) => {
+    const cfg = TAG_CONFIG[tag] || { label:tag, css:'' };
+    return `<div class="flow-group-title ${cfg.css}">${cfg.label}</div>` +
+      flows.map(f => `<button class="flow-btn" data-flow="${f.id}" onclick="selectFlow('${f.id}')">
+        <span class="flow-icon">${f.icon||''}</span>${f.name}
+      </button>`).join('');
+  }).join('');
+}
+
+function renderDiagram() {
+  const el = document.getElementById('diagram');
+  el.innerHTML = '<svg class="arrows" id="arrowsSvg"></svg>' +
+    FLOW_DATA.layers.map(layer => `
+      <div class="layer-row">
+        <div class="layer-label">${layer.name}</div>
+        <div class="layer-cards">
+          ${layer.pkgs.map(id => {
+            const p = FLOW_DATA.packages[id];
+            return `<div class="pkg" id="pkg-${id}">
+              <div class="pkg-header">
+                <span class="pkg-dot" style="background:${p.color}"></span>
+                <span class="pkg-name">${p.label}</span>
+              </div>
+              <ul class="pkg-classes">${p.classes.map(c => `<li data-class="${c}">${c}</li>`).join('')}</ul>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    `).join('');
+}
+
+// ═══════════════════════════════════════════════════
+// FLOW SELECTION & STEP NAV
+// ═══════════════════════════════════════════════════
+function selectFlow(flowId) {
+  currentFlow = FLOW_DATA.flows.find(f => f.id === flowId);
+  if (!currentFlow) return;
+  currentStep = -1;
+
+  document.querySelectorAll('.flow-btn').forEach(b => b.classList.toggle('active', b.dataset.flow === flowId));
+
+  // Open panel
+  const panel = document.getElementById('stepPanel');
+  panel.classList.add('open');
+  document.getElementById('panelTitle').textContent = currentFlow.name;
+
+  renderSteps();
+  applyHighlights();
+}
+
+function renderSteps() {
+  const tl = document.getElementById('stepsTimeline');
+  tl.innerHTML = currentFlow.steps.map((s, i) => `
+    <div class="step-row${currentStep === -1 ? ' active' : (i === currentStep ? ' active' : (i < currentStep ? ' past' : ''))}"
+         data-idx="${i}" onclick="goToStep(${i})">
+      <div class="step-badge">${i+1}</div>
+      <div class="step-body">
+        <div class="step-route">${pkgLabel(s.from)} → ${pkgLabel(s.to)}</div>
+        <div class="step-desc">${s.desc}</div>
+      </div>
+    </div>
+  `).join('');
+  updateCounter();
+}
+
+function updateCounter() {
+  const c = document.getElementById('stepCounter');
+  if (currentStep === -1) c.textContent = `All (${currentFlow.steps.length})`;
+  else c.textContent = `${currentStep+1} / ${currentFlow.steps.length}`;
+  document.getElementById('btnPrev').disabled = currentStep <= 0;
+  document.getElementById('btnNext').disabled = currentStep >= currentFlow.steps.length - 1;
+}
+
+function goToStep(idx) {
+  if (!currentFlow) return;
+  currentStep = idx;
+  renderSteps();
+  applyHighlights();
+  // Scroll step into view
+  const row = document.querySelector(`.step-row[data-idx="${idx}"]`);
+  if (row) row.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function stepNav(dir) {
+  if (!currentFlow) return;
+  if (dir === 0) { currentStep = -1; renderSteps(); applyHighlights(); return; }
+  const next = currentStep + dir;
+  if (next < 0 || next >= currentFlow.steps.length) return;
+  goToStep(next);
+}
+
+// ═══════════════════════════════════════════════════
+// HIGHLIGHTS + ARROWS
+// ═══════════════════════════════════════════════════
+function applyHighlights() {
+  if (!currentFlow) return;
+
+  const steps = currentStep === -1 ? currentFlow.steps : [currentFlow.steps[currentStep]];
+  const involved = new Set();
+  steps.forEach(s => { involved.add(s.from); involved.add(s.to); });
+
+  // Active pair for single-step mode
+  const activePair = currentStep !== -1
+    ? [currentFlow.steps[currentStep].from, currentFlow.steps[currentStep].to]
+    : null;
+
+  document.querySelectorAll('.pkg').forEach(el => {
+    const id = el.id.replace('pkg-','');
+    const isInvolved = involved.has(id);
+    el.classList.toggle('highlighted', isInvolved && !activePair);
+    el.classList.toggle('dimmed', !isInvolved);
+    el.classList.toggle('step-active', !!activePair && (id === activePair[0] || id === activePair[1]));
+    el.querySelectorAll('li').forEach(li => li.classList.remove('hi'));
+  });
+
+  // Highlight relevant classes
+  steps.forEach(s => {
+    document.querySelectorAll('.pkg-classes li').forEach(li => {
+      const cls = li.dataset.class;
+      if (cls && s.desc.includes(cls)) li.classList.add('hi');
+    });
+  });
+
+  drawArrows(steps);
+}
+
+function drawArrows(steps) {
+  const svg = document.getElementById('arrowsSvg');
+  svg.innerHTML = '';
+
+  // Defs
+  const defs = svgEl('defs');
+  ['arrow-accent','arrow-white'].forEach(id => {
+    const m = svgEl('marker', { id, markerWidth:10, markerHeight:7, refX:9, refY:3.5, orient:'auto' });
+    m.appendChild(svgEl('polygon', { points:'0 0, 10 3.5, 0 7', fill: id === 'arrow-white' ? '#fff' : 'var(--accent)' }));
+    defs.appendChild(m);
+  });
+  // Glow filter
+  const filter = svgEl('filter', { id:'glow', x:'-20%', y:'-20%', width:'140%', height:'140%' });
+  const blur = svgEl('feGaussianBlur', { stdDeviation:'3', result:'blur' });
+  const merge = svgEl('feMerge');
+  merge.appendChild(svgEl('feMergeNode', { in:'blur' }));
+  merge.appendChild(svgEl('feMergeNode', { in:'SourceGraphic' }));
+  filter.appendChild(blur); filter.appendChild(merge);
+  defs.appendChild(filter);
+  svg.appendChild(defs);
+
+  const wrapRect = document.getElementById('diagramWrap').getBoundingClientRect();
+  const scrollX = document.getElementById('diagramWrap').scrollLeft;
+  const scrollY = document.getElementById('diagramWrap').scrollTop;
+
+  const seen = new Set();
+  const isSingle = currentStep !== -1;
+
+  steps.forEach((step, i) => {
+    if (step.from === step.to) return;
+    const key = `${step.from}-${step.to}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    const fromEl = document.getElementById(`pkg-${step.from}`);
+    const toEl = document.getElementById(`pkg-${step.to}`);
+    if (!fromEl || !toEl) return;
+
+    const fr = fromEl.getBoundingClientRect();
+    const tr = toEl.getBoundingClientRect();
+    const x1 = fr.left + fr.width/2 - wrapRect.left + scrollX;
+    const y1 = fr.top + fr.height/2 - wrapRect.top + scrollY;
+    const x2 = tr.left + tr.width/2 - wrapRect.left + scrollX;
+    const y2 = tr.top + tr.height/2 - wrapRect.top + scrollY;
+
+    // Curved path
+    const dx = x2 - x1, dy = y2 - y1;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const curve = Math.min(dist * 0.2, 60);
+    const mx = (x1+x2)/2, my = (y1+y2)/2;
+    // Perpendicular offset for curve
+    const nx = -dy/dist * curve, ny = dx/dist * curve;
+    const cx = mx + nx, cy = my + ny;
+
+    const path = svgEl('path', {
+      d: `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`,
+      fill: 'none',
+      stroke: isSingle ? '#fff' : 'var(--accent)',
+      'stroke-width': isSingle ? 2.5 : 1.5,
+      'stroke-opacity': isSingle ? 0.9 : 0.4,
+      'marker-end': `url(#${isSingle ? 'arrow-white' : 'arrow-accent'})`,
+      filter: isSingle ? 'url(#glow)' : 'none',
+    });
+
+    // Animated dash for single step
+    if (isSingle) {
+      path.setAttribute('stroke-dasharray', '8 4');
+      path.innerHTML = `<animate attributeName="stroke-dashoffset" from="24" to="0" dur="0.8s" repeatCount="indefinite"/>`;
+    }
+
+    svg.appendChild(path);
+
+    // Step number badge on arrow midpoint
+    if (currentStep === -1) {
+      const stepIdx = currentFlow.steps.findIndex(s => s.from === step.from && s.to === step.to);
+      if (stepIdx !== -1) {
+        const g = svgEl('g');
+        g.appendChild(svgEl('circle', { cx:cx, cy:cy, r:10, fill:'var(--surface)', stroke:'var(--accent)', 'stroke-width':1 }));
+        const txt = svgEl('text', { x:cx, y:cy+4, 'text-anchor':'middle', fill:'var(--accent)', 'font-size':'10', 'font-weight':'700', 'font-family':'inherit' });
+        txt.textContent = stepIdx + 1;
+        g.appendChild(txt);
+        svg.appendChild(g);
+      }
+    }
+  });
+}
+
+function svgEl(tag, attrs={}) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+function pkgLabel(id) { return FLOW_DATA.packages[id]?.label || id; }
+
+function resetView() {
+  currentFlow = null; currentStep = -1;
+  document.querySelectorAll('.flow-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.pkg').forEach(el => {
+    el.classList.remove('highlighted','dimmed','step-active');
+    el.querySelectorAll('li').forEach(li => li.classList.remove('hi'));
+  });
+  document.getElementById('stepPanel').classList.remove('open');
+  document.getElementById('arrowsSvg').innerHTML = '';
+}
+
+// ═══════════════════════════════════════════════════
+// KEYBOARD
+// ═══════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (!currentFlow) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); stepNav(1); }
+  else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); stepNav(-1); }
+  else if (e.key === 'Escape') { resetView(); }
+  else if (e.key === 'Home') { e.preventDefault(); goToStep(0); }
+  else if (e.key === 'End') { e.preventDefault(); goToStep(currentFlow.steps.length - 1); }
+  else if (e.key === 'a' || e.key === 'A') { stepNav(0); }
+});
+
+// Redraw on resize / scroll
+const redraw = () => { if (currentFlow) applyHighlights(); };
+window.addEventListener('resize', redraw);
+document.getElementById('diagramWrap').addEventListener('scroll', redraw);
+
+// Init
+renderSidebar();
+renderDiagram();
+</script>
+</body>
+</html>
