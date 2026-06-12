@@ -95,7 +95,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
         Payment payment = createDonePayment(orderId);
         Refund refund = createCompletedRefund(payment.getId(), orderId, userId);
 
-        mockMvc.perform(get("/api/refunds/" + refund.getId())
+        mockMvc.perform(get("/api/v1/refunds/" + refund.getId())
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(refund.getId()))
@@ -108,7 +108,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
     void getById_notFound() throws Exception {
         String userToken = signupAndLogin("user2", "Password1!", "u2@test.com");
 
-        mockMvc.perform(get("/api/refunds/99999")
+        mockMvc.perform(get("/api/v1/refunds/99999")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isNotFound());
     }
@@ -123,7 +123,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
         Payment payment = createDonePayment(orderId);
         createCompletedRefund(payment.getId(), orderId, userId);
 
-        mockMvc.perform(get("/api/refunds/payments/" + payment.getId())
+        mockMvc.perform(get("/api/v1/refunds/payments/" + payment.getId())
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].paymentId").value(payment.getId()))
@@ -142,7 +142,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
         createCompletedRefund(payment.getId(), orderId, userId);
 
         // 추가 부분 취소 요청 — REFUND_ALREADY_EXISTS(409)가 아닌 다른 응답(Toss 연동 실패)
-        int status = mockMvc.perform(post("/api/refunds")
+        int status = mockMvc.perform(post("/api/v1/refunds")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -164,7 +164,7 @@ class RefundIntegrationTest extends AbstractIntegrationTest {
         createCompletedRefund(payment.getId(), orderId, userId);
 
         // 동일 paymentId로 환불 재요청 → 409
-        mockMvc.perform(post("/api/refunds")
+        mockMvc.perform(post("/api/v1/refunds")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(

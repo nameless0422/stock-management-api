@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @Tag(name = "배송", description = "배송비 정책 조회")
 @RestController
-@RequestMapping("/api/shipping")
+@RequestMapping("/api/v1/shipping")
 @RequiredArgsConstructor
 public class ShippingPolicyController {
 

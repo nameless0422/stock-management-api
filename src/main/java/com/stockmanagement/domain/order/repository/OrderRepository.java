@@ -35,7 +35,7 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
      * 주문과 항목을 한 번의 쿼리로 조회한다 (N+1 방지).
      * 단건 상세 조회 시 사용한다.
      */
-    @Query("SELECT o FROM Order o JOIN FETCH o.items i JOIN FETCH i.product WHERE o.id = :id")
+    @Query("SELECT o FROM Order o JOIN FETCH o.items i JOIN FETCH i.product JOIN FETCH i.variant WHERE o.id = :id")
     Optional<Order> findByIdWithItems(@Param("id") Long id);
 
     /**
@@ -45,7 +45,7 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
-    @Query("SELECT o FROM Order o JOIN FETCH o.items i JOIN FETCH i.product WHERE o.id = :id")
+    @Query("SELECT o FROM Order o JOIN FETCH o.items i JOIN FETCH i.product JOIN FETCH i.variant WHERE o.id = :id")
     Optional<Order> findByIdWithItemsForUpdate(@Param("id") Long id);
 
     /**
@@ -54,8 +54,14 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
      */
     Page<Order> findByUserId(Long userId, Pageable pageable);
 
+    /** 커서 기반 조회 — 첫 페이지. */
+    List<Order> findByUserIdOrderByIdDesc(Long userId, Pageable pageable);
+
+    /** 커서 기반 조회 — 다음 페이지 (id < lastId). */
+    List<Order> findByUserIdAndIdLessThanOrderByIdDesc(Long userId, Long lastId, Pageable pageable);
+
     /** 여러 주문을 항목+상품 포함하여 한 번에 조회한다 (결제 목록 주문 요약용). */
-    @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.items i LEFT JOIN FETCH i.product WHERE o.id IN :ids")
+    @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.items i LEFT JOIN FETCH i.product LEFT JOIN FETCH i.variant WHERE o.id IN :ids")
     List<Order> findByIdsWithItems(@Param("ids") List<Long> ids);
 
     /** 주문 목록 전체 페이징 조회 (관리자용) */
@@ -123,41 +129,6 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
            "AND o.status = com.stockmanagement.domain.order.entity.OrderStatus.CONFIRMED")
     boolean existsPurchaseByUserIdAndProductId(@Param("userId") Long userId,
                                                @Param("productId") Long productId);
-
-    // ===== 커서 기반 페이지네이션 (사용자 주문 목록 스크롤) =====
-
-    /**
-     * 사용자 주문 목록을 커서 기반으로 최신순 조회한다 (첫 페이지).
-     *
-     * <p>COUNT 쿼리 없이 LIMIT만 사용하여 오프셋 방식 대비 일정한 응답 속도를 보장한다.
-     *
-     * @param userId 조회 대상 사용자 ID
-     * @param status 주문 상태 필터 (null이면 전체)
-     * @param pageable {@code PageRequest.of(0, size+1)} — LIMIT 제어용
-     */
-    @Query("SELECT o FROM Order o WHERE o.userId = :userId " +
-           "AND (:status IS NULL OR o.status = :status) " +
-           "ORDER BY o.id DESC")
-    List<Order> findCursorByUserId(@Param("userId") Long userId,
-                                   @Param("status") OrderStatus status,
-                                   Pageable pageable);
-
-    /**
-     * 사용자 주문 목록을 커서 기반으로 최신순 조회한다 (커서 이후).
-     *
-     * @param userId  조회 대상 사용자 ID
-     * @param status  주문 상태 필터 (null이면 전체)
-     * @param lastId  이전 페이지 마지막 항목의 ID (이 ID 미만부터 조회)
-     * @param pageable {@code PageRequest.of(0, size+1)} — LIMIT 제어용
-     */
-    @Query("SELECT o FROM Order o WHERE o.userId = :userId " +
-           "AND (:status IS NULL OR o.status = :status) " +
-           "AND o.id < :lastId " +
-           "ORDER BY o.id DESC")
-    List<Order> findCursorByUserIdAfter(@Param("userId") Long userId,
-                                        @Param("status") OrderStatus status,
-                                        @Param("lastId") Long lastId,
-                                        Pageable pageable);
 
     // ===== 일별 통계 집계 (DailyOrderStatsScheduler) =====
 

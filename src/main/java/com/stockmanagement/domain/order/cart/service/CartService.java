@@ -18,7 +18,8 @@ import com.stockmanagement.domain.inventory.entity.StockStatus;
 import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
-import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.product.entity.ProductVariant;
+import com.stockmanagement.domain.product.repository.ProductVariantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -48,7 +49,7 @@ import java.util.stream.Collectors;
 public class CartService {
 
     private final CartRepository cartRepository;
-    private final ProductRepository productRepository;
+    private final ProductVariantRepository variantRepository;
     private final InventoryRepository inventoryRepository;
     private final OrderCommandService orderCommandService;
     private final SystemSettingService systemSettingService;
@@ -60,33 +61,37 @@ public class CartService {
             return CartResponse.from(userId, items);
         }
         int threshold = systemSettingService.getLowStockThreshold();
-        List<Long> productIds = items.stream().map(i -> i.getProduct().getId()).toList();
-        Map<Long, Integer> availabilityMap = inventoryRepository.findAllByProductIdIn(productIds).stream()
-                .collect(Collectors.toMap(inv -> inv.getProduct().getId(), Inventory::getAvailable));
+        List<Long> variantIds = items.stream().map(i -> i.getVariant().getId()).toList();
+        Map<Long, Integer> availabilityMap = inventoryRepository.findAllByVariantIdIn(variantIds).stream()
+                .collect(Collectors.toMap(inv -> inv.getVariant().getId(), Inventory::getAvailable));
         Map<Long, StockStatus> stockStatusMap = availabilityMap.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> StockStatus.of(e.getValue(), threshold)));
         return CartResponse.from(userId, items, availabilityMap, stockStatusMap);
     }
 
     /**
-     * 상품을 장바구니에 추가하거나 수량을 변경한다.
+     * 상품 변형을 장바구니에 추가하거나 수량을 변경한다.
      *
-     * <p>동일 상품이 이미 담겨 있으면 요청 수량으로 덮어쓴다(교체).
+     * <p>동일 변형이 이미 담겨 있으면 요청 수량으로 덮어쓴다(교체).
      * 없으면 새 CartItem을 추가한다.
-     * 전체 장바구니 재조회 없이 영향받은 단건만 반환하여 불필요한 쿼리를 최소화한다.
      */
     @Transactional
     public CartItemResponse addOrUpdate(Long userId, CartItemRequest request) {
-        Product product = productRepository.findById(request.getProductId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        ProductVariant variant = variantRepository.findByIdWithProduct(request.getVariantId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.VARIANT_NOT_FOUND));
 
-        // 판매 중인 상품만 장바구니에 담을 수 있다
+        Product product = variant.getProduct();
+
+        // 판매 중인 상품/변형만 장바구니에 담을 수 있다
         if (product.getStatus() != ProductStatus.ACTIVE) {
             throw new BusinessException(ErrorCode.PRODUCT_NOT_AVAILABLE);
         }
+        if (variant.getStatus() != ProductStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.VARIANT_NOT_AVAILABLE);
+        }
 
         Optional<CartItem> existing =
-                cartRepository.findByUserIdAndProductId(userId, product.getId());
+                cartRepository.findByUserIdAndVariantId(userId, variant.getId());
 
         CartItem cartItem;
         if (existing.isPresent()) {
@@ -97,19 +102,20 @@ public class CartService {
                 cartItem = cartRepository.saveAndFlush(CartItem.builder()
                         .userId(userId)
                         .product(product)
+                        .variant(variant)
                         .quantity(request.getQuantity())
-                        .savedPrice(product.getPrice())
+                        .savedPrice(variant.getPrice())
                         .build());
             } catch (DataIntegrityViolationException e) {
-                // 동시 요청으로 UK(user_id, product_id) 충돌 — 재조회 후 수량 업데이트
-                cartItem = cartRepository.findByUserIdAndProductId(userId, product.getId())
+                // 동시 요청으로 UK(user_id, variant_id) 충돌 — 재조회 후 수량 업데이트
+                cartItem = cartRepository.findByUserIdAndVariantId(userId, variant.getId())
                         .orElseThrow(() -> new BusinessException(ErrorCode.CART_ITEM_NOT_FOUND));
                 cartItem.updateQuantity(request.getQuantity());
             }
         }
 
         // 단건 재고 조회 (전체 장바구니 리로드 불필요)
-        Integer available = inventoryRepository.findByProductId(product.getId())
+        Integer available = inventoryRepository.findByVariantId(variant.getId())
                 .map(Inventory::getAvailable)
                 .orElse(null);
         StockStatus stockStatus = available != null
@@ -118,13 +124,13 @@ public class CartService {
     }
 
     /**
-     * 특정 상품을 장바구니에서 제거한다.
+     * 특정 변형을 장바구니에서 제거한다.
      *
-     * @throws BusinessException 장바구니에 해당 상품이 없는 경우
+     * @throws BusinessException 장바구니에 해당 변형이 없는 경우
      */
     @Transactional
-    public void removeItem(Long userId, Long productId) {
-        CartItem item = cartRepository.findByUserIdAndProductId(userId, productId)
+    public void removeItem(Long userId, Long variantId) {
+        CartItem item = cartRepository.findByUserIdAndVariantId(userId, variantId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CART_ITEM_NOT_FOUND));
         cartRepository.delete(item);
     }
@@ -141,14 +147,10 @@ public class CartService {
      * <p>처리 흐름:
      * <ol>
      *   <li>장바구니가 비어 있으면 예외
-     *   <li>현재 상품 가격 기준으로 {@link OrderCreateRequest} 구성
+     *   <li>현재 variant 가격 기준으로 {@link OrderCreateRequest} 구성
      *   <li>{@link OrderCommandService#create} 호출 → 재고 예약 + 주문 생성
-     *   <li>주문 생성 성공 시 장바구니 비우기
+     *   <li>주문 생성 성공 시 장바구니에서 결제된 항목 제거
      * </ol>
-     *
-     * @param userId           주문자 ID
-     * @param checkoutRequest  멱등성 키 포함
-     * @return 생성된 주문 응답
      */
     @Transactional
     public OrderResponse checkout(Long userId, CartCheckoutRequest checkoutRequest) {
@@ -157,12 +159,12 @@ public class CartService {
             throw new BusinessException(ErrorCode.CART_EMPTY);
         }
 
-        // selectedProductIds가 없으면 전체, 있으면 해당 상품만 결제
-        List<Long> selected = checkoutRequest.getSelectedProductIds();
+        // selectedVariantIds가 없으면 전체, 있으면 해당 변형만 결제
+        List<Long> selected = checkoutRequest.getSelectedVariantIds();
         List<CartItem> items = (selected == null || selected.isEmpty())
                 ? allItems
                 : allItems.stream()
-                        .filter(i -> selected.contains(i.getProduct().getId()))
+                        .filter(i -> selected.contains(i.getVariant().getId()))
                         .toList();
 
         if (items.isEmpty()) {
@@ -172,8 +174,9 @@ public class CartService {
         List<OrderItemRequest> orderItems = items.stream()
                 .map(item -> OrderItemRequest.of(
                         item.getProduct().getId(),
+                        item.getVariant().getId(),
                         item.getQuantity(),
-                        item.getProduct().getPrice()))
+                        item.getVariant().getPrice()))
                 .toList();
 
         OrderCreateRequest orderRequest = OrderCreateRequest.of(
@@ -183,11 +186,11 @@ public class CartService {
 
         OrderResponse orderResponse = orderCommandService.create(orderRequest, userId);
 
-        // 결제한 상품만 장바구니에서 제거 (선택 결제 시 나머지 유지)
-        Set<Long> checkedOutProductIds = items.stream()
-                .map(i -> i.getProduct().getId())
+        // 결제한 변형만 장바구니에서 제거 (선택 결제 시 나머지 유지)
+        Set<Long> checkedOutVariantIds = items.stream()
+                .map(i -> i.getVariant().getId())
                 .collect(Collectors.toSet());
-        cartRepository.deleteByUserIdAndProductIdIn(userId, checkedOutProductIds);
+        cartRepository.deleteByUserIdAndVariantIdIn(userId, checkedOutVariantIds);
 
         return orderResponse;
     }

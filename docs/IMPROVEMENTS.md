@@ -801,3 +801,5 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 보안·품질 개선 (#57/#58/#59/#13/#28/#24/#46/#50/#60/#61/#52/#53/#54) | **647개** |
 | 버그·보안·성능 수정 (#89~#101) | **647개** |
 | 비밀번호 재설정 API (#110) + 홈 화면 집계 API (#127) | **655개** |
+| 커서 기반 페이지네이션 전환 (#15, 12개 엔드포인트) | ~670개 |
+| ProductVariant 시스템 도입 (Product 1:N Variant 1:1 Inventory) | **779개** |

@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.order.service;
 
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
@@ -14,6 +15,7 @@ import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.point.service.PointService;
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductVariant;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,9 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -71,6 +71,7 @@ class OrderQueryServiceTest {
     private OrderQueryService orderQueryService;
 
     private Product product;
+    private ProductVariant variant;
     private Order order;
 
     @BeforeEach
@@ -83,6 +84,14 @@ class OrderQueryServiceTest {
                 .build();
         ReflectionTestUtils.setField(product, "id", 1L);
 
+        variant = ProductVariant.builder()
+                .product(product)
+                .optionName("기본")
+                .sku("SKU-001")
+                .price(new BigDecimal("10000"))
+                .build();
+        ReflectionTestUtils.setField(variant, "id", 1L);
+
         order = Order.builder()
                 .userId(1L)
                 .totalAmount(new BigDecimal("10000"))
@@ -91,6 +100,7 @@ class OrderQueryServiceTest {
 
         OrderItem orderItem = OrderItem.builder()
                 .product(product)
+                .variant(variant)
                 .quantity(1)
                 .unitPrice(new BigDecimal("10000"))
                 .build();
@@ -137,26 +147,24 @@ class OrderQueryServiceTest {
         @Test
         @DisplayName("ADMIN — 필터 없이 전체 주문 반환")
         void admin_returnsAllOrders() {
-            Pageable pageable = PageRequest.of(0, 10);
             given(orderRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of(order), pageable, 1));
+                    .willReturn(new PageImpl<>(List.of(order)));
 
-            Page<OrderResponse> result = orderQueryService.getList(null, true, new OrderSearchRequest(), pageable);
+            CursorPage<OrderResponse> result = orderQueryService.getList(null, true, new OrderSearchRequest(), null, 10);
 
-            assertThat(result.getTotalElements()).isEqualTo(1);
+            assertThat(result.getContent()).hasSize(1);
             assertThat(result.getContent().get(0).getIdempotencyKey()).isEqualTo("idem-key-001");
         }
 
         @Test
         @DisplayName("USER — 컨트롤러에서 전달된 userId로 강제 필터링")
         void user_filtersOwnOrdersOnly() {
-            Pageable pageable = PageRequest.of(0, 10);
             given(orderRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of(order), pageable, 1));
+                    .willReturn(new PageImpl<>(List.of(order)));
 
-            Page<OrderResponse> result = orderQueryService.getList(1L, false, new OrderSearchRequest(), pageable);
+            CursorPage<OrderResponse> result = orderQueryService.getList(1L, false, new OrderSearchRequest(), null, 10);
 
-            assertThat(result.getTotalElements()).isEqualTo(1);
+            assertThat(result.getContent()).hasSize(1);
         }
     }
 }

@@ -13,12 +13,9 @@ import com.stockmanagement.domain.shipment.dto.ShipmentUpdateRequest;
 import com.stockmanagement.domain.shipment.entity.Shipment;
 import com.stockmanagement.common.outbox.OutboxEventStore;
 import com.stockmanagement.domain.shipment.repository.ShipmentRepository;
-import com.stockmanagement.domain.user.repository.UserRepository;
+import com.stockmanagement.common.dto.CursorPage;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +28,10 @@ import org.springframework.transaction.annotation.Transactional;
  *   결제 완료(CONFIRMED)  → {@link #createForOrder}    : PREPARING 생성 (PaymentService 호출)
  *   PREPARING            → {@link #startShipping}     : SHIPPED (운송장 등록)
  *   SHIPPED              → {@link #completeDelivery}  : DELIVERED
- *   PREPARING|SHIPPED    → {@link #processReturn}     : RETURNED
+ *   PREPARING|SHIPPED    → {@link #processReturn}     : RETURNED (ADMIN 직접)
+ *   DELIVERED            → {@link #requestReturn}     : RETURN_REQUESTED (사용자 신청)
+ *   RETURN_REQUESTED     → {@link #approveReturn}     : RETURNED (ADMIN 승인)
+ *   RETURN_REQUESTED     → {@link #rejectReturn}      : DELIVERED (ADMIN 거부)
  * </pre>
  */
 @Service
@@ -41,7 +41,6 @@ public class ShipmentService {
 
     private final ShipmentRepository shipmentRepository;
     private final OrderRepository orderRepository;
-    private final UserRepository userRepository;
     private final OutboxEventStore outboxEventStore;
 
     /**
@@ -75,7 +74,7 @@ public class ShipmentService {
      *
      * @throws BusinessException 배송 정보가 없는 경우, 또는 소유자가 아닌 경우
      */
-    public ShipmentResponse getByOrderId(Long orderId, String username, boolean isAdmin) {
+    public ShipmentResponse getByOrderId(Long orderId, Long userId, boolean isAdmin) {
         Shipment shipment = shipmentRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND));
 
@@ -83,7 +82,7 @@ public class ShipmentService {
             // userId 스칼라 프로젝션 — Order 전체 엔티티 로드 불필요
             Long orderUserId = orderRepository.findUserIdById(orderId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND));
-            if (!orderUserId.equals(resolveUserId(username))) {
+            if (!orderUserId.equals(userId)) {
                 // 타인 배송 존재 여부 노출 방지 — ACCESS_DENIED 대신 NOT_FOUND 반환
                 throw new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND);
             }
@@ -93,14 +92,21 @@ public class ShipmentService {
     }
 
     /**
-     * 로그인한 사용자의 배송 목록을 최신순 페이징 조회한다.
+     * 로그인한 사용자의 배송 목록을 커서 기반으로 조회한다.
      *
-     * @param userId   요청자 ID (JWT claim 기반)
-     * @param pageable 페이지 요청
+     * @param userId 요청자 ID (JWT claim 기반)
+     * @param lastId 커서 (이전 페이지 마지막 ID), null이면 첫 페이지
+     * @param size   페이지 크기
      */
-    public Page<ShipmentResponse> getMyShipments(Long userId, Pageable pageable) {
-        return shipmentRepository.findByUserId(userId, pageable)
-                .map(ShipmentResponse::from);
+    public CursorPage<ShipmentResponse> getMyShipments(Long userId, Long lastId, int size) {
+        PageRequest limit = PageRequest.of(0, size + 1);
+        var items = lastId == null
+                ? shipmentRepository.findByUserIdCursor(userId, limit)
+                : shipmentRepository.findByUserIdCursorAfter(userId, lastId, limit);
+        return CursorPage.of(
+                items.stream().map(ShipmentResponse::from).toList(),
+                size,
+                ShipmentResponse::getId);
     }
 
     /**
@@ -143,15 +149,48 @@ public class ShipmentService {
         return ShipmentResponse.from(shipment);
     }
 
-    /** JWT details에서 userId를 꺼낸다. details가 없으면 DB fallback (구 토큰·테스트 환경 호환). */
-    private Long resolveUserId(String username) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getDetails() instanceof Long userId) {
-            return userId;
+    /**
+     * 사용자가 반품을 신청한다. (DELIVERED → RETURN_REQUESTED)
+     *
+     * @param orderId 주문 ID
+     * @param userId  요청자 ID (소유권 검증)
+     * @param reason  반품 사유
+     */
+    @Transactional
+    public ShipmentResponse requestReturn(Long orderId, Long userId, String reason) {
+        Long orderUserId = orderRepository.findUserIdById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!orderUserId.equals(userId)) {
+            throw new BusinessException(ErrorCode.SHIPMENT_NOT_FOUND);
         }
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND))
-                .getId();
+        Shipment shipment = findByOrderIdOrThrow(orderId);
+        shipment.requestReturn(reason);
+        return ShipmentResponse.from(shipment);
+    }
+
+    /**
+     * ADMIN이 반품을 승인한다. (RETURN_REQUESTED → RETURNED)
+     *
+     * @param orderId 주문 ID
+     */
+    @Transactional
+    public ShipmentResponse approveReturn(Long orderId) {
+        Shipment shipment = findByOrderIdOrThrow(orderId);
+        shipment.approveReturn();
+        outboxEventStore.save(new ShipmentReturnedEvent(orderId));
+        return ShipmentResponse.from(shipment);
+    }
+
+    /**
+     * ADMIN이 반품을 거부한다. (RETURN_REQUESTED → DELIVERED)
+     *
+     * @param orderId 주문 ID
+     */
+    @Transactional
+    public ShipmentResponse rejectReturn(Long orderId) {
+        Shipment shipment = findByOrderIdOrThrow(orderId);
+        shipment.rejectReturn();
+        return ShipmentResponse.from(shipment);
     }
 
     private Shipment findByOrderIdOrThrow(Long orderId) {

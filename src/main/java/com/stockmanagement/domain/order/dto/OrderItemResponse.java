@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.extern.jackson.Jacksonized;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
  * 주문 항목 응답 DTO.
@@ -24,6 +25,12 @@ public class OrderItemResponse {
     /** 상품명 — 주문 당시 이름 (Product 참조를 통해 현재 이름을 반환) */
     private final String productName;
 
+    /** 주문한 변형 ID */
+    private final Long variantId;
+
+    /** 변형 옵션 이름 (예: "빨강/L") */
+    private final String variantOptionName;
+
     /** 주문 수량 */
     private final int quantity;
 
@@ -39,6 +46,12 @@ public class OrderItemResponse {
     /** 상품 대표 이미지 URL — null이면 이미지 없음 */
     private final String thumbnailUrl;
 
+    /** 주문 아이템 상태 (ACTIVE, CANCELLED) */
+    private final String status;
+
+    /** 부분 취소 시각 — ACTIVE이면 null */
+    private final LocalDateTime cancelledAt;
+
     /** OrderItem 엔티티를 응답 DTO로 변환 (hasReview 미포함). */
     public static OrderItemResponse from(OrderItem item) {
         return from(item, null);
@@ -50,11 +63,15 @@ public class OrderItemResponse {
                 .id(item.getId())
                 .productId(item.getProduct().getId())
                 .productName(item.getProduct().getName())
+                .variantId(item.getVariant().getId())
+                .variantOptionName(item.getVariant().getOptionName())
                 .quantity(item.getQuantity())
                 .unitPrice(item.getUnitPrice())
                 .subtotal(item.getSubtotal())
                 .hasReview(hasReview)
                 .thumbnailUrl(item.getProduct().getThumbnailUrl())
+                .status(item.getStatus().name())
+                .cancelledAt(item.getCancelledAt())
                 .build();
     }
 }

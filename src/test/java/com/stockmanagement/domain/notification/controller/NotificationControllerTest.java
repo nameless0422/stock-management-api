@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.notification.controller;
 
 import com.stockmanagement.common.config.SecurityConfig;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.JwtTokenProvider;
 import com.stockmanagement.domain.notification.dto.NotificationResponse;
@@ -14,16 +15,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -59,10 +57,10 @@ class NotificationControllerTest {
                     .read(false)
                     .createdAt(LocalDateTime.now())
                     .build();
-            given(notificationService.getNotifications(any(), any(), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of(response)));
+            given(notificationService.getNotifications(any(), any(), any(), anyInt()))
+                    .willReturn(CursorPage.of(List.of(response), 20, NotificationResponse::getId));
 
-            mockMvc.perform(get("/api/notifications"))
+            mockMvc.perform(get("/api/v1/notifications"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.content[0].title").value("주문 접수"));
@@ -71,7 +69,7 @@ class NotificationControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/notifications"))
+            mockMvc.perform(get("/api/v1/notifications"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -84,7 +82,7 @@ class NotificationControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 읽음 처리 → 204")
         void marksRead() throws Exception {
-            mockMvc.perform(post("/api/notifications/1/read"))
+            mockMvc.perform(post("/api/v1/notifications/1/read"))
                     .andExpect(status().isNoContent());
         }
     }
@@ -97,7 +95,7 @@ class NotificationControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 전체 읽음 처리 → 204")
         void marksAllRead() throws Exception {
-            mockMvc.perform(post("/api/notifications/read-all"))
+            mockMvc.perform(post("/api/v1/notifications/read-all"))
                     .andExpect(status().isNoContent());
         }
     }
@@ -112,7 +110,7 @@ class NotificationControllerTest {
         void returnsCount() throws Exception {
             given(notificationService.getUnreadCount(any())).willReturn(3L);
 
-            mockMvc.perform(get("/api/notifications/unread-count"))
+            mockMvc.perform(get("/api/v1/notifications/unread-count"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.count").value(3));
@@ -121,7 +119,7 @@ class NotificationControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/notifications/unread-count"))
+            mockMvc.perform(get("/api/v1/notifications/unread-count"))
                     .andExpect(status().isUnauthorized());
         }
     }

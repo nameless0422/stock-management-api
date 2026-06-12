@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.order.controller;
 
 import com.stockmanagement.common.config.SecurityConfig;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.dto.OrderResponse;
@@ -19,8 +20,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -73,7 +72,7 @@ class OrderControllerTest {
 
         private static final String VALID_JSON =
                 "{\"userId\":1,\"idempotencyKey\":\"key-001\"," +
-                "\"items\":[{\"productId\":1,\"quantity\":2,\"unitPrice\":5000}]}";
+                "\"items\":[{\"productId\":1,\"variantId\":1,\"quantity\":2,\"unitPrice\":5000}]}";
 
         @Test
         @WithMockUser
@@ -81,7 +80,7 @@ class OrderControllerTest {
         void createsOrder() throws Exception {
             given(orderCommandService.create(any(), anyLong())).willReturn(mock(OrderResponse.class));
 
-            mockMvc.perform(post("/api/orders")
+            mockMvc.perform(post("/api/v1/orders")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isCreated())
@@ -91,7 +90,7 @@ class OrderControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(post("/api/orders")
+            mockMvc.perform(post("/api/v1/orders")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isUnauthorized());
@@ -101,7 +100,7 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("필수 필드(idempotencyKey, items) 누락 → 400")
         void validationFailure() throws Exception {
-            mockMvc.perform(post("/api/orders")
+            mockMvc.perform(post("/api/v1/orders")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isBadRequest());
@@ -114,7 +113,7 @@ class OrderControllerTest {
             given(orderCommandService.create(any(), anyLong()))
                     .willThrow(new BusinessException(ErrorCode.INSUFFICIENT_STOCK));
 
-            mockMvc.perform(post("/api/orders")
+            mockMvc.perform(post("/api/v1/orders")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isConflict())
@@ -134,7 +133,7 @@ class OrderControllerTest {
         void returnsOrder() throws Exception {
             given(orderQueryService.getByIdForUser(anyLong(), any(), anyBoolean())).willReturn(mock(OrderResponse.class));
 
-            mockMvc.perform(get("/api/orders/1"))
+            mockMvc.perform(get("/api/v1/orders/1"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -142,7 +141,7 @@ class OrderControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(get("/api/orders/1"))
+            mockMvc.perform(get("/api/v1/orders/1"))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -153,7 +152,7 @@ class OrderControllerTest {
             given(orderQueryService.getByIdForUser(eq(999L), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
-            mockMvc.perform(get("/api/orders/999"))
+            mockMvc.perform(get("/api/v1/orders/999"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -165,7 +164,7 @@ class OrderControllerTest {
             given(orderQueryService.getByIdForUser(eq(1L), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.ORDER_ACCESS_DENIED));
 
-            mockMvc.perform(get("/api/orders/1"))
+            mockMvc.perform(get("/api/v1/orders/1"))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -181,10 +180,10 @@ class OrderControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 주문 목록 페이징 조회 → 200")
         void returnsList() throws Exception {
-            given(orderQueryService.getList(any(), anyBoolean(), any(), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of()));
+            given(orderQueryService.getList(any(), anyBoolean(), any(), any(), anyInt()))
+                    .willReturn(CursorPage.of(List.of(), 20, OrderResponse::getId));
 
-            mockMvc.perform(get("/api/orders"))
+            mockMvc.perform(get("/api/v1/orders"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -202,7 +201,7 @@ class OrderControllerTest {
         void cancelsOrder() throws Exception {
             given(orderCommandService.cancel(anyLong(), any(), anyBoolean(), any())).willReturn(mock(OrderResponse.class));
 
-            mockMvc.perform(post("/api/orders/1/cancel"))
+            mockMvc.perform(post("/api/v1/orders/1/cancel"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -210,7 +209,7 @@ class OrderControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(post("/api/orders/1/cancel"))
+            mockMvc.perform(post("/api/v1/orders/1/cancel"))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -221,7 +220,7 @@ class OrderControllerTest {
             given(orderCommandService.cancel(anyLong(), any(), anyBoolean(), any()))
                     .willThrow(new BusinessException(ErrorCode.INVALID_ORDER_STATUS));
 
-            mockMvc.perform(post("/api/orders/1/cancel"))
+            mockMvc.perform(post("/api/v1/orders/1/cancel"))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -240,7 +239,7 @@ class OrderControllerTest {
             given(orderQueryService.getHistory(anyLong(), any(), anyBoolean()))
                     .willReturn(List.of(mock(OrderStatusHistoryResponse.class)));
 
-            mockMvc.perform(get("/api/orders/1/history"))
+            mockMvc.perform(get("/api/v1/orders/1/history"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -248,7 +247,7 @@ class OrderControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(get("/api/orders/1/history"))
+            mockMvc.perform(get("/api/v1/orders/1/history"))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -259,7 +258,7 @@ class OrderControllerTest {
             given(orderQueryService.getHistory(eq(999L), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
-            mockMvc.perform(get("/api/orders/999/history"))
+            mockMvc.perform(get("/api/v1/orders/999/history"))
                     .andExpect(status().isNotFound());
         }
 
@@ -270,7 +269,7 @@ class OrderControllerTest {
             given(orderQueryService.getHistory(eq(1L), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.ORDER_ACCESS_DENIED));
 
-            mockMvc.perform(get("/api/orders/1/history"))
+            mockMvc.perform(get("/api/v1/orders/1/history"))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false));
         }

@@ -64,7 +64,7 @@ class CartControllerTest {
         void returnsCart() throws Exception {
             given(cartService.getCart(1L)).willReturn(mock(CartResponse.class));
 
-            mockMvc.perform(get("/api/cart").with(authentication(USER_AUTH)))
+            mockMvc.perform(get("/api/v1/cart").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -72,7 +72,7 @@ class CartControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/cart"))
+            mockMvc.perform(get("/api/v1/cart"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -83,14 +83,14 @@ class CartControllerTest {
     @DisplayName("POST /api/cart/items")
     class AddOrUpdate {
 
-        private static final String ITEM_JSON = "{\"productId\":1,\"quantity\":2}";
+        private static final String ITEM_JSON = "{\"productId\":1,\"variantId\":1,\"quantity\":2}";
 
         @Test
         @DisplayName("인증된 사용자 — 상품 추가 → 200")
         void addsItem() throws Exception {
             given(cartService.addOrUpdate(anyLong(), any())).willReturn(mock(CartItemResponse.class));
 
-            mockMvc.perform(post("/api/cart/items")
+            mockMvc.perform(post("/api/v1/cart/items")
                             .with(authentication(USER_AUTH))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(ITEM_JSON))
@@ -101,7 +101,7 @@ class CartControllerTest {
         @Test
         @DisplayName("필수 필드 누락 → 400")
         void validationFailure() throws Exception {
-            mockMvc.perform(post("/api/cart/items")
+            mockMvc.perform(post("/api/v1/cart/items")
                             .with(authentication(USER_AUTH))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
@@ -109,23 +109,23 @@ class CartControllerTest {
         }
     }
 
-    // ===== DELETE /api/cart/items/{productId} =====
+    // ===== DELETE /api/cart/items/variants/{variantId} =====
 
     @Nested
-    @DisplayName("DELETE /api/cart/items/{productId}")
+    @DisplayName("DELETE /api/cart/items/variants/{variantId}")
     class RemoveItem {
 
         @Test
-        @DisplayName("인증된 사용자 — 상품 제거 → 204")
+        @DisplayName("인증된 사용자 — 변형 제거 → 204")
         void removesItem() throws Exception {
-            mockMvc.perform(delete("/api/cart/items/1").with(authentication(USER_AUTH)))
+            mockMvc.perform(delete("/api/v1/cart/items/variants/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isNoContent());
         }
 
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(delete("/api/cart/items/1"))
+            mockMvc.perform(delete("/api/v1/cart/items/variants/1"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -139,7 +139,7 @@ class CartControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 장바구니 비우기 → 204")
         void clearsCart() throws Exception {
-            mockMvc.perform(delete("/api/cart").with(authentication(USER_AUTH)))
+            mockMvc.perform(delete("/api/v1/cart").with(authentication(USER_AUTH)))
                     .andExpect(status().isNoContent());
         }
     }
@@ -157,7 +157,7 @@ class CartControllerTest {
         void checksOut() throws Exception {
             given(cartService.checkout(anyLong(), any())).willReturn(mock(OrderResponse.class));
 
-            mockMvc.perform(post("/api/cart/checkout")
+            mockMvc.perform(post("/api/v1/cart/checkout")
                             .with(authentication(USER_AUTH))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(CHECKOUT_JSON))
@@ -168,7 +168,7 @@ class CartControllerTest {
         @Test
         @DisplayName("멱등성 키 누락 → 400")
         void missingIdempotencyKey() throws Exception {
-            mockMvc.perform(post("/api/cart/checkout")
+            mockMvc.perform(post("/api/v1/cart/checkout")
                             .with(authentication(USER_AUTH))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))

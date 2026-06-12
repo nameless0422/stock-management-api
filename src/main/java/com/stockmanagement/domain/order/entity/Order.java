@@ -197,7 +197,7 @@ public class Order {
      */
     public void startCancellation() {
         if (this.status == OrderStatus.CANCEL_IN_PROGRESS) return; // 재시도 시 idempotent
-        if (this.status != OrderStatus.CONFIRMED) {
+        if (this.status != OrderStatus.CONFIRMED && this.status != OrderStatus.PARTIAL_CANCELLED) {
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
         }
         this.status = OrderStatus.CANCEL_IN_PROGRESS;
@@ -224,10 +224,44 @@ public class Order {
      * @throws BusinessException if the current status is not CONFIRMED or CANCEL_IN_PROGRESS
      */
     public void refund() {
-        if (this.status != OrderStatus.CONFIRMED && this.status != OrderStatus.CANCEL_IN_PROGRESS) {
+        if (this.status != OrderStatus.CONFIRMED
+                && this.status != OrderStatus.PARTIAL_CANCELLED
+                && this.status != OrderStatus.CANCEL_IN_PROGRESS) {
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
         }
         this.status = OrderStatus.CANCELLED;
+    }
+
+    /**
+     * 부분 취소를 적용한다 — 아이템 일부 취소 후 호출.
+     *
+     * <p>모든 아이템이 CANCELLED이면 CANCELLED, 아니면 PARTIAL_CANCELLED로 전환.
+     * CONFIRMED/PARTIAL_CANCELLED 상태에서만 호출 가능.
+     *
+     * @param reason 취소 사유 (null 허용)
+     * @throws BusinessException CONFIRMED/PARTIAL_CANCELLED가 아닌 상태에서 호출 시
+     */
+    public void partialCancel(String reason) {
+        if (this.status != OrderStatus.CONFIRMED && this.status != OrderStatus.PARTIAL_CANCELLED) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+        }
+        this.cancelReason = reason;
+
+        if (isAllItemsCancelled()) {
+            this.status = OrderStatus.CANCELLED;
+        } else {
+            this.status = OrderStatus.PARTIAL_CANCELLED;
+        }
+    }
+
+    /** 모든 아이템이 취소되었는지 확인한다. */
+    public boolean isAllItemsCancelled() {
+        return !items.isEmpty() && items.stream().noneMatch(OrderItem::isActive);
+    }
+
+    /** ACTIVE 상태인 아이템만 반환한다. */
+    public List<OrderItem> getActiveItems() {
+        return items.stream().filter(OrderItem::isActive).toList();
     }
 
     /**

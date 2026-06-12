@@ -18,8 +18,10 @@ Spring Boot 기반 **쇼핑몰 백엔드 포트폴리오 프로젝트**.
 | **보안** | IDOR 소유권 검증 4개 엔드포인트, 가격 조작 방어(DB canonical price 강제), JWT `userId` 클레임으로 인증 DB round-trip 제거, Toss Webhook HMAC-SHA256 서명 검증 |
 | **ES 검색 + Fallback** | 상품 키워드·가격·카테고리 복합 검색(Elasticsearch), 장애 시 자동 MySQL fallback |
 | **Circuit Breaker** | TossPayments HTTP 호출 실패 누적 시 회로 차단 → 빠른 실패 응답 |
-| **배치 처리** | 쿠폰 만료 비활성화·일별 재고 스냅샷·일별 주문 통계 스케줄러 (`@Scheduled`, `@ConditionalOnProperty`, 멱등성 보장) |
-| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **655개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
+| **커서 페이지네이션** | 12개 사용자 대상 엔드포인트 offset→cursor 전환 — `CursorPage<T>` 재사용, `lastId` 기반 일관된 인터페이스 |
+| **상품 바리에이션** | `Product 1:N ProductVariant 1:1 Inventory` 구조 — 색상·사이즈 옵션 지원, 상품 생성 시 기본 variant + inventory 자동 생성 |
+| **배치 처리** | 주문 만료·쿠폰 만료·포인트 소멸·일별 재고 스냅샷·일별 주문 통계 5개 스케줄러 (`@Scheduled`, `@ConditionalOnProperty`, 멱등성 보장) |
+| **테스트 피라미드** | 단위·컨트롤러·통합 테스트 **779개** 전체 통과, Testcontainers로 실제 MySQL·Redis·ES 사용 |
 
 ---
 
@@ -97,7 +99,7 @@ docker compose -f docker/docker-compose.yml up -d mysql redis elasticsearch
 ./gradlew bootRun
 ```
 
-Flyway가 기동 시 V1~V46 마이그레이션을 자동 실행합니다.
+Flyway가 기동 시 V1~V57 마이그레이션을 자동 실행합니다.
 
 ### 환경 변수
 
@@ -139,7 +141,7 @@ Flyway가 기동 시 V1~V46 마이그레이션을 자동 실행합니다.
 | 통합 | `integration/` | Testcontainers (MySQL + Redis + ES), Flyway 실행, 실제 HTTP 흐름 E2E |
 | 동시성 | `integration/InventoryConcurrencyTest` | 동시 입고 lost update · 재고 예약 overselling 검증 |
 
-현재 총 **655개** 테스트 전체 통과.
+현재 총 **779개** 테스트 전체 통과.
 
 ---
 
@@ -159,11 +161,13 @@ com.stockmanagement/
 │   ├── ratelimit/       # @RateLimit (어노테이션), RateLimitAspect (AOP, Redis)
 │   └── security/        # LoginRateLimiter, JwtBlacklist, RefreshTokenStore
 ├── domain/
-│   ├── product/         # 상품 CRUD + Elasticsearch 검색 (document/, service/ProductSearchService)
+│   ├── product/         # 상품 CRUD + ProductVariant + Elasticsearch 검색
 │   │   ├── category/    # 카테고리 계층 구조 (parent-child 2단계)
 │   │   ├── image/       # 상품 이미지 (MinIO S3 Presigned URL)
 │   │   ├── review/      # 상품 리뷰 (구매자 전용, 1인 1리뷰)
-│   │   └── wishlist/    # 찜 목록
+│   │   ├── wishlist/    # 찜 목록
+│   │   ├── qna/         # 상품 Q&A (사용자 문의 + ADMIN 답변)
+│   │   └── notification/ # 재입고 알림 구독
 │   ├── inventory/       # 재고 4-state 모델 + 변동 이력 + 필터 검색 + 일별 스냅샷
 │   │   └── scheduler/   # InventorySnapshotScheduler (매일 자정 5분)
 │   ├── order/           # 주문 생성·취소, 멱등성 키, 상태 이력, 만료 자동 취소, 필터 조회, 일별 통계
@@ -177,6 +181,7 @@ com.stockmanagement/
 │   ├── refund/          # 환불 이력 관리 (PENDING→COMPLETED/FAILED)
 │   ├── user/            # 회원가입·로그인, ADMIN/USER 역할, Refresh Token
 │   │   └── address/     # 배송지 관리 (기본 배송지, 주문 연동)
+│   ├── notification/    # 앱 내 알림 (주문/배송 상태 변경 등)
 │   └── admin/           # 관리자 대시보드, 사용자 관리, 전체 주문 조회, 배치 통계 조회
 │       └── setting/     # 시스템 설정 (저재고 임계값 동적 관리)
 └── security/            # JwtTokenProvider, JwtAuthenticationFilter
@@ -252,10 +257,21 @@ erDiagram
         bigint product_id FK
     }
 
+    %% ── PRODUCT VARIANT ─────────────────────────────────
+    product_variants {
+        bigint id PK
+        bigint product_id FK
+        varchar option_name "기본|색상|사이즈 등"
+        varchar sku UK
+        decimal price
+        varchar status "ACTIVE|DISCONTINUED"
+    }
+
     %% ── INVENTORY ────────────────────────────────────────
     inventory {
         bigint id PK
-        bigint product_id UK "FK, 상품당 1행"
+        bigint variant_id UK "FK, 바리에이션당 1행"
+        bigint product_id FK "읽기 전용"
         int on_hand "창고 실물 수량"
         int reserved "주문 생성 보류"
         int allocated "결제 완료 확정"
@@ -276,24 +292,29 @@ erDiagram
     cart_items {
         bigint id PK
         bigint user_id FK
-        bigint product_id FK
+        bigint variant_id FK
         int quantity
+        decimal saved_price "담을 당시 가격 스냅샷"
     }
     orders {
         bigint id PK
         bigint user_id FK
-        varchar status "PENDING|PAYMENT_IN_PROGRESS|CONFIRMED|CANCELLED"
+        varchar status "PENDING|PAYMENT_IN_PROGRESS|CONFIRMED|CANCELLED|PARTIAL_CANCELLED"
         decimal total_amount
+        varchar order_number "yyyyMMdd-NNNNNNN"
         varchar idempotency_key UK
         bigint delivery_address_id FK "NULL=미지정"
         bigint coupon_id FK "NULL=미사용"
         decimal discount_amount
         bigint used_points
+        varchar cancel_reason "NULL"
     }
     order_items {
         bigint id PK
         bigint order_id FK
         bigint product_id FK
+        bigint variant_id FK
+        varchar status "ACTIVE|CANCELLED"
         int quantity
         decimal unit_price "주문 당시 단가"
         decimal subtotal
@@ -420,12 +441,14 @@ erDiagram
     categories ||--o{ categories : "하위 카테고리"
     categories ||--o{ products : "상품 분류"
 
-    products ||--|| inventory : "재고 (1:1)"
+    products ||--o{ product_variants : "바리에이션"
     products ||--o{ product_images : "이미지"
-    products ||--o{ order_items : "주문 항목"
-    products ||--o{ cart_items : "장바구니"
     products ||--o{ reviews : "리뷰"
-    products ||--o{ wishlist_items : "찜"
+
+    product_variants ||--|| inventory : "재고 (1:1)"
+    product_variants ||--o{ order_items : "주문 항목"
+    product_variants ||--o{ cart_items : "장바구니"
+    product_variants ||--o{ wishlist_items : "찜"
 
     inventory ||--o{ inventory_transactions : "변동 이력"
 
@@ -729,13 +752,15 @@ available = onHand - reserved - allocated
 
 검색 조건이 없으면 MySQL 조회, ES 장애 시 MySQL fallback.
 
-### 배치 처리 — 3개 스케줄러
+### 배치 처리 — 5개 스케줄러
 
 `@Scheduled` + `@ConditionalOnProperty` 패턴으로 환경별 활성화를 제어합니다.
 
 | 스케줄러 | 실행 시각 | 동작 |
 |---|---|---|
+| `OrderExpiryScheduler` | 5분 주기 | PENDING 30분 초과 주문 자동 취소, PAYMENT_IN_PROGRESS 10분 초과 시 복원 |
 | `CouponExpiryScheduler` | 매일 새벽 1시 | 만료된 활성 쿠폰 `deactivate()` (Dirty Checking) |
+| `PointExpiryScheduler` | 매일 새벽 0시 30분 | 만료 포인트 소멸 처리 (365일 보존 정책) |
 | `InventorySnapshotScheduler` | 매일 자정 5분 | 전체 재고 → `daily_inventory_snapshots` 저장 (중복 스킵) |
 | `DailyOrderStatsScheduler` | 매일 자정 1분 | 전일 주문 집계 → `daily_order_stats` upsert |
 
@@ -793,6 +818,17 @@ available = onHand - reserved - allocated
 | V44 | `payments` 가상계좌 컬럼 추가 (`virtual_account_bank/number/due_date`) |
 | V45 | `payments` 카드 결제 상세 추가 (`card_company/number/installment_plan_months`) |
 | V46 | `users.phone_number` 추가 |
+| V47 | 관리자 목록 조회용 복합 인덱스 추가 |
+| V48 | `restock_notifications` — 재입고 알림 구독 |
+| V49 | `shipping_policies` 초기 데이터 삽입 |
+| V50 | `notifications` — 앱 내 알림 |
+| V51 | `point_transactions.status` 컬럼 추가 |
+| V52 | `point_transactions.expires_at` 컬럼 추가 |
+| V53 | `users.email_verified` 컬럼 추가 |
+| V54 | `product_qna` — 상품 Q&A |
+| V55 | `shipments` 반품 관련 컬럼 추가 (return_reason, returned_at) |
+| V56 | `product_variants` — 상품 바리에이션 시스템 도입 |
+| V57 | `order_items.status` 컬럼 추가 (ACTIVE/CANCELLED 부분 취소 지원) |
 
 ---
 
@@ -810,21 +846,26 @@ available = onHand - reserved - allocated
 | POST | `/api/auth/refresh` | Access Token 재발급 (Refresh Token rotation) | 공개 |
 | POST | `/api/auth/forgot-password` | 비밀번호 재설정 이메일 발송 (Rate Limit 3회/시간) | 공개 |
 | POST | `/api/auth/reset-password` | 비밀번호 재설정 (토큰 검증, Rate Limit 5회/시간) | 공개 |
-| GET | `/api/users/me` | 내 정보 조회 | USER |
-| PATCH | `/api/users/me` | 프로필 수정 (이메일 변경) | USER |
-| PATCH | `/api/users/me/password` | 비밀번호 변경 (성공 시 Refresh Token 일괄 폐기) | USER |
-| GET | `/api/users/me/orders` | 내 주문 목록 (최신순, 페이징) | USER |
-| DELETE | `/api/users/me` | 회원 탈퇴 (Soft Delete + Refresh Token 일괄 폐기) | USER |
+| GET | `/api/user/me` | 내 정보 조회 (포인트 잔액 포함) | USER |
+| PUT | `/api/user/profile` | 프로필 수정 | USER |
+| POST | `/api/user/password/change` | 비밀번호 변경 (성공 시 Refresh Token 일괄 폐기) | USER |
+| GET | `/api/user/orders` | 내 주문 목록 (커서 페이지네이션) | USER |
+| POST | `/api/user/deactivate` | 회원 탈퇴 (Soft Delete + 연관 데이터 정리) | USER |
 
 ### 상품
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
-| POST | `/api/products` | 상품 등록 | ADMIN |
-| GET | `/api/products` | 상품 목록 (ES 검색 or MySQL, `?q=&minPrice=&maxPrice=&category=&sort=`) | 공개 |
+| POST | `/api/products` | 상품 등록 (기본 variant + inventory 자동 생성) | ADMIN |
+| GET | `/api/products` | 상품 목록 (ES 검색 or MySQL, `?q=&minPrice=&maxPrice=&categoryId=&sort=&includeChildren=`) | 공개 |
+| GET | `/api/products/search/suggestions` | 검색 자동완성 (Elasticsearch prefix query) | 공개 |
 | GET | `/api/products/{id}` | 상품 단건 조회 | 공개 |
 | PUT | `/api/products/{id}` | 상품 수정 | ADMIN |
 | DELETE | `/api/products/{id}` | 상품 삭제 (soft delete → DISCONTINUED) | ADMIN |
+| POST | `/api/products/{id}/variants` | 바리에이션 추가 | ADMIN |
+| GET | `/api/products/{id}/variants` | 바리에이션 목록 | 공개 |
+| PUT | `/api/products/{id}/variants/{variantId}` | 바리에이션 수정 | ADMIN |
+| DELETE | `/api/products/{id}/variants/{variantId}` | 바리에이션 삭제 | ADMIN |
 
 ### 카테고리
 
@@ -855,33 +896,53 @@ available = onHand - reserved - allocated
 | GET | `/api/products/{id}/reviews` | 상품 리뷰 목록 + 평균 별점 | 공개 |
 | DELETE | `/api/products/{id}/reviews/{reviewId}` | 리뷰 삭제 (본인만) | USER |
 
+### Q&A
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/products/{id}/qna` | 문의 등록 | USER |
+| GET | `/api/products/{id}/qna` | 문의 목록 (커서 페이지네이션) | 공개 |
+| PUT | `/api/products/{id}/qna/{qnaId}/answer` | 답변 등록 | ADMIN |
+| DELETE | `/api/products/{id}/qna/{qnaId}` | 문의 삭제 | USER/ADMIN |
+
+### 재입고 알림
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| POST | `/api/products/{id}/restock-notifications` | 재입고 알림 구독 | USER |
+| GET | `/api/products/{id}/restock-notifications` | 구독 목록 | USER |
+| DELETE | `/api/products/{id}/restock-notifications/{notificationId}` | 구독 취소 | USER |
+
 ### 위시리스트
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
 | POST | `/api/wishlist/{productId}` | 찜 추가 | USER |
 | DELETE | `/api/wishlist/{productId}` | 찜 제거 | USER |
-| GET | `/api/wishlist` | 찜 목록 조회 | USER |
+| GET | `/api/wishlist` | 찜 목록 조회 (커서 페이지네이션) | USER |
 
 ### 재고
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
 | GET | `/api/inventory` | 재고 목록 (`?status=&productId=` 필터) | ADMIN |
-| GET | `/api/inventory/{productId}` | 재고 현황 조회 | ADMIN |
-| GET | `/api/inventory/{productId}/transactions` | 재고 변동 이력 (페이징) | ADMIN |
-| POST | `/api/inventory/{productId}/receive` | 입고 처리 | ADMIN |
-| POST | `/api/inventory/{productId}/adjust` | 재고 조정 | ADMIN |
+| GET | `/api/inventory/{id}` | 재고 현황 조회 | ADMIN |
+| GET | `/api/inventory/variants/{variantId}` | 바리에이션별 재고 조회 | ADMIN |
+| POST | `/api/inventory/receive` | 입고 처리 | ADMIN |
+| POST | `/api/inventory/adjust` | 재고 조정 | ADMIN |
 
 ### 주문
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
+| POST | `/api/orders/preview` | 결제 금액 미리보기 (쿠폰·포인트·배송비 계산) | USER |
 | POST | `/api/orders` | 주문 생성 (재고 예약, 멱등성, 쿠폰·포인트·배송지 적용) | USER |
-| GET | `/api/orders` | 주문 목록 (USER=본인, ADMIN=전체, `?status=&userId=&startDate=&endDate=`) | USER |
+| GET | `/api/orders` | 주문 목록 (커서 페이지네이션, `?status=&startDate=&endDate=`) | USER |
 | GET | `/api/orders/{id}` | 주문 단건 조회 (본인 주문만) | USER |
-| GET | `/api/orders/{id}/history` | 주문 상태 변경 이력 (본인 주문만) | USER |
-| POST | `/api/orders/{id}/cancel` | 주문 취소 (재고 예약 해제, 쿠폰·포인트 반환) | USER |
+| GET | `/api/orders/{id}/detail` | 주문 상세 통합 조회 (order + payment + shipment + refund) | USER |
+| GET | `/api/orders/{id}/history` | 주문 상태 변경 이력 | USER |
+| POST | `/api/orders/{id}/cancel` | 주문 취소 (사유 포함, 재고 반환 + 쿠폰·포인트 반환) | USER |
+| POST | `/api/orders/{id}/items/{itemId}/cancel` | 주문 아이템 부분 취소 | USER/ADMIN |
 
 ### 쿠폰
 
@@ -911,20 +972,31 @@ available = onHand - reserved - allocated
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
-| GET | `/api/cart` | 장바구니 조회 | USER |
-| POST | `/api/cart/items` | 상품 담기 / 수량 변경 (ACTIVE 상품만) | USER |
-| DELETE | `/api/cart/items/{productId}` | 상품 제거 | USER |
+| GET | `/api/cart` | 장바구니 조회 (가격 변동 감지 포함) | USER |
+| POST | `/api/cart/items` | 상품 담기 / 수량 변경 (ACTIVE variant만) | USER |
+| PUT | `/api/cart/items/{itemId}` | 수량 변경 | USER |
+| DELETE | `/api/cart/items/{itemId}` | 상품 제거 | USER |
+| DELETE | `/api/cart/items/variants/{variantId}` | 바리에이션으로 제거 | USER |
 | DELETE | `/api/cart` | 장바구니 비우기 | USER |
-| POST | `/api/cart/checkout` | 장바구니 → 주문 전환 (쿠폰·포인트·배송지 포함) | USER |
+| POST | `/api/cart/checkout` | 장바구니 → 주문 전환 (선택 항목 지원, 쿠폰·포인트·배송지 포함) | USER |
 
 ### 배송
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
-| GET | `/api/shipments/orders/{orderId}` | 주문 배송 조회 (본인 주문만) | USER |
-| PATCH | `/api/shipments/{id}/ship` | 배송 시작 (PREPARING → SHIPPED) | ADMIN |
-| PATCH | `/api/shipments/{id}/deliver` | 배송 완료 (SHIPPED → DELIVERED) | ADMIN |
-| PATCH | `/api/shipments/{id}/return` | 반품 처리 (SHIPPED → RETURNED) | ADMIN |
+| GET | `/api/shipments/my` | 내 배송 목록 (커서 페이지네이션) | USER |
+| GET | `/api/shipments/{id}` | 배송 단건 조회 (본인 주문만) | USER |
+| POST | `/api/shipments/{id}/ship` | 배송 시작 (PREPARING → SHIPPED) | ADMIN |
+| POST | `/api/shipments/{id}/deliver` | 배송 완료 (SHIPPED → DELIVERED) | ADMIN |
+| POST | `/api/shipments/{id}/return` | 반품 처리 (SHIPPED → RETURNED) | ADMIN |
+
+### 배송비 정책
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| GET | `/api/shipping-policies` | 배송비 정책 조회 | 공개 |
+| POST | `/api/shipping-policies` | 배송비 정책 생성 | ADMIN |
+| PUT | `/api/shipping-policies/{id}` | 배송비 정책 수정 | ADMIN |
 
 ### 배송지
 
@@ -941,16 +1013,24 @@ available = onHand - reserved - allocated
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
-| GET | `/api/points/balance` | 포인트 잔액 조회 | USER |
-| GET | `/api/points/history` | 포인트 변동 이력 (페이징) | USER |
+| GET | `/api/points/my` | 포인트 잔액 조회 | USER |
+| GET | `/api/points/transactions` | 포인트 변동 이력 (커서 페이지네이션) | USER |
+| GET | `/api/points/expiring-soon` | 30일 내 소멸 예정 포인트 목록 | USER |
+| POST | `/api/points/use` | 포인트 사용 | USER |
 
 ### 환불
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
-| POST | `/api/refunds` | 환불 요청 (DONE 결제만 가능, 본인 주문만) | USER |
+| GET | `/api/refunds` | 환불 목록 (커서 페이지네이션) | USER |
 | GET | `/api/refunds/{id}` | 환불 단건 조회 (본인만) | USER |
-| GET | `/api/payments/{paymentId}/refund` | 결제 ID로 환불 조회 (본인만) | USER |
+
+### 앱 알림
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| GET | `/api/notifications` | 알림 목록 (커서 페이지네이션) | USER |
+| POST | `/api/notifications/{id}/read` | 알림 읽음 처리 | USER |
 
 ### 홈 화면
 

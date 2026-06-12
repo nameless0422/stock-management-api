@@ -28,13 +28,16 @@ import com.stockmanagement.domain.user.repository.UserRepository;
 import com.stockmanagement.common.email.EmailService;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.LoginRateLimiter;
+import com.stockmanagement.common.security.EmailVerificationTokenStore;
 import com.stockmanagement.common.security.PasswordResetTokenStore;
 import com.stockmanagement.common.security.RefreshTokenStore;
 import com.stockmanagement.common.security.JwtTokenProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
+import com.stockmanagement.common.dto.CursorPage;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -76,6 +79,7 @@ public class UserService {
     private final LoginRateLimiter loginRateLimiter;
     private final RefreshTokenStore refreshTokenStore;
     private final PasswordResetTokenStore passwordResetTokenStore;
+    private final EmailVerificationTokenStore emailVerificationTokenStore;
 
     @Nullable
     @Autowired(required = false)
@@ -112,6 +116,14 @@ public class UserService {
         }
         // 포인트 계정을 회원가입 시점에 미리 생성 — getOrCreate() 경쟁 조건 원천 차단
         userPointRepository.save(UserPoint.builder().userId(savedUser.getId()).build());
+
+        // 이메일 인증 토큰 발급 + 인증 메일 발송
+        String verificationToken = emailVerificationTokenStore.issue(savedUser.getUsername());
+        if (emailService != null) {
+            emailService.sendVerificationEmail(savedUser.getEmail(), savedUser.getUsername(), verificationToken);
+        } else {
+            log.warn("[EmailVerification] mail.enabled=false — 인증 토큰 발급됨(token={})", verificationToken);
+        }
         return UserResponse.from(savedUser);
     }
 
@@ -129,7 +141,8 @@ public class UserService {
         loginRateLimiter.reset(request.username());
         String accessToken  = jwtTokenProvider.createToken(user.getUsername(), user.getRole().name(), user.getId());
         String refreshToken = refreshTokenStore.issue(user.getUsername());
-        return LoginResponse.of(accessToken, jwtTokenProvider.getTokenValidityInSeconds(), refreshToken);
+        return LoginResponse.of(accessToken, jwtTokenProvider.getTokenValidityInSeconds(), refreshToken,
+                user.isEmailVerified());
     }
 
     /**
@@ -145,7 +158,36 @@ public class UserService {
 
         String newAccessToken  = jwtTokenProvider.createToken(user.getUsername(), user.getRole().name(), user.getId());
         String newRefreshToken = refreshTokenStore.issue(user.getUsername());
-        return LoginResponse.of(newAccessToken, jwtTokenProvider.getTokenValidityInSeconds(), newRefreshToken);
+        return LoginResponse.of(newAccessToken, jwtTokenProvider.getTokenValidityInSeconds(), newRefreshToken,
+                user.isEmailVerified());
+    }
+
+    /** 이메일 인증 토큰을 검증하고 사용자의 이메일을 인증 완료 처리한다. */
+    @Transactional
+    public void verifyEmail(String token) {
+        String username = emailVerificationTokenStore.consume(token);
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (user.isEmailVerified()) {
+            throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
+        }
+        user.verifyEmail();
+    }
+
+    /** 이메일 인증 메일을 재발송한다. 이미 인증된 경우 예외. */
+    @Transactional(readOnly = true)
+    public void resendVerificationEmail(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (user.isEmailVerified()) {
+            throw new BusinessException(ErrorCode.EMAIL_ALREADY_VERIFIED);
+        }
+        String verificationToken = emailVerificationTokenStore.issue(username);
+        if (emailService != null) {
+            emailService.sendVerificationEmail(user.getEmail(), username, verificationToken);
+        } else {
+            log.warn("[EmailVerification] mail.enabled=false — 재발송 토큰(token={})", verificationToken);
+        }
     }
 
     /** username으로 사용자 ID를 반환한다. */
@@ -156,10 +198,10 @@ public class UserService {
     }
 
     /** 현재 인증된 사용자 정보 조회 (포인트 잔액 포함). */
-    public UserResponse getMe(String username) {
-        User user = userRepository.findByUsername(username)
+    public UserResponse getMe(Long userId) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        Long pointBalance = userPointRepository.findByUserId(user.getId())
+        Long pointBalance = userPointRepository.findByUserId(userId)
                 .map(up -> up.getBalance()).orElse(null);
         return UserResponse.from(user, pointBalance);
     }
@@ -192,8 +234,8 @@ public class UserService {
 
     /** 프로필(이메일) 수정. 이메일 변경 시 중복 여부 검증. */
     @Transactional
-    public UserResponse updateProfile(String username, UpdateProfileRequest request) {
-        User user = userRepository.findByUsername(username)
+    public UserResponse updateProfile(Long userId, UpdateProfileRequest request) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         if (request.getEmail() != null && !request.getEmail().equals(user.getEmail())) {
             if (userRepository.existsByEmail(request.getEmail())) {
@@ -230,23 +272,27 @@ public class UserService {
         jwtBlacklist.revoke(accessToken);
     }
 
-    /** 현재 인증된 사용자의 주문 목록 페이징 조회. hasReview + shipmentStatus 정보 포함. */
-    public Page<OrderResponse> getMyOrders(String username, Pageable pageable) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        Page<Order> orders = orderRepository.findByUserId(user.getId(), pageable);
-        // 페이지 내 전체 상품 ID를 한 번에 조회 (N+1 방지)
-        List<Long> allProductIds = orders.getContent().stream()
+    /** 현재 인증된 사용자의 주문 목록 커서 기반 조회. hasReview + shipmentStatus 정보 포함. */
+    public CursorPage<OrderResponse> getMyOrders(Long userId, Long lastId, int size) {
+        PageRequest limit = PageRequest.of(0, size + 1);
+        List<Order> items = lastId == null
+                ? orderRepository.findByUserIdOrderByIdDesc(userId, limit)
+                : orderRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, lastId, limit);
+        // 목록 내 전체 상품 ID를 한 번에 조회 (N+1 방지)
+        List<Long> allProductIds = items.stream()
                 .flatMap(o -> o.getItems().stream().map(i -> i.getProduct().getId()))
                 .collect(Collectors.toList());
         Set<Long> reviewedIds = allProductIds.isEmpty()
                 ? Set.of()
-                : new HashSet<>(reviewRepository.findReviewedProductIdsByUserId(user.getId(), allProductIds));
+                : new HashSet<>(reviewRepository.findReviewedProductIdsByUserId(userId, allProductIds));
         // 배송 상태 배치 조회 (N+1 방지)
-        List<Long> orderIds = orders.map(Order::getId).toList();
+        List<Long> orderIds = items.stream().map(Order::getId).toList();
         Map<Long, com.stockmanagement.domain.shipment.entity.ShipmentStatus> statusMap =
                 shipmentRepository.findStatusMapByOrderIds(orderIds);
-        return orders.map(o -> OrderResponse.from(o, reviewedIds, statusMap.get(o.getId())));
+        List<OrderResponse> responses = items.stream()
+                .map(o -> OrderResponse.from(o, reviewedIds, statusMap.get(o.getId())))
+                .toList();
+        return CursorPage.of(responses, size, OrderResponse::getId);
     }
 
     /**

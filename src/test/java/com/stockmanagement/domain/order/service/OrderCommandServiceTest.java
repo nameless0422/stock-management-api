@@ -18,7 +18,8 @@ import com.stockmanagement.domain.order.repository.OrderDeliverySnapshotReposito
 import com.stockmanagement.domain.order.repository.OrderRepository;
 import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.product.entity.Product;
-import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.product.entity.ProductVariant;
+import com.stockmanagement.domain.product.repository.ProductVariantRepository;
 import com.stockmanagement.common.outbox.OutboxEventStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,7 +49,7 @@ class OrderCommandServiceTest {
     private OrderRepository orderRepository;
 
     @Mock
-    private ProductRepository productRepository;
+    private ProductVariantRepository variantRepository;
 
     @Mock
     private InventoryService inventoryService;
@@ -75,6 +76,7 @@ class OrderCommandServiceTest {
     private OrderCommandService orderCommandService;
 
     private Product product;
+    private ProductVariant variant;
     private Order order;
 
     @BeforeEach
@@ -85,7 +87,15 @@ class OrderCommandServiceTest {
                 .price(new BigDecimal("10000"))
                 .sku("SKU-001")
                 .build();
-        ReflectionTestUtils.setField(product, "id", 1L); // findAllById 결과 Map 조회에 필요
+        ReflectionTestUtils.setField(product, "id", 1L);
+
+        variant = ProductVariant.builder()
+                .product(product)
+                .optionName("기본")
+                .sku("SKU-001")
+                .price(new BigDecimal("10000"))
+                .build();
+        ReflectionTestUtils.setField(variant, "id", 1L);
 
         order = Order.builder()
                 .userId(1L)
@@ -95,6 +105,7 @@ class OrderCommandServiceTest {
 
         OrderItem orderItem = OrderItem.builder()
                 .product(product)
+                .variant(variant)
                 .quantity(1)
                 .unitPrice(new BigDecimal("10000"))
                 .build();
@@ -111,7 +122,7 @@ class OrderCommandServiceTest {
         @DisplayName("정상 주문 생성 — Order 저장 및 재고 예약 호출")
         void createsOrderAndReservesStock() {
             OrderItemRequest itemRequest = mock(OrderItemRequest.class);
-            given(itemRequest.getProductId()).willReturn(1L);
+            given(itemRequest.getVariantId()).willReturn(1L);
             given(itemRequest.getQuantity()).willReturn(1);
             given(itemRequest.getUnitPrice()).willReturn(new BigDecimal("10000"));
 
@@ -121,13 +132,13 @@ class OrderCommandServiceTest {
             given(request.getItems()).willReturn(List.of(itemRequest));
 
             given(orderRepository.findByIdempotencyKey("idem-key-001")).willReturn(Optional.empty());
-            given(productRepository.findAllById(anyIterable())).willReturn(List.of(product));
+            given(variantRepository.findAllByIdInWithProduct(anyCollection())).willReturn(List.of(variant));
             given(orderRepository.save(any(Order.class))).willReturn(order);
 
             OrderResponse response = orderCommandService.create(request);
 
             verify(orderRepository).save(any(Order.class));
-            verify(inventoryService).reserve(any(), eq(1));
+            verify(inventoryService).reserve(eq(1L), eq(1));
             assertThat(response.getStatus()).isEqualTo(OrderStatus.PENDING);
             assertThat(response.getTotalAmount()).isEqualByComparingTo("10000");
             assertThat(response.getIdempotencyKey()).isEqualTo("idem-key-001");
@@ -137,7 +148,7 @@ class OrderCommandServiceTest {
         @DisplayName("멱등성 키 경쟁 조건 — save()에서 DataIntegrityViolationException 발생 시 기존 주문 반환")
         void returnsExistingOrderOnDataIntegrityViolation() {
             OrderItemRequest itemRequest = mock(OrderItemRequest.class);
-            given(itemRequest.getProductId()).willReturn(1L);
+            given(itemRequest.getVariantId()).willReturn(1L);
             given(itemRequest.getQuantity()).willReturn(1);
             given(itemRequest.getUnitPrice()).willReturn(new BigDecimal("10000"));
 
@@ -147,9 +158,9 @@ class OrderCommandServiceTest {
             given(request.getItems()).willReturn(List.of(itemRequest));
 
             given(orderRepository.findByIdempotencyKey("idem-key-race"))
-                    .willReturn(Optional.empty())   // 1차 조회: 없음 → 저장 진행
+                    .willReturn(Optional.empty())   // 1차 조회: 없음 -> 저장 진행
                     .willReturn(Optional.of(order)); // 2차 조회(catch 내부): 기존 주문 반환
-            given(productRepository.findAllById(anyIterable())).willReturn(List.of(product));
+            given(variantRepository.findAllByIdInWithProduct(anyCollection())).willReturn(List.of(variant));
             given(orderRepository.save(any(Order.class)))
                     .willThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate"));
 
@@ -174,34 +185,32 @@ class OrderCommandServiceTest {
         }
 
         @Test
-        @DisplayName("존재하지 않는 상품 ID 포함 시 PRODUCT_NOT_FOUND 예외 발생")
-        void throwsWhenProductNotFound() {
-            // getUnitPrice/getQuantity는 상품 조회 실패 시 호출되지 않으므로 스텁 불필요
+        @DisplayName("존재하지 않는 변형 ID 포함 시 VARIANT_NOT_FOUND 예외 발생")
+        void throwsWhenVariantNotFound() {
             OrderItemRequest itemRequest = mock(OrderItemRequest.class);
-            given(itemRequest.getProductId()).willReturn(99L);
+            given(itemRequest.getVariantId()).willReturn(99L);
 
             OrderCreateRequest request = mock(OrderCreateRequest.class);
             given(request.getIdempotencyKey()).willReturn("idem-key-001");
             given(request.getItems()).willReturn(List.of(itemRequest));
 
             given(orderRepository.findByIdempotencyKey("idem-key-001")).willReturn(Optional.empty());
-            given(productRepository.findAllById(anyIterable())).willReturn(List.of()); // 존재하지 않는 상품
+            given(variantRepository.findAllByIdInWithProduct(anyCollection())).willReturn(List.of()); // 존재하지 않는 변형
 
             assertThatThrownBy(() -> orderCommandService.create(request))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                            .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND));
+                            .isEqualTo(ErrorCode.VARIANT_NOT_FOUND));
 
             verify(orderRepository, never()).save(any());
             verifyNoInteractions(inventoryService);
         }
 
         @Test
-        @DisplayName("요청 단가와 상품 가격 불일치 시 INVALID_INPUT 예외 발생")
+        @DisplayName("요청 단가와 변형 가격 불일치 시 INVALID_INPUT 예외 발생")
         void throwsWhenUnitPriceMismatch() {
-            // getQuantity/getUserId는 단가 불일치 예외 경로에서 호출되지 않으므로 스텁 불필요
             OrderItemRequest itemRequest = mock(OrderItemRequest.class);
-            given(itemRequest.getProductId()).willReturn(1L);
+            given(itemRequest.getVariantId()).willReturn(1L);
             given(itemRequest.getUnitPrice()).willReturn(new BigDecimal("9999")); // 불일치
 
             OrderCreateRequest request = mock(OrderCreateRequest.class);
@@ -209,7 +218,7 @@ class OrderCommandServiceTest {
             given(request.getItems()).willReturn(List.of(itemRequest));
 
             given(orderRepository.findByIdempotencyKey("idem-key-001")).willReturn(Optional.empty());
-            given(productRepository.findAllById(anyIterable())).willReturn(List.of(product)); // price=10000
+            given(variantRepository.findAllByIdInWithProduct(anyCollection())).willReturn(List.of(variant)); // price=10000
 
             assertThatThrownBy(() -> orderCommandService.create(request))
                     .isInstanceOf(BusinessException.class)
@@ -220,12 +229,12 @@ class OrderCommandServiceTest {
         }
 
         @Test
-        @DisplayName("동일 상품 중복 포함 시 INVALID_INPUT 예외 발생")
-        void throwsWhenDuplicateProductId() {
+        @DisplayName("동일 변형 중복 포함 시 INVALID_INPUT 예외 발생")
+        void throwsWhenDuplicateVariantId() {
             OrderItemRequest item1 = mock(OrderItemRequest.class);
-            given(item1.getProductId()).willReturn(1L);
+            given(item1.getVariantId()).willReturn(1L);
             OrderItemRequest item2 = mock(OrderItemRequest.class);
-            given(item2.getProductId()).willReturn(1L); // 중복 상품
+            given(item2.getVariantId()).willReturn(1L); // 중복 변형
 
             OrderCreateRequest request = mock(OrderCreateRequest.class);
             given(request.getIdempotencyKey()).willReturn("idem-key-dup");
@@ -246,7 +255,7 @@ class OrderCommandServiceTest {
         @DisplayName("쿠폰 코드 포함 주문 생성 — discountAmount 적용")
         void createOrderWithCoupon() {
             OrderItemRequest itemRequest = mock(OrderItemRequest.class);
-            given(itemRequest.getProductId()).willReturn(1L);
+            given(itemRequest.getVariantId()).willReturn(1L);
             given(itemRequest.getQuantity()).willReturn(1);
             given(itemRequest.getUnitPrice()).willReturn(new BigDecimal("10000"));
 
@@ -257,7 +266,7 @@ class OrderCommandServiceTest {
             given(request.getCouponCode()).willReturn("FIXED2000");
 
             given(orderRepository.findByIdempotencyKey("idem-key-coupon")).willReturn(Optional.empty());
-            given(productRepository.findAllById(anyIterable())).willReturn(List.of(product));
+            given(variantRepository.findAllByIdInWithProduct(anyCollection())).willReturn(List.of(variant));
             given(orderRepository.save(any(Order.class))).willReturn(order);
 
             CouponValidateResponse couponResult = CouponValidateResponse.builder()
@@ -271,7 +280,6 @@ class OrderCommandServiceTest {
             OrderResponse response = orderCommandService.create(request);
 
             verify(couponService).applyCoupon(eq("FIXED2000"), eq(1L), any(), any());
-            // Order.applyDiscount()가 호출되어 discountAmount가 설정됨
             assertThat(response).isNotNull();
         }
 
@@ -279,7 +287,7 @@ class OrderCommandServiceTest {
         @DisplayName("재고 부족 시 InsufficientStockException이 전파된다")
         void propagatesInsufficientStockException() {
             OrderItemRequest itemRequest = mock(OrderItemRequest.class);
-            given(itemRequest.getProductId()).willReturn(1L);
+            given(itemRequest.getVariantId()).willReturn(1L);
             given(itemRequest.getQuantity()).willReturn(100);
             given(itemRequest.getUnitPrice()).willReturn(new BigDecimal("10000"));
 
@@ -289,10 +297,10 @@ class OrderCommandServiceTest {
             given(request.getItems()).willReturn(List.of(itemRequest));
 
             given(orderRepository.findByIdempotencyKey("idem-key-001")).willReturn(Optional.empty());
-            given(productRepository.findAllById(anyIterable())).willReturn(List.of(product));
+            given(variantRepository.findAllByIdInWithProduct(anyCollection())).willReturn(List.of(variant));
             given(orderRepository.save(any(Order.class))).willReturn(order);
             doThrow(new InsufficientStockException(100, 5))
-                    .when(inventoryService).reserve(any(), anyInt());
+                    .when(inventoryService).reserve(anyLong(), anyInt());
 
             assertThatThrownBy(() -> orderCommandService.create(request))
                     .isInstanceOf(InsufficientStockException.class);
@@ -310,17 +318,17 @@ class OrderCommandServiceTest {
         void cancelsPendingOrder() {
             given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
-            OrderResponse response = orderCommandService.cancel(1L, 1L, false, null); // userId=1L, order.userId=1L
+            OrderResponse response = orderCommandService.cancel(1L, 1L, false, null);
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-            verify(inventoryService).releaseReservation(any(), eq(1));
+            verify(inventoryService).releaseReservation(eq(1L), eq(1));
             assertThat(response.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         }
 
         @Test
         @DisplayName("CONFIRMED 주문 취소 시도 — INVALID_ORDER_STATUS 예외 발생")
         void throwsWhenCancellingConfirmedOrder() {
-            order.confirm(); // PENDING → CONFIRMED
+            order.confirm(); // PENDING -> CONFIRMED
             given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
 
             assertThatThrownBy(() -> orderCommandService.cancel(1L, 1L, false, null))

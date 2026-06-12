@@ -23,7 +23,7 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
         void createProduct_admin_201() throws Exception {
             String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
 
-            mockMvc.perform(post("/api/products")
+            mockMvc.perform(post("/api/v1/products")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"name\":\"테스트상품\",\"sku\":\"SKU-001\",\"price\":10000}"))
@@ -38,7 +38,7 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
         void createProduct_user_403() throws Exception {
             String userToken = signupAndLogin("normaluser", "Password1@3", "user@example.com");
 
-            mockMvc.perform(post("/api/products")
+            mockMvc.perform(post("/api/v1/products")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"name\":\"상품\",\"sku\":\"SKU-002\",\"price\":5000}"))
@@ -51,13 +51,13 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
             String adminToken = createAdminAndLogin("admin2", "adminpass2", "admin2@example.com");
             String productJson = "{\"name\":\"상품A\",\"sku\":\"SKU-DUP\",\"price\":10000}";
 
-            mockMvc.perform(post("/api/products")
+            mockMvc.perform(post("/api/v1/products")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(productJson))
                     .andExpect(status().isCreated());
 
-            mockMvc.perform(post("/api/products")
+            mockMvc.perform(post("/api/v1/products")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"name\":\"상품B\",\"sku\":\"SKU-DUP\",\"price\":10000}"))
@@ -78,7 +78,7 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
             String adminToken = createAdminAndLogin("admin3", "adminpass3", "admin3@example.com");
             String userToken = signupAndLogin("user3", "Password1@3", "user3@example.com");
 
-            String responseBody = mockMvc.perform(post("/api/products")
+            String responseBody = mockMvc.perform(post("/api/v1/products")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"name\":\"조회테스트\",\"sku\":\"SKU-GET\",\"price\":5000}"))
@@ -87,7 +87,7 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
 
             long productId = objectMapper.readTree(responseBody).path("data").path("id").asLong();
 
-            mockMvc.perform(get("/api/products/" + productId)
+            mockMvc.perform(get("/api/v1/products/" + productId)
                             .header("Authorization", "Bearer " + userToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.name").value("조회테스트"))
@@ -99,7 +99,7 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
         void getProduct_notFound_404() throws Exception {
             String userToken = signupAndLogin("user4", "Password1@3", "user4@example.com");
 
-            mockMvc.perform(get("/api/products/99999")
+            mockMvc.perform(get("/api/v1/products/99999")
                             .header("Authorization", "Bearer " + userToken))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
@@ -117,7 +117,7 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
         void updateProduct_admin_200() throws Exception {
             String adminToken = createAdminAndLogin("admin5", "adminpass5", "admin5@example.com");
 
-            String createBody = mockMvc.perform(post("/api/products")
+            String createBody = mockMvc.perform(post("/api/v1/products")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"name\":\"원래이름\",\"sku\":\"SKU-UPD\",\"price\":10000}"))
@@ -126,7 +126,7 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
 
             long productId = objectMapper.readTree(createBody).path("data").path("id").asLong();
 
-            mockMvc.perform(put("/api/products/" + productId)
+            mockMvc.perform(put("/api/v1/products/" + productId)
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"name\":\"수정된이름\",\"price\":20000}"))
@@ -147,7 +147,7 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
         void deleteProduct_softDelete() throws Exception {
             String adminToken = createAdminAndLogin("admin4", "adminpass4", "admin4@example.com");
 
-            String responseBody = mockMvc.perform(post("/api/products")
+            String responseBody = mockMvc.perform(post("/api/v1/products")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"name\":\"삭제테스트\",\"sku\":\"SKU-DEL\",\"price\":3000}"))
@@ -157,12 +157,12 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
             long productId = objectMapper.readTree(responseBody).path("data").path("id").asLong();
 
             // 소프트 삭제 → 204
-            mockMvc.perform(delete("/api/products/" + productId)
+            mockMvc.perform(delete("/api/v1/products/" + productId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isNoContent());
 
             // 삭제 후에도 GET 가능 — 상태만 DISCONTINUED
-            mockMvc.perform(get("/api/products/" + productId)
+            mockMvc.perform(get("/api/v1/products/" + productId)
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.status").value("DISCONTINUED"));
@@ -180,13 +180,13 @@ class ProductIntegrationTest extends AbstractIntegrationTest {
         void getProducts_list_200() throws Exception {
             String adminToken = createAdminAndLogin("admin6", "adminpass6", "admin6@example.com");
 
-            mockMvc.perform(post("/api/products")
+            mockMvc.perform(post("/api/v1/products")
                             .header("Authorization", "Bearer " + adminToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"name\":\"상품1\",\"sku\":\"SKU-L01\",\"price\":1000}"))
                     .andExpect(status().isCreated());
 
-            mockMvc.perform(get("/api/products")
+            mockMvc.perform(get("/api/v1/products")
                             .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))

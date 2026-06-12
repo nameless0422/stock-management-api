@@ -1,22 +1,23 @@
 package com.stockmanagement.domain.product.wishlist.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.domain.product.wishlist.dto.WishlistResponse;
 import com.stockmanagement.domain.product.wishlist.service.WishlistService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Wishlist", description = "위시리스트 API")
+@Validated
 @RestController
-@RequestMapping("/api/wishlist")
+@RequestMapping("/api/v1/wishlist")
 @RequiredArgsConstructor
 public class WishlistController {
 
@@ -46,11 +47,12 @@ public class WishlistController {
         return ApiResponse.ok(java.util.Map.of("wishlisted", wishlisted));
     }
 
-    @Operation(summary = "내 위시리스트 목록 조회 (페이지네이션)")
+    @Operation(summary = "내 위시리스트 목록 조회 (커서 기반)")
     @GetMapping
-    public ApiResponse<Page<WishlistResponse>> getList(
+    public ApiResponse<CursorPage<WishlistResponse>> getList(
             @CurrentUserId Long userId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ApiResponse.ok(wishlistService.getList(userId, pageable));
+            @RequestParam(required = false) Long lastId,
+            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(wishlistService.getList(userId, lastId, size));
     }
 }

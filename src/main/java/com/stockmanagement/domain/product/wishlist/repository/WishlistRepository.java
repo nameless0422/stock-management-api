@@ -40,6 +40,17 @@ public interface WishlistRepository extends JpaRepository<WishlistItem, Long> {
                     "(SELECT 1 FROM Product p WHERE p.id = w.productId)")
     Page<WishlistItem> findByUserIdWithExistingProduct(@Param("userId") Long userId, Pageable pageable);
 
+    /** 커서 기반 조회 — 첫 페이지. 존재하는 상품만 반환한다. */
+    @Query("SELECT w FROM WishlistItem w WHERE w.userId = :userId AND EXISTS " +
+            "(SELECT 1 FROM Product p WHERE p.id = w.productId) ORDER BY w.id DESC")
+    List<WishlistItem> findByUserIdWithExistingProductCursor(@Param("userId") Long userId, Pageable pageable);
+
+    /** 커서 기반 조회 — 다음 페이지 (id < lastId). 존재하는 상품만 반환한다. */
+    @Query("SELECT w FROM WishlistItem w WHERE w.userId = :userId AND w.id < :lastId AND EXISTS " +
+            "(SELECT 1 FROM Product p WHERE p.id = w.productId) ORDER BY w.id DESC")
+    List<WishlistItem> findByUserIdWithExistingProductCursorAfter(@Param("userId") Long userId,
+                                                                  @Param("lastId") Long lastId, Pageable pageable);
+
     /** 회원 탈퇴 시 사용자의 위시리스트 전체를 일괄 삭제한다. */
     @Modifying
     @Query("DELETE FROM WishlistItem w WHERE w.userId = :userId")

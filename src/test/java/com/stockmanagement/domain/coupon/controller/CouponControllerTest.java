@@ -71,7 +71,7 @@ class CouponControllerTest {
         void adminCreates() throws Exception {
             given(couponService.create(any())).willReturn(mock(CouponResponse.class));
 
-            mockMvc.perform(post("/api/coupons")
+            mockMvc.perform(post("/api/v1/coupons")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(CREATE_JSON))
                     .andExpect(status().isCreated())
@@ -82,7 +82,7 @@ class CouponControllerTest {
         @WithMockUser(roles = "USER")
         @DisplayName("USER 쿠폰 생성 → 403")
         void userForbidden() throws Exception {
-            mockMvc.perform(post("/api/coupons")
+            mockMvc.perform(post("/api/v1/coupons")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(CREATE_JSON))
                     .andExpect(status().isForbidden());
@@ -91,7 +91,7 @@ class CouponControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(post("/api/coupons")
+            mockMvc.perform(post("/api/v1/coupons")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(CREATE_JSON))
                     .andExpect(status().isUnauthorized());
@@ -111,7 +111,7 @@ class CouponControllerTest {
             given(couponService.getList(any(Pageable.class)))
                     .willReturn(new PageImpl<>(List.of(mock(CouponResponse.class))));
 
-            mockMvc.perform(get("/api/coupons"))
+            mockMvc.perform(get("/api/v1/coupons"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -129,7 +129,7 @@ class CouponControllerTest {
         void adminDeactivates() throws Exception {
             given(couponService.deactivate(1L)).willReturn(mock(CouponResponse.class));
 
-            mockMvc.perform(patch("/api/coupons/1/deactivate"))
+            mockMvc.perform(patch("/api/v1/coupons/1/deactivate"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -138,7 +138,7 @@ class CouponControllerTest {
         @WithMockUser(roles = "USER")
         @DisplayName("USER 비활성화 → 403")
         void userForbidden() throws Exception {
-            mockMvc.perform(patch("/api/coupons/1/deactivate"))
+            mockMvc.perform(patch("/api/v1/coupons/1/deactivate"))
                     .andExpect(status().isForbidden());
         }
     }
@@ -153,7 +153,7 @@ class CouponControllerTest {
         @WithMockUser(roles = "ADMIN")
         @DisplayName("ADMIN 발급 → 201")
         void adminIssues() throws Exception {
-            mockMvc.perform(post("/api/coupons/1/issue")
+            mockMvc.perform(post("/api/v1/coupons/1/issue")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"userId\":2}"))
                     .andExpect(status().isCreated());
@@ -163,7 +163,7 @@ class CouponControllerTest {
         @WithMockUser(roles = "USER")
         @DisplayName("USER 발급 시도 → 403")
         void userForbidden() throws Exception {
-            mockMvc.perform(post("/api/coupons/1/issue")
+            mockMvc.perform(post("/api/v1/coupons/1/issue")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"userId\":2}"))
                     .andExpect(status().isForbidden());
@@ -185,7 +185,7 @@ class CouponControllerTest {
             var auth = new UsernamePasswordAuthenticationToken("testuser", null,
                     List.of(new SimpleGrantedAuthority("ROLE_USER")));
 
-            mockMvc.perform(get("/api/coupons/my").with(authentication(auth)))
+            mockMvc.perform(get("/api/v1/coupons/my").with(authentication(auth)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -193,7 +193,7 @@ class CouponControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/coupons/my"))
+            mockMvc.perform(get("/api/v1/coupons/my"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -226,7 +226,7 @@ class CouponControllerTest {
             var auth = new UsernamePasswordAuthenticationToken("testuser", null,
                     List.of(new SimpleGrantedAuthority("ROLE_USER")));
 
-            mockMvc.perform(post("/api/coupons/validate")
+            mockMvc.perform(post("/api/v1/coupons/validate")
                             .with(authentication(auth))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALIDATE_JSON))
@@ -239,7 +239,7 @@ class CouponControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(post("/api/coupons/validate")
+            mockMvc.perform(post("/api/v1/coupons/validate")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALIDATE_JSON))
                     .andExpect(status().isUnauthorized());

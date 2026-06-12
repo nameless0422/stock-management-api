@@ -10,12 +10,17 @@ public class LowStockEvent extends DomainEvent {
 
     private final Long productId;
     private final String productName;
+    private final Long variantId;
+    private final String variantOptionName;
     private final int available;
 
-    public LowStockEvent(Long productId, String productName, int available) {
+    public LowStockEvent(Long productId, String productName,
+                         Long variantId, String variantOptionName, int available) {
         super();
         this.productId = productId;
         this.productName = productName;
+        this.variantId = variantId;
+        this.variantOptionName = variantOptionName;
         this.available = available;
     }
 }

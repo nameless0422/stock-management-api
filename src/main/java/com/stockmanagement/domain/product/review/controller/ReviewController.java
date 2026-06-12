@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.product.review.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.domain.product.review.dto.RatingStatsResponse;
 import com.stockmanagement.domain.product.review.dto.ReviewCreateRequest;
@@ -10,17 +11,17 @@ import com.stockmanagement.domain.product.review.service.ReviewService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Review", description = "상품 리뷰 API")
+@Validated
 @RestController
-@RequestMapping("/api/products/{productId}/reviews")
+@RequestMapping("/api/v1/products/{productId}/reviews")
 @RequiredArgsConstructor
 public class ReviewController {
 
@@ -36,15 +37,15 @@ public class ReviewController {
         return ApiResponse.ok(reviewService.create(productId, userId, request));
     }
 
-    @Operation(summary = "상품 리뷰 목록 조회",
-               description = "sort: createdAt,desc(기본) | rating,desc | rating,asc\n\n" +
-                       "rating: 1~5 별점 필터 (null이면 전체)")
+    @Operation(summary = "상품 리뷰 목록 조회 (커서 기반)",
+               description = "rating: 1~5 별점 필터 (null이면 전체)")
     @GetMapping
-    public ApiResponse<Page<ReviewResponse>> getList(
+    public ApiResponse<CursorPage<ReviewResponse>> getList(
             @PathVariable Long productId,
             @RequestParam(required = false) Integer rating,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ApiResponse.ok(reviewService.getList(productId, pageable, rating));
+            @RequestParam(required = false) Long lastId,
+            @Min(1) @Max(100) @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(reviewService.getList(productId, lastId, size, rating));
     }
 
     @Operation(summary = "리뷰 별점 분포 통계",

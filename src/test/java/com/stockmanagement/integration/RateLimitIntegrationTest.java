@@ -23,15 +23,16 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
         String adminToken = createAdminAndLogin("rl-admin", "adminpass1", "rl-admin@example.com");
 
         // 상품 생성 + 충분한 재고 확보 (주문 10건 × 1개 = 10개 필요)
-        String productBody = mockMvc.perform(post("/api/products")
+        String productBody = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"RL테스트상품\",\"sku\":\"RL-SKU-001\",\"price\":10000}"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long productId = objectMapper.readTree(productBody).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":20}"))
@@ -42,24 +43,24 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
 
         // 한도 이내 요청(10회) — 모두 성공해야 한다
         for (int i = 1; i <= 10; i++) {
-            mockMvc.perform(post("/api/orders")
+            mockMvc.perform(post("/api/v1/orders")
                             .header("Authorization", "Bearer " + userToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
                                     "{\"userId\":%d,\"idempotencyKey\":\"rl-test-%d\"," +
-                                    "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                    buyerId, i, productId)))
+                                    "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                    buyerId, i, productId, variantId)))
                     .andExpect(status().isCreated());
         }
 
         // 11번째 요청 — rate limit 초과 → 429
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"rl-test-11\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                buyerId, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                buyerId, productId, variantId)))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.success").value(false));
     }
@@ -72,15 +73,16 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
         String userBToken = signupAndLogin("rl-userB", "PassB1234!", "userb@example.com");
 
         String adminToken = createAdminAndLogin("rl-admin2", "adminpass1", "rl-admin2@example.com");
-        String productBody = mockMvc.perform(post("/api/products")
+        String productBody = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"RL분리상품\",\"sku\":\"RL-SKU-002\",\"price\":10000}"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long productId = objectMapper.readTree(productBody).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":30}"))
@@ -91,34 +93,34 @@ class RateLimitIntegrationTest extends AbstractIntegrationTest {
 
         // userA 10회 주문 (한도 도달)
         for (int i = 1; i <= 10; i++) {
-            mockMvc.perform(post("/api/orders")
+            mockMvc.perform(post("/api/v1/orders")
                             .header("Authorization", "Bearer " + userAToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
                                     "{\"userId\":%d,\"idempotencyKey\":\"rl-a-test-%d\"," +
-                                    "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                    userAId, i, productId)))
+                                    "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                    userAId, i, productId, variantId)))
                     .andExpect(status().isCreated());
         }
 
         // userA 11번째 — 429
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userAToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"rl-a-test-11\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                userAId, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                userAId, productId, variantId)))
                 .andExpect(status().isTooManyRequests());
 
         // userB는 다른 카운터 → 첫 요청이므로 정상 처리
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userBToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"rl-b-test-1\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
-                                userBId, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":10000}]}",
+                                userBId, productId, variantId)))
                 .andExpect(status().isCreated());
     }
 }

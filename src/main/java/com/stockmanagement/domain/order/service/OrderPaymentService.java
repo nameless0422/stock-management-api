@@ -55,7 +55,7 @@ public class OrderPaymentService {
         order.confirm();
 
         for (OrderItem item : order.getItems()) {
-            inventoryService.confirmAllocation(item.getProduct().getId(), item.getQuantity());
+            inventoryService.confirmAllocation(item.getVariant().getId(), item.getQuantity());
         }
 
         recordHistory(order.getId(), previousStatus, OrderStatus.CONFIRMED, null);
@@ -75,16 +75,18 @@ public class OrderPaymentService {
         Order order = orderRepository.findByIdWithItemsForUpdate(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
+        OrderStatus previousStatus = order.getStatus();
         order.refund();
 
-        for (OrderItem item : order.getItems()) {
-            inventoryService.releaseAllocation(item.getProduct().getId(), item.getQuantity());
+        // ACTIVE 아이템만 재고 해제 — 부분 취소로 이미 CANCELLED된 아이템은 건너뜀
+        for (OrderItem item : order.getActiveItems()) {
+            inventoryService.releaseAllocation(item.getVariant().getId(), item.getQuantity());
         }
 
         couponService.releaseCoupon(order.getId());
         pointService.refundByOrder(order.getUserId(), order.getId());
 
-        recordHistory(order.getId(), OrderStatus.CONFIRMED, OrderStatus.CANCELLED, null);
+        recordHistory(order.getId(), previousStatus, OrderStatus.CANCELLED, null);
         outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "PAYMENT_REFUNDED"));
     }
 
@@ -107,7 +109,7 @@ public class OrderPaymentService {
         order.cancelByWebhook(reason);
 
         for (OrderItem item : order.getItems()) {
-            inventoryService.releaseReservation(item.getProduct().getId(), item.getQuantity());
+            inventoryService.releaseReservation(item.getVariant().getId(), item.getQuantity());
         }
 
         couponService.releaseCoupon(order.getId());

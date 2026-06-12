@@ -7,6 +7,9 @@ import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.dto.ProductSearchRequest;
 import com.stockmanagement.domain.product.dto.ProductStatusRequest;
 import com.stockmanagement.domain.product.dto.ProductUpdateRequest;
+import com.stockmanagement.domain.product.dto.ProductVariantCreateRequest;
+import com.stockmanagement.domain.product.dto.ProductVariantResponse;
+import com.stockmanagement.domain.product.dto.ProductVariantUpdateRequest;
 import com.stockmanagement.domain.product.dto.SuggestResponse;
 import com.stockmanagement.domain.product.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,15 +23,17 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @Tag(name = "상품", description = "상품 CRUD — 등록·조회·수정·삭제")
 @RestController
-@RequestMapping("/api/products")
+@RequestMapping("/api/v1/products")
 @RequiredArgsConstructor
 public class ProductController {
 
     private final ProductService productService;
 
-    @Operation(summary = "상품 등록", description = "ADMIN 전용. SKU 중복 시 409.")
+    @Operation(summary = "상품 등록", description = "ADMIN 전용. SKU 중복 시 409. 기본 variant와 Inventory를 자동 생성한다.")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<ProductResponse> create(@RequestBody @Valid ProductCreateRequest request) {
@@ -89,5 +94,38 @@ public class ProductController {
             @PathVariable Long id,
             @RequestBody @Valid ProductStatusRequest request) {
         return ApiResponse.ok(productService.changeStatus(id, request));
+    }
+
+    // ===== Variant 엔드포인트 =====
+
+    @Operation(summary = "변형 목록 조회", description = "상품의 모든 변형을 조회한다.")
+    @GetMapping("/{productId}/variants")
+    public ApiResponse<List<ProductVariantResponse>> getVariants(@PathVariable Long productId) {
+        return ApiResponse.ok(productService.getVariants(productId));
+    }
+
+    @Operation(summary = "변형 추가", description = "ADMIN 전용. SKU 중복 시 409. Inventory를 자동 생성한다.")
+    @PostMapping("/{productId}/variants")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<ProductVariantResponse> addVariant(
+            @PathVariable Long productId,
+            @RequestBody @Valid ProductVariantCreateRequest request) {
+        return ApiResponse.ok(productService.addVariant(productId, request));
+    }
+
+    @Operation(summary = "변형 수정", description = "ADMIN 전용. optionName, price, status를 변경한다.")
+    @PutMapping("/{productId}/variants/{variantId}")
+    public ApiResponse<ProductVariantResponse> updateVariant(
+            @PathVariable Long productId,
+            @PathVariable Long variantId,
+            @RequestBody @Valid ProductVariantUpdateRequest request) {
+        return ApiResponse.ok(productService.updateVariant(productId, variantId, request));
+    }
+
+    @Operation(summary = "변형 비활성화", description = "ADMIN 전용. DISCONTINUED 상태로 전환.")
+    @DeleteMapping("/{productId}/variants/{variantId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deactivateVariant(@PathVariable Long productId, @PathVariable Long variantId) {
+        productService.deactivateVariant(productId, variantId);
     }
 }

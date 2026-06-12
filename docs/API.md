@@ -29,6 +29,10 @@ Authorization: Bearer <accessToken>
 | HTTP | 코드 | 설명 |
 |------|------|------|
 | 400 | `INVALID_INPUT` | 요청 파라미터 검증 실패 |
+| 400 | `PRODUCT_NOT_AVAILABLE` | 비활성화된 상품/바리에이션 주문 시도 |
+| 400 | `INSUFFICIENT_STOCK` | 재고 부족 |
+| 400 | `INSUFFICIENT_POINTS` | 포인트 잔액 부족 |
+| 400 | `COUPON_ALREADY_USED` | 이미 사용된 쿠폰 |
 | 401 | `UNAUTHORIZED` | 미인증 (JWT 없음/만료) |
 | 401 | `INVALID_RESET_TOKEN` | 비밀번호 재설정 토큰 무효/만료 |
 | 403 | `FORBIDDEN` | 권한 없음 |
@@ -110,38 +114,38 @@ Authorization: Bearer <accessToken>
 // 응답: 200 OK — 성공 시 해당 사용자 Refresh Token 일괄 폐기
 ```
 
-### `GET /api/users/me`
+### `GET /api/user/me`
 
 > 권한: USER
 
 ```json
 // 응답
-{ "id": 1, "username": "user1", "email": "user1@example.com", "role": "USER" }
+{ "id": 1, "username": "user1", "email": "user1@example.com", "role": "USER", "phoneNumber": "010-1234-5678", "pointBalance": 3000 }
 ```
 
-### `PATCH /api/users/me`
+### `PUT /api/user/profile`
 
-> 권한: USER | 이메일 수정. 중복 이메일이면 409
+> 권한: USER | 프로필 수정 (이름, 전화번호 등)
 
 ```json
-{ "email": "new@example.com" }
+{ "phoneNumber": "010-9999-8888" }
 ```
 
-### `PATCH /api/users/me/password`
+### `POST /api/user/password/change`
 
-> 권한: USER | 현재 비밀번호 확인 후 변경. 성공 시 Refresh Token 일괄 폐기 (204 No Content)
+> 권한: USER | 현재 비밀번호 확인 후 변경. 성공 시 Access Token 블랙리스트 등록 + Refresh Token 일괄 폐기
 
 ```json
 { "currentPassword": "OldPass1!", "newPassword": "NewPass1!" }
 ```
 
-### `GET /api/users/me/orders`
+### `GET /api/user/orders`
 
-> 권한: USER | 내 주문 목록 (최신순, 기본 20건 페이징)
+> 권한: USER | 내 주문 목록 (커서 페이지네이션, `?lastId=&size=20`)
 
-### `DELETE /api/users/me`
+### `POST /api/user/deactivate`
 
-> 권한: USER | Soft Delete (`deleted_at` 설정) + 해당 사용자 Refresh Token 일괄 폐기
+> 권한: USER | Soft Delete (`deleted_at` 설정) + PENDING 주문 강제 취소 + 장바구니·위시리스트·배송지 일괄 삭제 + Refresh Token 일괄 폐기
 
 ---
 
@@ -176,13 +180,23 @@ Authorization: Bearer <accessToken>
 |---|---|
 | `q` | 키워드 (name·sku·category·description multi_match) |
 | `minPrice` / `maxPrice` | 가격 범위 |
-| `category` | 카테고리명 정확 일치 |
+| `categoryId` | 카테고리 ID |
+| `includeChildren` | `true` 시 하위 카테고리 포함 검색 |
 | `sort` | `price_asc` \| `price_desc` \| `newest` \| `relevance` (기본) |
-| `page` / `size` | 페이징 |
+| `page` / `size` | 페이징 (관리자·카탈로그 검색용) |
+
+### `GET /api/products/search/suggestions`
+
+> 권한: 공개 | Elasticsearch prefix query 기반 자동완성
+
+```
+GET /api/products/search/suggestions?q=노트
+→ { "suggestions": ["노트북", "노트북 파우치", ...] }
+```
 
 ### `POST /api/products`
 
-> 권한: ADMIN
+> 권한: ADMIN | 등록 시 기본 variant("기본") + inventory 자동 생성
 
 ```json
 // 요청
@@ -203,6 +217,30 @@ Authorization: Bearer <accessToken>
 ### `DELETE /api/products/{id}`
 
 > 권한: ADMIN | Soft Delete — `status = DISCONTINUED` 로 변경
+
+---
+
+## 상품 바리에이션
+
+### `GET /api/products/{id}/variants`
+
+> 권한: 공개
+
+### `POST /api/products/{id}/variants`
+
+> 권한: ADMIN
+
+```json
+{ "optionName": "블랙 M", "sku": "MBP-16-M3-BLK-M", "price": 3990000, "status": "ACTIVE" }
+```
+
+### `PUT /api/products/{id}/variants/{variantId}`
+
+> 권한: ADMIN | 바리에이션 정보 수정
+
+### `DELETE /api/products/{id}/variants/{variantId}`
+
+> 권한: ADMIN | 바리에이션 + 연관 inventory 삭제
 
 ---
 
@@ -313,9 +351,47 @@ Authorization: Bearer <accessToken>
 |---|---|---|
 | `POST` | `/api/wishlist/{productId}` | 찜 추가 |
 | `DELETE` | `/api/wishlist/{productId}` | 찜 제거 |
-| `GET` | `/api/wishlist` | 찜 목록 조회 (삭제된 상품 자동 필터링) |
+| `GET` | `/api/wishlist` | 찜 목록 조회 (커서 페이지네이션, `?lastId=&size=20`) |
+
+> 권한: USER | `WishlistResponse`에 `productName`, `productPrice`, `thumbnailUrl`, `availableQuantity`, `productStatus` 포함
+
+---
+
+## 상품 Q&A
+
+### `GET /api/products/{id}/qna`
+
+> 권한: 공개 | 커서 페이지네이션 (`?lastId=&size=20`)
+
+### `POST /api/products/{id}/qna`
 
 > 권한: USER
+
+```json
+{ "question": "사이즈가 작게 나오나요?" }
+```
+
+### `PUT /api/products/{id}/qna/{qnaId}/answer`
+
+> 권한: ADMIN
+
+```json
+{ "answer": "정사이즈로 나옵니다." }
+```
+
+### `DELETE /api/products/{id}/qna/{qnaId}`
+
+> 권한: USER(본인) / ADMIN
+
+---
+
+## 재입고 알림
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| `POST` | `/api/products/{id}/restock-notifications` | 알림 구독 | USER |
+| `GET` | `/api/products/{id}/restock-notifications` | 구독 목록 | USER |
+| `DELETE` | `/api/products/{id}/restock-notifications/{notificationId}` | 구독 취소 | USER |
 
 ---
 
@@ -334,11 +410,15 @@ Authorization: Bearer <accessToken>
 | `status` | `NORMAL` \| `LOW_STOCK` \| `OUT_OF_STOCK` |
 | `page` / `size` | 페이징 |
 
-### `GET /api/inventory/{productId}/transactions`
+### `GET /api/inventory/variants/{variantId}`
+
+> 권한: ADMIN | 바리에이션 단건 재고 조회
+
+### `GET /api/inventory/variants/{variantId}/transactions`
 
 > 권한: ADMIN | 재고 변동 이력, 페이징 지원. `(inventory_id, created_at)` 복합 인덱스
 
-### `POST /api/inventory/{productId}/receive`
+### `POST /api/inventory/variants/{variantId}/receive`
 
 > 권한: ADMIN | 입고 처리
 
@@ -346,7 +426,7 @@ Authorization: Bearer <accessToken>
 { "quantity": 100, "note": "정기 입고" }
 ```
 
-### `POST /api/inventory/{productId}/adjust`
+### `POST /api/inventory/variants/{variantId}/adjust`
 
 > 권한: ADMIN | 실사 후 수량 조정
 
@@ -360,6 +440,22 @@ Authorization: Bearer <accessToken>
 
 > **소유권 검증**: 단건 조회·취소는 본인 주문만. ADMIN은 전체 접근 가능
 
+### `POST /api/orders/preview`
+
+> 권한: USER | DB 변경 없음. 최종 금액·할인·포인트 미리 계산
+
+```json
+// 요청
+{
+  "items": [{ "variantId": 1, "quantity": 2 }],
+  "couponCode": "FIXED5000",
+  "usePoints": 3000
+}
+
+// 응답
+{ "totalAmount": 52000, "discountAmount": 5000, "usedPoints": 3000, "finalAmount": 44000 }
+```
+
 ### `POST /api/orders`
 
 > 권한: USER | Rate Limit: 10회/분
@@ -372,41 +468,59 @@ Authorization: Bearer <accessToken>
   "couponCode": "FIXED5000",
   "usePoints": 3000,
   "items": [
-    { "productId": 1, "quantity": 2 }
+    { "variantId": 1, "quantity": 2 }
   ]
 }
 ```
 
 - `unitPrice`를 보내도 **무시됨** — 서버가 DB 가격을 강제 적용 (가격 조작 방어)
 - `idempotencyKey` 중복 시 기존 주문 반환 (멱등성)
-- 상품 `status = ACTIVE` 아니면 `PRODUCT_NOT_AVAILABLE` 에러
+- 바리에이션 `status = ACTIVE` 아니면 `PRODUCT_NOT_AVAILABLE` 에러
 
 ```json
 // 응답
 {
   "id": 1,
+  "orderNumber": "ORD-20240701-000001",
   "status": "PENDING",
   "totalAmount": 52000,
   "discountAmount": 5000,
   "usedPoints": 3000,
   "couponId": 2,
-  "items": [...]
+  "items": [{ "variantId": 1, "optionName": "L / 블랙", "quantity": 2, ... }]
 }
 ```
 
 ### `GET /api/orders`
 
-> 권한: USER(본인) / ADMIN(전체)
+> 권한: USER(본인) / ADMIN(전체) | 커서 페이지네이션
 
 | 쿼리 파라미터 | 설명 |
 |---|---|
-| `status` | `PENDING` \| `CONFIRMED` \| `CANCELLED` |
+| `status` | `PENDING` \| `PAYMENT_IN_PROGRESS` \| `CONFIRMED` \| `CANCELLED` |
 | `userId` | ADMIN 전용 필터 |
 | `startDate` / `endDate` | ISO 날짜 범위 (`2024-01-01`) |
+| `lastId` / `size` | 커서 페이지네이션 (기본 20) |
+
+### `GET /api/orders/{id}`
+
+> 권한: USER(본인) | 주문 단건 상세 조회. `OrderDetailResponse` — items에 `thumbnailUrl`, `refundId` 포함
 
 ### `POST /api/orders/{id}/cancel`
 
 > 권한: USER | `PENDING` 상태만 취소 가능. 재고 반환 + 쿠폰 반환 + 포인트 반환
+
+```json
+{ "reason": "단순 변심" }
+```
+
+### `POST /api/orders/{id}/cancel-items`
+
+> 권한: USER | `CONFIRMED` 상태에서 특정 아이템만 부분 취소. 주문 `PARTIAL_CANCELLED` 전이
+
+```json
+{ "itemIds": [1, 2] }
+```
 
 ### `GET /api/orders/{id}/history`
 
@@ -558,15 +672,18 @@ Authorization: Bearer <accessToken>
 
 | Method | Endpoint | 설명 |
 |---|---|---|
-| `GET` | `/api/cart` | 장바구니 조회 |
-| `POST` | `/api/cart/items` | 상품 담기 / 수량 변경 (ACTIVE 상품만) |
-| `DELETE` | `/api/cart/items/{productId}` | 상품 제거 |
+| `GET` | `/api/cart` | 장바구니 조회 (가격 변동 항목 `priceChanged: true` 표시) |
+| `POST` | `/api/cart/items` | 상품 담기 / 수량 변경 (ACTIVE 바리에이션만) |
+| `DELETE` | `/api/cart/items/variants/{variantId}` | 바리에이션 제거 |
 | `DELETE` | `/api/cart` | 장바구니 전체 비우기 |
 | `POST` | `/api/cart/checkout` | 장바구니 → 주문 전환 |
 
 > 권한: USER
 
 ```json
+// POST /api/cart/items 요청
+{ "variantId": 1, "quantity": 2 }
+
 // POST /api/cart/checkout 요청
 {
   "idempotencyKey": "uuid-...",
@@ -581,17 +698,19 @@ Authorization: Bearer <accessToken>
 ## 배송
 
 > 결제 확정 시 자동으로 `PREPARING` 상태 Shipment 생성
+> `ShipmentResponse.trackingUrl` 포함 (CJ대한통운·한진택배·롯데택배·우체국택배 자동 매핑)
 
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
-| `GET` | `/api/shipments/orders/{orderId}` | 배송 조회 (본인 주문만) | USER |
-| `PATCH` | `/api/shipments/{id}/ship` | 배송 시작 → `SHIPPED` | ADMIN |
-| `PATCH` | `/api/shipments/{id}/deliver` | 배송 완료 → `DELIVERED` | ADMIN |
-| `PATCH` | `/api/shipments/{id}/return` | 반품 → `RETURNED` | ADMIN |
+| `GET` | `/api/shipments/my` | 내 배송 목록 (커서 페이지네이션, `?lastId=&size=20`) | USER |
+| `GET` | `/api/shipments/{id}` | 배송 단건 조회 (본인 주문만) | USER |
+| `POST` | `/api/shipments/{id}/ship` | 배송 시작 → `SHIPPED` | ADMIN |
+| `POST` | `/api/shipments/{id}/deliver` | 배송 완료 → `DELIVERED` | ADMIN |
+| `POST` | `/api/shipments/{id}/return` | 반품 → `RETURNED` | ADMIN |
 
 ```json
-// PATCH ship 요청
-{ "carrier": "CJ대한통운", "trackingNumber": "123456789012" }
+// POST ship 요청
+{ "carrier": "CJ대한통운", "trackingNumber": "123456789012", "estimatedDeliveryAt": "2024-07-15" }
 ```
 
 ---
@@ -631,8 +750,10 @@ Authorization: Bearer <accessToken>
 
 | Method | Endpoint | 설명 |
 |---|---|---|
-| `GET` | `/api/points/balance` | 포인트 잔액 조회 |
-| `GET` | `/api/points/history` | 변동 이력 (페이징) |
+| `GET` | `/api/points/my` | 포인트 잔액 + 사용 가능 포인트 조회 |
+| `GET` | `/api/points/transactions` | 변동 이력 (커서 페이지네이션, `?lastId=&size=20`) |
+| `GET` | `/api/points/expiring-soon` | 30일 내 만료 예정 포인트 조회 |
+| `POST` | `/api/points/use` | 포인트 수동 사용 (관리자 발급 포인트 사용 시) |
 
 > 권한: USER
 
@@ -646,6 +767,7 @@ Authorization: Bearer <accessToken>
 | Method | Endpoint | 설명 | 권한 |
 |---|---|---|---|
 | `POST` | `/api/refunds` | 환불 요청 (본인 주문만) | USER |
+| `GET` | `/api/refunds` | 내 환불 목록 (커서 페이지네이션, `?lastId=&size=20`) | USER |
 | `GET` | `/api/refunds/{id}` | 환불 단건 조회 (본인만) | USER |
 | `GET` | `/api/payments/{paymentId}/refund` | 결제 ID로 환불 조회 | USER |
 
@@ -653,6 +775,18 @@ Authorization: Bearer <accessToken>
 // POST 요청
 { "paymentId": 1, "reason": "상품 불량" }
 ```
+
+---
+
+## 알림
+
+> 결제 확정·배송 상태 변경 등 주요 이벤트 발생 시 자동 생성
+
+| Method | Endpoint | 설명 | 권한 |
+|---|---|---|---|
+| `GET` | `/api/notifications` | 내 알림 목록 (커서 페이지네이션, `?lastId=&size=20`) | USER |
+| `PATCH` | `/api/notifications/{id}/read` | 단건 읽음 처리 | USER |
+| `PATCH` | `/api/notifications/read-all` | 전체 읽음 처리 | USER |
 
 ---
 

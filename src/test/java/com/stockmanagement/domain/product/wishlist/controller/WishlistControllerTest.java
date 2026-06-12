@@ -20,13 +20,11 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
-import org.springframework.data.domain.PageImpl;
+import com.stockmanagement.common.dto.CursorPage;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -66,7 +64,7 @@ class WishlistControllerTest {
         void addsToWishlist() throws Exception {
             given(wishlistService.add(anyLong(), anyLong())).willReturn(mock(WishlistResponse.class));
 
-            mockMvc.perform(post("/api/wishlist/1").with(authentication(USER_AUTH)))
+            mockMvc.perform(post("/api/v1/wishlist/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -74,7 +72,7 @@ class WishlistControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(post("/api/wishlist/1"))
+            mockMvc.perform(post("/api/v1/wishlist/1"))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -84,7 +82,7 @@ class WishlistControllerTest {
             given(wishlistService.add(anyLong(), anyLong()))
                     .willThrow(new BusinessException(ErrorCode.WISHLIST_ALREADY_EXISTS));
 
-            mockMvc.perform(post("/api/wishlist/1").with(authentication(USER_AUTH)))
+            mockMvc.perform(post("/api/v1/wishlist/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -99,14 +97,14 @@ class WishlistControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 위시리스트 제거 → 204")
         void removesFromWishlist() throws Exception {
-            mockMvc.perform(delete("/api/wishlist/1").with(authentication(USER_AUTH)))
+            mockMvc.perform(delete("/api/v1/wishlist/1").with(authentication(USER_AUTH)))
                     .andExpect(status().isNoContent());
         }
 
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(delete("/api/wishlist/1"))
+            mockMvc.perform(delete("/api/v1/wishlist/1"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -120,10 +118,10 @@ class WishlistControllerTest {
         @Test
         @DisplayName("인증된 사용자 — 위시리스트 조회 → 200")
         void returnsList() throws Exception {
-            given(wishlistService.getList(anyLong(), any()))
-                    .willReturn(new PageImpl<>(List.of(mock(WishlistResponse.class))));
+            given(wishlistService.getList(anyLong(), any(), anyInt()))
+                    .willReturn(CursorPage.of(List.of(mock(WishlistResponse.class)), 20, WishlistResponse::getId));
 
-            mockMvc.perform(get("/api/wishlist").with(authentication(USER_AUTH)))
+            mockMvc.perform(get("/api/v1/wishlist").with(authentication(USER_AUTH)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -131,7 +129,7 @@ class WishlistControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/wishlist"))
+            mockMvc.perform(get("/api/v1/wishlist"))
                     .andExpect(status().isUnauthorized());
         }
     }

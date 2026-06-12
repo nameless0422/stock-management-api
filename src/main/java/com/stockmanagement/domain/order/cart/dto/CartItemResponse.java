@@ -14,6 +14,8 @@ public class CartItemResponse {
 
     private Long productId;
     private String productName;
+    private Long variantId;
+    private String variantOptionName;
     private BigDecimal unitPrice;
     private int quantity;
     private BigDecimal subtotal;
@@ -34,12 +36,14 @@ public class CartItemResponse {
     }
 
     public static CartItemResponse from(CartItem item, Integer availableQuantity, StockStatus stockStatus) {
-        BigDecimal unitPrice = item.getProduct().getPrice();
+        BigDecimal unitPrice = item.getVariant().getPrice();
         BigDecimal savedPrice = item.getSavedPrice();
         Boolean priceChanged = savedPrice != null ? savedPrice.compareTo(unitPrice) != 0 : null;
         return CartItemResponse.builder()
                 .productId(item.getProduct().getId())
                 .productName(item.getProduct().getName())
+                .variantId(item.getVariant().getId())
+                .variantOptionName(item.getVariant().getOptionName())
                 .thumbnailUrl(item.getProduct().getThumbnailUrl())
                 .unitPrice(unitPrice)
                 .quantity(item.getQuantity())

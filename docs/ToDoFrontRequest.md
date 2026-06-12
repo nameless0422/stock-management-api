@@ -1,9 +1,9 @@
 
 ---
 
-## 프론트엔드 관점 API 검토 — 쇼핑몰
+## 프론트엔드 관점 API 검토 — 쇼핑몰 [아카이브]
 
-> **전체 16개 항목 모두 구현 완료** (1차·2차·3차 커밋)
+> **[완료]** 전체 16개 항목 모두 구현 완료 (1차·2차·3차 커밋). 이 문서는 이력 보관용.
 
 ### 🔴 결제 흐름
 
@@ -522,21 +522,11 @@ V37 migration. `CartItem.savedPrice` 추가 (담을 당시 가격 스냅샷). `C
 
 ### 🟡 중장기 — API 설계 일관성
 
-**50. 페이지네이션 전략 혼재 (Page vs CursorPage)**
+**50. ~~페이지네이션 전략 혼재 (Page vs CursorPage)~~ → 해결됨**
 
-주문 목록 조회가 두 가지 방식으로 중복 존재한다:
-- `GET /api/orders` → `Page<OrderResponse>` (offset 기반)
-- `GET /api/orders/scroll` → `CursorPage<OrderResponse>` (커서 기반)
-
-재고 이력은 `CursorPage`, 상품/카테고리/쿠폰은 `Page`. 어떤 API가 어떤 방식인지 패턴이 없다.
-프론트에서 API마다 다른 페이지네이션 로직을 작성해야 하고, 무한 스크롤과 페이지 번호 UI를 각각 구현해야 한다.
-
-```
-개선 방향 합의 필요:
-  - 목록 기본: Page (어드민 테이블, 정렬 가능한 목록)
-  - 무한 스크롤: CursorPage (피드형 목록)
-  - GET /api/orders/scroll 제거 또는 GET /api/orders에 통합
-```
+`GET /api/orders/scroll` 제거. 페이지네이션 전략 통일:
+- **목록 기본**: `Page` (어드민 테이블, 정렬·필터 가능)
+- **무한 스크롤**: `CursorPage` (피드형 — 재고 이력 등)
 
 **51. 재고 수량 직접 노출 정책 미비**
 

@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.product.review.service;
 
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.order.repository.OrderRepository;
@@ -17,9 +18,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
@@ -112,15 +110,15 @@ class ReviewServiceTest {
     class GetList {
 
         @Test
-        @DisplayName("정상 조회 → 페이지 반환")
+        @DisplayName("정상 조회 → 커서 페이지 반환")
         void success() {
             given(productRepository.existsById(1L)).willReturn(true);
             Review r = Review.builder().productId(1L).userId(2L).rating(4).title("보통").content("그냥 그래요").build();
             ReflectionTestUtils.setField(r, "id", 5L);
-            given(reviewRepository.findByProductId(any(), any(Pageable.class)))
-                    .willReturn(new PageImpl<>(List.of(r)));
+            given(reviewRepository.findByProductIdOrderByIdDesc(any(), any()))
+                    .willReturn(List.of(r));
 
-            Page<ReviewResponse> page = reviewService.getList(1L, Pageable.unpaged(), null);
+            CursorPage<ReviewResponse> page = reviewService.getList(1L, null, 20, null);
 
             assertThat(page.getContent()).hasSize(1);
             assertThat(page.getContent().get(0).getRating()).isEqualTo(4);

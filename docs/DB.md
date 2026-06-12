@@ -1,6 +1,6 @@
 # DB 스키마
 
-MySQL 8, Flyway 마이그레이션 (V1~V46), ENGINE=InnoDB, CHARSET=utf8mb4
+MySQL 8, Flyway 마이그레이션 (V1~V57), ENGINE=InnoDB, CHARSET=utf8mb4
 
 ---
 
@@ -54,6 +54,17 @@ MySQL 8, Flyway 마이그레이션 (V1~V46), ENGINE=InnoDB, CHARSET=utf8mb4
 | V44 | `payments` 가상계좌 컬럼 추가 | 은행명·계좌번호·입금기한 |
 | V45 | `payments` 카드 상세 컬럼 추가 | 카드사·카드번호·할부 |
 | V46 | `users.phone_number` | 사용자 전화번호 |
+| V47 | 관리자 목록 조회 복합 인덱스 | `(user_id, created_at)` 등 관리자 화면 최적화 |
+| V48 | `restock_notifications` | 재입고 알림 구독 (user_id, product_id) |
+| V49 | `shipping_policies` 초기 데이터 | 무료배송 기준·기본 배송비 설정 삽입 |
+| V50 | `notifications` | 앱 내 알림 (type, title, content, read_at) |
+| V51 | `point_transactions.status` | `PENDING\|COMPLETED\|CANCELLED` 상태 컬럼 추가 |
+| V52 | `point_transactions.expires_at` | 포인트 만료일 컬럼 추가 (적립 시 1년 후 설정) |
+| V53 | `users.email_verified` | 이메일 인증 여부 (`DEFAULT 0`) |
+| V54 | `product_qna` | 상품 문의 (question, answer, answered_at) |
+| V55 | `shipments` 반품 필드 | `return_reason`, `returned_at` 컬럼 추가 |
+| V56 | `product_variants` | 상품 바리에이션 (product_id FK, option_name, sku UK, price, status) |
+| V57 | `order_items.status` | `ACTIVE\|CANCELLED` — 아이템 단위 부분 취소 지원 |
 
 ---
 
@@ -62,28 +73,28 @@ MySQL 8, Flyway 마이그레이션 (V1~V46), ENGINE=InnoDB, CHARSET=utf8mb4
 ```
 categories ──────────────┐
                          ▼
-users ──────────── orders ──────── order_items ──── products
-  │                  │   │                         │     │
-  │                  │   └── coupon_id → coupons   │  inventory
-  │                  │   └── delivery_address_id ─┐│       │
-  │                  │                            ││  inventory_transactions
-  │                  ├── order_status_history      │delivery_addresses
-  │                  ├── payments ──── refunds     │
-  │                  └── shipments                 │
-  │                                               (ON DELETE SET NULL)
-  ├── cart_items → products
+users ──────────── orders ──────── order_items ──── product_variants ──── inventory
+  │                  │   │                                │                    │
+  │                  │   └── coupon_id → coupons          │            inventory_transactions
+  │                  │   └── delivery_address_id          └── products
+  │                  │                                        │
+  │                  ├── order_status_history               product_images
+  │                  ├── order_delivery_snapshots           product_qna
+  │                  ├── payments ──── refunds              restock_notifications
+  │                  └── shipments                         reviews
+  │                                                        wishlist_items
+  ├── cart_items → product_variants
   ├── delivery_addresses
   ├── coupon_usages → coupons
   ├── user_coupons → coupons
   ├── user_points
   ├── point_transactions
-  ├── reviews → products
-  └── wishlist_items → products
+  └── notifications
 
 이벤트 / 설정:
   outbox_events      (Transactional Outbox 발행 큐)
   system_settings    (런타임 설정, PK: setting_key)
-  product_images     (MinIO 오브젝트 메타데이터, product FK)
+  shipping_policies  (배송비 정책)
 
 배치 집계:
   daily_order_stats         (일별 주문·매출)
@@ -111,14 +122,32 @@ users ──────────── orders ──────── order
 
 ---
 
-### inventory (V2)
+### product_variants (V56)
 
-상품 1개당 레코드 1개 (1:1). 재고 4-state 모델.
+상품 옵션(색상·사이즈 등) 단위의 바리에이션. 상품 생성 시 기본 variant("기본") + inventory가 자동 생성된다.
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
 | id | BIGINT | PK, AUTO_INCREMENT | |
-| product_id | BIGINT | NOT NULL, **UNIQUE**, FK→products | |
+| product_id | BIGINT | NOT NULL, FK→products | |
+| option_name | VARCHAR(100) | NOT NULL | 옵션명 (예: "기본", "블랙 M") |
+| sku | VARCHAR(100) | NOT NULL, **UNIQUE** | 바리에이션 재고 관리 코드 |
+| price | DECIMAL(15,2) | NOT NULL | 바리에이션별 가격 |
+| status | VARCHAR(20) | NOT NULL | `ACTIVE` / `DISCONTINUED` |
+| created_at | DATETIME(6) | NOT NULL | |
+| updated_at | DATETIME(6) | NOT NULL | |
+
+---
+
+### inventory (V2, V56에서 variant_id 연결)
+
+바리에이션 1개당 레코드 1개 (1:1). 재고 4-state 모델.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| variant_id | BIGINT | NOT NULL, **UNIQUE**, FK→product_variants | |
+| product_id | BIGINT | NOT NULL, FK→products | 읽기 전용 (variant.product_id와 동기) |
 | on_hand | INT | NOT NULL, DEFAULT 0 | 창고 실물 재고 |
 | reserved | INT | NOT NULL, DEFAULT 0 | 주문 생성 후 예약 (미결제) |
 | allocated | INT | NOT NULL, DEFAULT 0 | 결제 완료 후 확정 |
@@ -508,9 +537,13 @@ users ──────────── orders ──────── order
 
 | FK | 방향 | 비고 |
 |---|---|---|
-| `inventory.product_id` | → products.id | UNIQUE (1:1) |
+| `product_variants.product_id` | → products.id | N:1 |
+| `inventory.variant_id` | → product_variants.id | UNIQUE (1:1) |
+| `inventory.product_id` | → products.id | 읽기 전용 |
 | `order_items.order_id` | → orders.id | |
 | `order_items.product_id` | → products.id | |
+| `order_items.variant_id` | → product_variants.id | |
+| `cart_items.variant_id` | → product_variants.id | |
 | `orders.user_id` | → users.id | V5 추가, INDEX(V23) |
 | `orders.delivery_address_id` | → delivery_addresses.id | NULL, ON DELETE SET NULL, V12 추가 |
 | `orders.coupon_id` | → coupons.id | NULL, ON DELETE SET NULL, V13 추가 |

@@ -23,6 +23,8 @@ public class ShipmentResponse {
     private LocalDate estimatedDeliveryAt;
     private LocalDateTime shippedAt;
     private LocalDateTime deliveredAt;
+    private String returnReason;
+    private LocalDateTime returnRequestedAt;
     private LocalDateTime createdAt;
 
     public static ShipmentResponse from(Shipment shipment) {
@@ -36,6 +38,8 @@ public class ShipmentResponse {
                 .estimatedDeliveryAt(shipment.getEstimatedDeliveryAt())
                 .shippedAt(shipment.getShippedAt())
                 .deliveredAt(shipment.getDeliveredAt())
+                .returnReason(shipment.getReturnReason())
+                .returnRequestedAt(shipment.getReturnRequestedAt())
                 .createdAt(shipment.getCreatedAt())
                 .build();
     }

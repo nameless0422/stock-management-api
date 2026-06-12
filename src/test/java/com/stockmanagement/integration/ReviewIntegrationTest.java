@@ -21,15 +21,16 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
 
     /** 상품 생성 + 재고 입고 후 productId 반환. */
     private long createProductAndReceive(String adminToken, String sku, int price, int qty) throws Exception {
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format("{\"name\":\"상품_%s\",\"sku\":\"%s\",\"price\":%d}", sku, sku, price)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long productId = objectMapper.readTree(body).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + qty + "}"))
@@ -42,13 +43,14 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
      * TossPayments API 없이 구매 완료 상태를 시뮬레이션한다.
      */
     private void placeConfirmedOrder(String userToken, long userId, long productId, int price) throws Exception {
-        String body = mockMvc.perform(post("/api/orders")
+        long variantId = getDefaultVariantId(productId);
+        String body = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":%d}]}",
-                                userId, UUID.randomUUID(), productId, price)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":%d}]}",
+                                userId, UUID.randomUUID(), productId, variantId, price)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long orderId = objectMapper.readTree(body).path("data").path("id").asLong();
@@ -70,7 +72,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         long userId = userRepository.findByUsername("reviewer").orElseThrow().getId();
         placeConfirmedOrder(userToken, userId, productId, 10000);
 
-        mockMvc.perform(post("/api/products/" + productId + "/reviews")
+        mockMvc.perform(post("/api/v1/products/" + productId + "/reviews")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"rating\":5,\"title\":\"좋아요\",\"content\":\"매우 만족합니다.\"}"))
@@ -88,7 +90,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         // 구매 이력 없는 사용자
         String userToken = signupAndLogin("stranger", "Password1!", "str@test.com");
 
-        mockMvc.perform(post("/api/products/" + productId + "/reviews")
+        mockMvc.perform(post("/api/v1/products/" + productId + "/reviews")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"rating\":3,\"title\":\"그냥\",\"content\":\"특별함 없음\"}"))
@@ -106,13 +108,13 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         placeConfirmedOrder(userToken, userId, productId, 10000);
 
         String reviewJson = "{\"rating\":4,\"title\":\"보통\",\"content\":\"나쁘지 않음\"}";
-        mockMvc.perform(post("/api/products/" + productId + "/reviews")
+        mockMvc.perform(post("/api/v1/products/" + productId + "/reviews")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON).content(reviewJson))
                 .andExpect(status().isCreated());
 
         // 두 번째 리뷰 → 409
-        mockMvc.perform(post("/api/products/" + productId + "/reviews")
+        mockMvc.perform(post("/api/v1/products/" + productId + "/reviews")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON).content(reviewJson))
                 .andExpect(status().isConflict());
@@ -128,14 +130,14 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         long userId = userRepository.findByUsername("reviewer3").orElseThrow().getId();
         placeConfirmedOrder(userToken, userId, productId, 10000);
 
-        mockMvc.perform(post("/api/products/" + productId + "/reviews")
+        mockMvc.perform(post("/api/v1/products/" + productId + "/reviews")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"rating\":5,\"title\":\"최고\",\"content\":\"강추합니다\"}"))
                 .andExpect(status().isCreated());
 
         // 비로그인으로 목록 조회
-        mockMvc.perform(get("/api/products/" + productId + "/reviews"))
+        mockMvc.perform(get("/api/v1/products/" + productId + "/reviews"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content").isArray())
                 .andExpect(jsonPath("$.data.content[0].rating").value(5))
@@ -152,7 +154,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         long userId = userRepository.findByUsername("reviewer4").orElseThrow().getId();
         placeConfirmedOrder(userToken, userId, productId, 10000);
 
-        String body = mockMvc.perform(post("/api/products/" + productId + "/reviews")
+        String body = mockMvc.perform(post("/api/v1/products/" + productId + "/reviews")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"rating\":3,\"title\":\"보통\",\"content\":\"그냥 그래요\"}"))
@@ -160,14 +162,14 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         long reviewId = objectMapper.readTree(body).path("data").path("id").asLong();
 
-        mockMvc.perform(delete("/api/products/" + productId + "/reviews/" + reviewId)
+        mockMvc.perform(delete("/api/v1/products/" + productId + "/reviews/" + reviewId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isNoContent());
 
         // 삭제 후 목록 비어 있음 확인
-        mockMvc.perform(get("/api/products/" + productId + "/reviews"))
+        mockMvc.perform(get("/api/v1/products/" + productId + "/reviews"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(0));
+                .andExpect(jsonPath("$.data.content.length()").value(0));
     }
 
     @Test
@@ -180,7 +182,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
         long writerId = userRepository.findByUsername("writer").orElseThrow().getId();
         placeConfirmedOrder(writerToken, writerId, productId, 10000);
 
-        String body = mockMvc.perform(post("/api/products/" + productId + "/reviews")
+        String body = mockMvc.perform(post("/api/v1/products/" + productId + "/reviews")
                         .header("Authorization", "Bearer " + writerToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"rating\":2,\"title\":\"별로\",\"content\":\"실망\"}"))
@@ -190,7 +192,7 @@ class ReviewIntegrationTest extends AbstractIntegrationTest {
 
         // 타인이 삭제 시도 → 403
         String otherToken = signupAndLogin("other", "Password1!", "ot@test.com");
-        mockMvc.perform(delete("/api/products/" + productId + "/reviews/" + reviewId)
+        mockMvc.perform(delete("/api/v1/products/" + productId + "/reviews/" + reviewId)
                         .header("Authorization", "Bearer " + otherToken))
                 .andExpect(status().isForbidden());
     }

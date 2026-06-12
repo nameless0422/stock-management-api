@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -375,6 +376,29 @@ public class PaymentService {
             }
         }
         return paymentRepository.findByOrderId(orderId).map(PaymentResponse::from);
+    }
+
+    /**
+     * 주문 아이템 부분 취소를 위한 Toss 부분 환불 + Payment 엔티티 업데이트.
+     *
+     * <p>OrderCommandService.cancelItems()에서 호출된다.
+     * 기존 cancel()과 달리 Order 상태 전이는 하지 않는다 (호출자가 분산 락으로 관리).
+     *
+     * @param orderId      주문 ID
+     * @param cancelAmount 부분 환불 금액
+     * @param reason       취소 사유
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void cancelPartialForItems(Long orderId, BigDecimal cancelAmount, String reason) {
+        // 1. Short TX: Payment 로드 + paymentKey 확보
+        String paymentKey = transactionHelper.getPaymentKeyForOrder(orderId);
+
+        // 2. Toss API 호출 (DB 커넥션 미점유)
+        tossPaymentsClient.cancel(paymentKey,
+                new TossCancelRequest(reason, cancelAmount));
+
+        // 3. Short TX: Payment 상태 업데이트
+        transactionHelper.applyPartialCancelOnly(paymentKey, reason, cancelAmount);
     }
 
     // ===== Private helpers =====

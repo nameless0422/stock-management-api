@@ -42,6 +42,9 @@ public class User {
     @Column(nullable = false, length = 20)
     private UserRole role;
 
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -90,6 +93,11 @@ public class User {
     /** 탈퇴 여부를 반환한다. */
     public boolean isDeleted() {
         return this.deletedAt != null;
+    }
+
+    /** 이메일 인증을 완료 처리한다. */
+    public void verifyEmail() {
+        this.emailVerified = true;
     }
 
     /**

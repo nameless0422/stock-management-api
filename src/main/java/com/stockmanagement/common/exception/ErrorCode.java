@@ -22,6 +22,10 @@ public enum ErrorCode {
     PRODUCT_NOT_AVAILABLE(HttpStatus.UNPROCESSABLE_ENTITY, "판매 중이 아닌 상품은 주문할 수 없습니다."),
     DUPLICATE_SKU(HttpStatus.CONFLICT, "이미 존재하는 SKU입니다."),
 
+    // ===== ProductVariant =====
+    VARIANT_NOT_FOUND(HttpStatus.NOT_FOUND, "상품 변형을 찾을 수 없습니다."),
+    VARIANT_NOT_AVAILABLE(HttpStatus.UNPROCESSABLE_ENTITY, "판매 중이 아닌 변형은 주문할 수 없습니다."),
+
     // ===== Inventory =====
     INVENTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "재고 정보를 찾을 수 없습니다."),
     INSUFFICIENT_STOCK(HttpStatus.CONFLICT, "재고가 부족합니다."),
@@ -31,6 +35,8 @@ public enum ErrorCode {
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다."),
     INVALID_ORDER_STATUS(HttpStatus.CONFLICT, "현재 주문 상태에서 허용되지 않는 작업입니다."),
     ORDER_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 주문만 접근할 수 있습니다."),
+    ORDER_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 주문에서 아이템을 찾을 수 없습니다."),
+    ORDER_ITEM_ALREADY_CANCELLED(HttpStatus.CONFLICT, "이미 취소된 주문 아이템입니다."),
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "결제 정보를 찾을 수 없습니다."),
@@ -56,6 +62,7 @@ public enum ErrorCode {
     SHIPMENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 배송이 생성된 주문입니다."),
     INVALID_SHIPMENT_STATUS(HttpStatus.CONFLICT, "현재 배송 상태에서 허용되지 않는 작업입니다."),
     SHIPMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 배송 정보만 접근할 수 있습니다."),
+    RETURN_ALREADY_REQUESTED(HttpStatus.CONFLICT, "이미 반품이 신청된 배송입니다."),
 
     // ===== Category =====
     CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "카테고리를 찾을 수 없습니다."),
@@ -83,6 +90,10 @@ public enum ErrorCode {
     REVIEW_NOT_PURCHASED(HttpStatus.BAD_REQUEST, "구매한 상품에만 리뷰를 작성할 수 있습니다."),
     REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 리뷰를 작성한 상품입니다."),
     REVIEW_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 리뷰만 삭제할 수 있습니다."),
+
+    // ===== Product Q&A =====
+    QNA_NOT_FOUND(HttpStatus.NOT_FOUND, "Q&A를 찾을 수 없습니다."),
+    QNA_ACCESS_DENIED(HttpStatus.FORBIDDEN, "본인의 Q&A만 삭제할 수 있습니다."),
 
     // ===== Wishlist =====
     WISHLIST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 위시리스트에 추가된 상품입니다."),
@@ -112,6 +123,9 @@ public enum ErrorCode {
     SAME_PASSWORD(HttpStatus.BAD_REQUEST, "현재 비밀번호와 동일한 비밀번호로는 변경할 수 없습니다."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 Refresh Token입니다."),
     INVALID_RESET_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 비밀번호 재설정 토큰입니다."),
+    INVALID_VERIFICATION_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 이메일 인증 토큰입니다."),
+    EMAIL_ALREADY_VERIFIED(HttpStatus.BAD_REQUEST, "이미 인증된 이메일입니다."),
+    EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN, "이메일 인증이 필요합니다."),
 
     // ===== Admin =====
     LAST_ADMIN(HttpStatus.CONFLICT, "마지막 관리자의 권한은 해제할 수 없습니다."),

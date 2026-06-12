@@ -65,4 +65,16 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     /** 상품의 별점별 리뷰 수 분포를 조회한다. Object[0]=rating(Integer), Object[1]=count(Long). */
     @Query("SELECT r.rating, COUNT(r) FROM Review r WHERE r.productId = :productId GROUP BY r.rating")
     List<Object[]> findRatingDistributionByProductId(@Param("productId") Long productId);
+
+    // 커서 기반 — 상품 리뷰
+    List<Review> findByProductIdOrderByIdDesc(Long productId, Pageable pageable);
+    List<Review> findByProductIdAndIdLessThanOrderByIdDesc(Long productId, Long lastId, Pageable pageable);
+    List<Review> findByProductIdAndRatingOrderByIdDesc(Long productId, int rating, Pageable pageable);
+    List<Review> findByProductIdAndRatingAndIdLessThanOrderByIdDesc(Long productId, int rating, Long lastId, Pageable pageable);
+
+    // 커서 기반 — 사용자 리뷰
+    List<Review> findByUserIdOrderByIdDesc(Long userId, Pageable pageable);
+    List<Review> findByUserIdAndIdLessThanOrderByIdDesc(Long userId, Long lastId, Pageable pageable);
+    List<Review> findByUserIdAndRatingOrderByIdDesc(Long userId, int rating, Pageable pageable);
+    List<Review> findByUserIdAndRatingAndIdLessThanOrderByIdDesc(Long userId, int rating, Long lastId, Pageable pageable);
 }

@@ -28,18 +28,18 @@ class UserIntegrationTest extends AbstractIntegrationTest {
         void returnsEmptyOrders() throws Exception {
             String token = signupAndLogin("user1", "Password1!", "u1@test.com");
 
-            mockMvc.perform(get("/api/users/me/orders")
+            mockMvc.perform(get("/api/v1/users/me/orders")
                             .header("Authorization", "Bearer " + token))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.content").isArray())
-                    .andExpect(jsonPath("$.data.totalElements").value(0));
+                    .andExpect(jsonPath("$.data.content.length()").value(0));
         }
 
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticatedForbidden() throws Exception {
-            mockMvc.perform(get("/api/users/me/orders"))
+            mockMvc.perform(get("/api/v1/users/me/orders"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -56,13 +56,13 @@ class UserIntegrationTest extends AbstractIntegrationTest {
             String token = signupAndLogin("leaver", "Password1!", "leave@test.com");
 
             // 탈퇴 → 200
-            mockMvc.perform(delete("/api/users/me")
+            mockMvc.perform(delete("/api/v1/users/me")
                             .header("Authorization", "Bearer " + token))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
 
             // 탈퇴 후 로그인 시도 → 401
-            mockMvc.perform(post("/api/auth/login")
+            mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"username\":\"leaver\",\"password\":\"password1\"}"))
                     .andExpect(status().isUnauthorized());
@@ -71,7 +71,7 @@ class UserIntegrationTest extends AbstractIntegrationTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticatedForbidden() throws Exception {
-            mockMvc.perform(delete("/api/users/me"))
+            mockMvc.perform(delete("/api/v1/users/me"))
                     .andExpect(status().isUnauthorized());
         }
     }

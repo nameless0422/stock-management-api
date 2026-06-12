@@ -18,9 +18,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import org.springframework.data.domain.PageImpl;
+import com.stockmanagement.common.dto.CursorPage;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -28,7 +27,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
@@ -64,7 +63,7 @@ class WishlistServiceTest {
         void success() {
             given(productRepository.findById(10L)).willReturn(Optional.of(mockProduct(10L)));
             given(wishlistRepository.existsByUserIdAndProductId(1L, 10L)).willReturn(false);
-            given(inventoryRepository.findByProductId(10L)).willReturn(Optional.empty());
+            given(inventoryRepository.findAllByProductId(10L)).willReturn(List.of());
             WishlistItem saved = mockItem(5L, 1L, 10L);
             given(wishlistRepository.save(any())).willReturn(saved);
 
@@ -113,21 +112,20 @@ class WishlistServiceTest {
     }
 
     @Nested
-    @DisplayName("getList() — 위시리스트 페이징 조회")
+    @DisplayName("getList() — 위시리스트 커서 기반 조회")
     class GetList {
 
         @Test
-        @DisplayName("목록 반환")
+        @DisplayName("첫 페이지 목록 반환")
         void success() {
             WishlistItem item = mockItem(5L, 1L, 10L);
             Product product = mockProduct(10L);
-            Pageable pageable = PageRequest.of(0, 20);
-            given(wishlistRepository.findByUserIdWithExistingProduct(1L, pageable))
-                    .willReturn(new PageImpl<>(List.of(item)));
+            given(wishlistRepository.findByUserIdWithExistingProductCursor(eq(1L), any()))
+                    .willReturn(List.of(item));
             given(productRepository.findAllById(List.of(10L))).willReturn(List.of(product));
             given(inventoryRepository.findAllByProductIdIn(List.of(10L))).willReturn(List.of());
 
-            var page = wishlistService.getList(1L, pageable);
+            CursorPage<WishlistResponse> page = wishlistService.getList(1L, null, 20);
 
             assertThat(page.getContent()).hasSize(1);
             assertThat(page.getContent().get(0).getProductName()).isEqualTo("상품A");

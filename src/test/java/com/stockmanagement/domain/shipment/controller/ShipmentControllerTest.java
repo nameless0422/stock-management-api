@@ -3,8 +3,10 @@ package com.stockmanagement.domain.shipment.controller;
 import com.stockmanagement.common.config.SecurityConfig;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
+import com.stockmanagement.common.security.EmailVerificationTokenStore;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.domain.shipment.dto.ShipmentResponse;
+import com.stockmanagement.domain.shipment.entity.ShipmentStatus;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
 import com.stockmanagement.common.security.JwtTokenProvider;
 import com.stockmanagement.domain.user.service.UserService;
@@ -15,7 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.domain.PageImpl;
+import com.stockmanagement.common.dto.CursorPage;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -40,6 +42,7 @@ class ShipmentControllerTest {
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtBlacklist jwtBlacklist;
     @MockBean private UserService userService;
+    @MockBean private EmailVerificationTokenStore emailVerificationTokenStore;
 
     // ===== GET /api/shipments/my =====
 
@@ -52,10 +55,10 @@ class ShipmentControllerTest {
         @DisplayName("인증된 사용자 — 내 배송 목록 → 200")
         void returnsMyShipments() throws Exception {
             given(userService.resolveUserId(any())).willReturn(1L);
-            given(shipmentService.getMyShipments(anyLong(), any()))
-                    .willReturn(new PageImpl<>(List.of(mock(ShipmentResponse.class))));
+            given(shipmentService.getMyShipments(anyLong(), any(), anyInt()))
+                    .willReturn(CursorPage.of(List.of(mock(ShipmentResponse.class)), 20, ShipmentResponse::getId));
 
-            mockMvc.perform(get("/api/shipments/my"))
+            mockMvc.perform(get("/api/v1/shipments/my"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -63,7 +66,7 @@ class ShipmentControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/shipments/my"))
+            mockMvc.perform(get("/api/v1/shipments/my"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -78,9 +81,10 @@ class ShipmentControllerTest {
         @WithMockUser
         @DisplayName("인증된 사용자 — 배송 조회 → 200")
         void returnsShipment() throws Exception {
+            given(userService.resolveUserId(any())).willReturn(1L);
             given(shipmentService.getByOrderId(anyLong(), any(), anyBoolean())).willReturn(mock(ShipmentResponse.class));
 
-            mockMvc.perform(get("/api/shipments/orders/1"))
+            mockMvc.perform(get("/api/v1/shipments/orders/1"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -88,7 +92,7 @@ class ShipmentControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthenticated() throws Exception {
-            mockMvc.perform(get("/api/shipments/orders/1"))
+            mockMvc.perform(get("/api/v1/shipments/orders/1"))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -96,10 +100,11 @@ class ShipmentControllerTest {
         @WithMockUser
         @DisplayName("존재하지 않는 주문 → 404")
         void notFound() throws Exception {
+            given(userService.resolveUserId(any())).willReturn(1L);
             given(shipmentService.getByOrderId(anyLong(), any(), anyBoolean()))
                     .willThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
-            mockMvc.perform(get("/api/shipments/orders/999"))
+            mockMvc.perform(get("/api/v1/shipments/orders/999"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -119,7 +124,7 @@ class ShipmentControllerTest {
         void adminShips() throws Exception {
             given(shipmentService.startShipping(anyLong(), any())).willReturn(mock(ShipmentResponse.class));
 
-            mockMvc.perform(patch("/api/shipments/orders/1/ship")
+            mockMvc.perform(patch("/api/v1/shipments/orders/1/ship")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(SHIP_JSON))
                     .andExpect(status().isOk())
@@ -130,7 +135,7 @@ class ShipmentControllerTest {
         @WithMockUser(roles = "USER")
         @DisplayName("USER — 출고 처리 → 403")
         void userForbidden() throws Exception {
-            mockMvc.perform(patch("/api/shipments/orders/1/ship")
+            mockMvc.perform(patch("/api/v1/shipments/orders/1/ship")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(SHIP_JSON))
                     .andExpect(status().isForbidden());
@@ -140,7 +145,7 @@ class ShipmentControllerTest {
         @WithMockUser(roles = "ADMIN")
         @DisplayName("필수 필드 누락 → 400")
         void validationFailure() throws Exception {
-            mockMvc.perform(patch("/api/shipments/orders/1/ship")
+            mockMvc.perform(patch("/api/v1/shipments/orders/1/ship")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isBadRequest());
@@ -159,7 +164,7 @@ class ShipmentControllerTest {
         void adminDelivers() throws Exception {
             given(shipmentService.completeDelivery(1L)).willReturn(mock(ShipmentResponse.class));
 
-            mockMvc.perform(patch("/api/shipments/orders/1/deliver"))
+            mockMvc.perform(patch("/api/v1/shipments/orders/1/deliver"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -168,7 +173,7 @@ class ShipmentControllerTest {
         @WithMockUser(roles = "USER")
         @DisplayName("USER — 배송 완료 → 403")
         void userForbidden() throws Exception {
-            mockMvc.perform(patch("/api/shipments/orders/1/deliver"))
+            mockMvc.perform(patch("/api/v1/shipments/orders/1/deliver"))
                     .andExpect(status().isForbidden());
         }
     }
@@ -185,7 +190,7 @@ class ShipmentControllerTest {
         void adminReturns() throws Exception {
             given(shipmentService.processReturn(1L)).willReturn(mock(ShipmentResponse.class));
 
-            mockMvc.perform(patch("/api/shipments/orders/1/return"))
+            mockMvc.perform(patch("/api/v1/shipments/orders/1/return"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -194,7 +199,107 @@ class ShipmentControllerTest {
         @WithMockUser(roles = "USER")
         @DisplayName("USER — 반품 처리 → 403")
         void userForbidden() throws Exception {
-            mockMvc.perform(patch("/api/shipments/orders/1/return"))
+            mockMvc.perform(patch("/api/v1/shipments/orders/1/return"))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    // ===== POST /api/shipments/orders/{orderId}/return-request =====
+
+    @Nested
+    @DisplayName("POST /api/shipments/orders/{orderId}/return-request")
+    class ReturnRequest {
+
+        private static final String RETURN_JSON = "{\"reason\":\"단순 변심\"}";
+
+        @Test
+        @WithMockUser
+        @DisplayName("인증된 사용자 — 반품 신청 → 200")
+        void requestsReturn() throws Exception {
+            given(userService.resolveUserId(any())).willReturn(1L);
+            ShipmentResponse response = ShipmentResponse.builder()
+                    .id(1L).orderId(1L).status(ShipmentStatus.RETURN_REQUESTED)
+                    .returnReason("단순 변심").build();
+            given(shipmentService.requestReturn(anyLong(), anyLong(), anyString())).willReturn(response);
+
+            mockMvc.perform(post("/api/v1/shipments/orders/1/return-request")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(RETURN_JSON))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.status").value("RETURN_REQUESTED"));
+        }
+
+        @Test
+        @DisplayName("인증 없음 → 401")
+        void unauthenticated() throws Exception {
+            mockMvc.perform(post("/api/v1/shipments/orders/1/return-request")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(RETURN_JSON))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @WithMockUser
+        @DisplayName("사유 누락 → 400")
+        void validationFailure() throws Exception {
+            given(userService.resolveUserId(any())).willReturn(1L);
+
+            mockMvc.perform(post("/api/v1/shipments/orders/1/return-request")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"reason\":\"\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    // ===== PATCH /api/shipments/orders/{orderId}/return-approve =====
+
+    @Nested
+    @DisplayName("PATCH /api/shipments/orders/{orderId}/return-approve")
+    class ReturnApprove {
+
+        @Test
+        @WithMockUser(roles = "ADMIN")
+        @DisplayName("ADMIN — 반품 승인 → 200")
+        void adminApproves() throws Exception {
+            given(shipmentService.approveReturn(1L)).willReturn(mock(ShipmentResponse.class));
+
+            mockMvc.perform(patch("/api/v1/shipments/orders/1/return-approve"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @WithMockUser(roles = "USER")
+        @DisplayName("USER — 반품 승인 → 403")
+        void userForbidden() throws Exception {
+            mockMvc.perform(patch("/api/v1/shipments/orders/1/return-approve"))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    // ===== PATCH /api/shipments/orders/{orderId}/return-reject =====
+
+    @Nested
+    @DisplayName("PATCH /api/shipments/orders/{orderId}/return-reject")
+    class ReturnReject {
+
+        @Test
+        @WithMockUser(roles = "ADMIN")
+        @DisplayName("ADMIN — 반품 거부 → 200")
+        void adminRejects() throws Exception {
+            given(shipmentService.rejectReturn(1L)).willReturn(mock(ShipmentResponse.class));
+
+            mockMvc.perform(patch("/api/v1/shipments/orders/1/return-reject"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @WithMockUser(roles = "USER")
+        @DisplayName("USER — 반품 거부 → 403")
+        void userForbidden() throws Exception {
+            mockMvc.perform(patch("/api/v1/shipments/orders/1/return-reject"))
                     .andExpect(status().isForbidden());
         }
     }

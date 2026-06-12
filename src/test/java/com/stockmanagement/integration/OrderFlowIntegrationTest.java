@@ -20,7 +20,7 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
     void fullOrderFlow() throws Exception {
         // 1. ADMIN 생성 + 상품 등록
         String adminToken = createAdminAndLogin("admin", "adminpass1", "admin@example.com");
-        String createProductBody = mockMvc.perform(post("/api/products")
+        String createProductBody = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"테스트상품\",\"sku\":\"SKU-001\",\"price\":10000}"))
@@ -30,7 +30,8 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
         long productId = objectMapper.readTree(createProductBody).path("data").path("id").asLong();
 
         // 2. 입고 처리 (onHand = 50)
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        long variantId = getDefaultVariantId(productId);
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":50}"))
@@ -38,17 +39,17 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.onHand").value(50))
                 .andExpect(jsonPath("$.data.available").value(50));
 
-        // 3. 일반 유저 생성 + 주문 생성 (수량 3, 단가 10000 — product.price와 일치)
+        // 3. 일반 유저 생성 + 주문 생성 (수량 3, 단가 10000 — variant.price와 일치)
         String userToken = signupAndLogin("buyer", "Password1@3", "buyer@example.com");
         long buyerId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
-        String createOrderBody = mockMvc.perform(post("/api/orders")
+        String createOrderBody = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"order-key-001\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":3,\"unitPrice\":10000}]}",
-                                buyerId, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":3,\"unitPrice\":10000}]}",
+                                buyerId, productId, variantId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.status").value("PENDING"))
                 .andExpect(jsonPath("$.data.totalAmount").value(30000))
@@ -56,8 +57,8 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
 
         long orderId = objectMapper.readTree(createOrderBody).path("data").path("id").asLong();
 
-        // 4. 재고 예약 확인 (reserved = 3, available = 47) — ADMIN 전용 엔드포인트
-        mockMvc.perform(get("/api/inventory/" + productId)
+        // 4. 재고 예약 확인 (reserved = 3, available = 47)
+        mockMvc.perform(get("/api/v1/inventory/variants/" + variantId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.onHand").value(50))
@@ -65,13 +66,13 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.available").value(47));
 
         // 5. 주문 취소
-        mockMvc.perform(post("/api/orders/" + orderId + "/cancel")
+        mockMvc.perform(post("/api/v1/orders/" + orderId + "/cancel")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"));
 
-        // 6. 재고 예약 해제 확인 (reserved = 0, available = 50 복원) — ADMIN 전용 엔드포인트
-        mockMvc.perform(get("/api/inventory/" + productId)
+        // 6. 재고 예약 해제 확인 (reserved = 0, available = 50 복원)
+        mockMvc.perform(get("/api/v1/inventory/variants/" + variantId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reserved").value(0))
@@ -81,9 +82,8 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("단가 불일치 → 400")
     void createOrder_priceMismatch_400() throws Exception {
-        // 상품 가격 10000으로 등록
         String adminToken = createAdminAndLogin("admin2", "adminpass2", "admin2@example.com");
-        String createProductBody = mockMvc.perform(post("/api/products")
+        String createProductBody = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"가격테스트\",\"sku\":\"SKU-PRICE\",\"price\":10000}"))
@@ -91,8 +91,9 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
 
         long productId = objectMapper.readTree(createProductBody).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":10}"))
@@ -102,13 +103,13 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
         long buyerId = userRepository.findByUsername("buyer2").orElseThrow().getId();
 
         // 단가 9999 ≠ 10000 → 400
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"price-mismatch-001\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":9999}]}",
-                                buyerId, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":9999}]}",
+                                buyerId, productId, variantId)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
     }
@@ -116,9 +117,8 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("재고 부족 → 409")
     void createOrder_insufficientStock_409() throws Exception {
-        // 입고 5, 주문 10 → 재고 부족
         String adminToken = createAdminAndLogin("admin3", "adminpass3", "admin3@example.com");
-        String createProductBody = mockMvc.perform(post("/api/products")
+        String createProductBody = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"재고부족상품\",\"sku\":\"SKU-LOW\",\"price\":5000}"))
@@ -126,8 +126,9 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
 
         long productId = objectMapper.readTree(createProductBody).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":5}"))
@@ -137,13 +138,13 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
         long buyerId = userRepository.findByUsername("buyer3").orElseThrow().getId();
 
         // 가용 재고(5) 초과 주문(10) → 409
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"stock-001\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":10,\"unitPrice\":5000}]}",
-                                buyerId, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":10,\"unitPrice\":5000}]}",
+                                buyerId, productId, variantId)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.success").value(false));
     }
@@ -152,7 +153,7 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("멱등성 키 중복 요청 → 기존 주문 반환, 재고 이중 예약 없음")
     void createOrder_idempotent() throws Exception {
         String adminToken = createAdminAndLogin("admin4", "adminpass4", "admin4@example.com");
-        String createProductBody = mockMvc.perform(post("/api/products")
+        String createProductBody = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"멱등성상품\",\"sku\":\"SKU-IDEM\",\"price\":2000}"))
@@ -160,8 +161,9 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
 
         long productId = objectMapper.readTree(createProductBody).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":20}"))
@@ -172,11 +174,11 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
 
         String orderJson = String.format(
                 "{\"userId\":%d,\"idempotencyKey\":\"idem-key-001\"," +
-                "\"items\":[{\"productId\":%d,\"quantity\":2,\"unitPrice\":2000}]}",
-                buyerId, productId);
+                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":2,\"unitPrice\":2000}]}",
+                buyerId, productId, variantId);
 
         // 첫 번째 주문
-        String firstResponse = mockMvc.perform(post("/api/orders")
+        String firstResponse = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(orderJson))
@@ -186,7 +188,7 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
         long firstOrderId = objectMapper.readTree(firstResponse).path("data").path("id").asLong();
 
         // 동일 멱등성 키로 재요청 → 같은 주문 반환
-        String secondResponse = mockMvc.perform(post("/api/orders")
+        String secondResponse = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(orderJson))
@@ -198,8 +200,8 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
         // 동일한 주문 ID 반환 확인
         assertEquals(firstOrderId, secondOrderId);
 
-        // 재고 이중 예약 없음 — reserved = 2 (중복 아님) — ADMIN 전용 엔드포인트
-        mockMvc.perform(get("/api/inventory/" + productId)
+        // 재고 이중 예약 없음 — reserved = 2 (중복 아님)
+        mockMvc.perform(get("/api/v1/inventory/variants/" + variantId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reserved").value(2))
@@ -210,7 +212,7 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("CANCELLED 주문 재취소 시도 → 409")
     void cancelOrder_alreadyCancelled_409() throws Exception {
         String adminToken = createAdminAndLogin("admin5", "adminpass5", "admin5@example.com");
-        String createProductBody = mockMvc.perform(post("/api/products")
+        String createProductBody = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"취소테스트\",\"sku\":\"SKU-CXL\",\"price\":3000}"))
@@ -218,8 +220,9 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
 
         long productId = objectMapper.readTree(createProductBody).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":10}"))
@@ -229,25 +232,25 @@ class OrderFlowIntegrationTest extends AbstractIntegrationTest {
         long buyerId = userRepository.findByUsername("buyer5").orElseThrow().getId();
 
         // 주문 생성
-        String createOrderBody = mockMvc.perform(post("/api/orders")
+        String createOrderBody = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"cancel-test-001\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":3000}]}",
-                                buyerId, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":3000}]}",
+                                buyerId, productId, variantId)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 
         long orderId = objectMapper.readTree(createOrderBody).path("data").path("id").asLong();
 
         // 첫 번째 취소 → 200
-        mockMvc.perform(post("/api/orders/" + orderId + "/cancel")
+        mockMvc.perform(post("/api/v1/orders/" + orderId + "/cancel")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk());
 
         // 이미 CANCELLED 주문 재취소 → 409
-        mockMvc.perform(post("/api/orders/" + orderId + "/cancel")
+        mockMvc.perform(post("/api/v1/orders/" + orderId + "/cancel")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.success").value(false));

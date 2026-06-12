@@ -23,6 +23,7 @@ import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.entity.UserRole;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import com.stockmanagement.common.email.EmailService;
+import com.stockmanagement.common.security.EmailVerificationTokenStore;
 import com.stockmanagement.common.security.JwtBlacklist;
 import com.stockmanagement.common.security.LoginRateLimiter;
 import com.stockmanagement.common.security.PasswordResetTokenStore;
@@ -36,10 +37,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
+import com.stockmanagement.common.dto.CursorPage;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
@@ -106,6 +104,9 @@ class UserServiceTest {
 
     @Mock
     private EmailService emailService;
+
+    @Mock
+    private EmailVerificationTokenStore emailVerificationTokenStore;
 
     @InjectMocks
     private UserService userService;
@@ -295,9 +296,9 @@ class UserServiceTest {
         @Test
         @DisplayName("인증된 사용자 정보를 반환한다")
         void returnsUserResponse() {
-            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+            given(userRepository.findById(1L)).willReturn(Optional.of(user));
 
-            UserResponse response = userService.getMe("testuser");
+            UserResponse response = userService.getMe(1L);
 
             assertThat(response.username()).isEqualTo("testuser");
             assertThat(response.email()).isEqualTo("test@example.com");
@@ -306,9 +307,9 @@ class UserServiceTest {
         @Test
         @DisplayName("사용자가 존재하지 않으면 USER_NOT_FOUND 예외 발생")
         void throwsWhenUserNotFound() {
-            given(userRepository.findByUsername("ghost")).willReturn(Optional.empty());
+            given(userRepository.findById(999L)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> userService.getMe("ghost"))
+            assertThatThrownBy(() -> userService.getMe(999L))
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.USER_NOT_FOUND));
@@ -322,31 +323,15 @@ class UserServiceTest {
     class GetMyOrders {
 
         @Test
-        @DisplayName("인증된 사용자의 주문 목록을 페이징하여 반환한다")
+        @DisplayName("인증된 사용자의 주문 목록을 커서 기반으로 반환한다")
         void returnsPagedOrders() {
-            Pageable pageable = PageRequest.of(0, 10);
-            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
-            // user.getId()는 미영속 상태라 null이므로 any() 매처 사용
-            given(orderRepository.findByUserId(any(), eq(pageable)))
-                    .willReturn(new PageImpl<>(List.of(), pageable, 0));
+            given(orderRepository.findByUserIdOrderByIdDesc(any(), any()))
+                    .willReturn(List.of());
 
-            Page<OrderResponse> result = userService.getMyOrders("testuser", pageable);
+            CursorPage<OrderResponse> result = userService.getMyOrders(1L, null, 10);
 
-            assertThat(result).isEmpty();
-            verify(orderRepository).findByUserId(any(), eq(pageable));
-        }
-
-        @Test
-        @DisplayName("사용자가 존재하지 않으면 USER_NOT_FOUND 예외 발생")
-        void throwsWhenUserNotFound() {
-            given(userRepository.findByUsername("ghost")).willReturn(Optional.empty());
-
-            assertThatThrownBy(() -> userService.getMyOrders("ghost", PageRequest.of(0, 10)))
-                    .isInstanceOf(BusinessException.class)
-                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                            .isEqualTo(ErrorCode.USER_NOT_FOUND));
-
-            verifyNoInteractions(orderRepository);
+            assertThat(result.getContent()).isEmpty();
+            verify(orderRepository).findByUserIdOrderByIdDesc(any(), any());
         }
     }
 
@@ -444,6 +429,83 @@ class UserServiceTest {
                             .isEqualTo(ErrorCode.USER_NOT_FOUND));
 
             verify(userRepository, never()).delete(any(User.class));
+        }
+    }
+
+    // ===== verifyEmail() =====
+
+    @Nested
+    @DisplayName("verifyEmail()")
+    class VerifyEmail {
+
+        @Test
+        @DisplayName("유효한 토큰 — 이메일 인증 완료")
+        void verifiesEmail() {
+            given(emailVerificationTokenStore.consume("verify-token")).willReturn("testuser");
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+
+            userService.verifyEmail("verify-token");
+
+            assertThat(user.isEmailVerified()).isTrue();
+            verify(emailVerificationTokenStore).consume("verify-token");
+        }
+
+        @Test
+        @DisplayName("이미 인증된 이메일 — EMAIL_ALREADY_VERIFIED 예외")
+        void throwsWhenAlreadyVerified() {
+            user.verifyEmail(); // 이미 인증 상태
+            given(emailVerificationTokenStore.consume("verify-token")).willReturn("testuser");
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+
+            assertThatThrownBy(() -> userService.verifyEmail("verify-token"))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.EMAIL_ALREADY_VERIFIED));
+        }
+
+        @Test
+        @DisplayName("유효하지 않은 토큰 — INVALID_VERIFICATION_TOKEN 예외")
+        void throwsWhenTokenInvalid() {
+            given(emailVerificationTokenStore.consume("bad-token"))
+                    .willThrow(new BusinessException(ErrorCode.INVALID_VERIFICATION_TOKEN));
+
+            assertThatThrownBy(() -> userService.verifyEmail("bad-token"))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.INVALID_VERIFICATION_TOKEN));
+        }
+    }
+
+    // ===== resendVerificationEmail() =====
+
+    @Nested
+    @DisplayName("resendVerificationEmail()")
+    class ResendVerificationEmail {
+
+        @Test
+        @DisplayName("미인증 사용자 — 토큰 재발급 + 이메일 발송")
+        void resendsVerificationEmail() {
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+            given(emailVerificationTokenStore.issue("testuser")).willReturn("new-token");
+
+            userService.resendVerificationEmail("testuser");
+
+            verify(emailVerificationTokenStore).issue("testuser");
+            verify(emailService).sendVerificationEmail("test@example.com", "testuser", "new-token");
+        }
+
+        @Test
+        @DisplayName("이미 인증된 사용자 — EMAIL_ALREADY_VERIFIED 예외")
+        void throwsWhenAlreadyVerified() {
+            user.verifyEmail();
+            given(userRepository.findByUsername("testuser")).willReturn(Optional.of(user));
+
+            assertThatThrownBy(() -> userService.resendVerificationEmail("testuser"))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.EMAIL_ALREADY_VERIFIED));
+
+            verifyNoInteractions(emailVerificationTokenStore);
         }
     }
 

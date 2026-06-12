@@ -44,7 +44,7 @@ import java.util.List;
  */
 @Tag(name = "관리자", description = "ADMIN 전용 — 대시보드 · 사용자 관리 · 전체 주문 조회")
 @RestController
-@RequestMapping("/api/admin")
+@RequestMapping("/api/v1/admin")
 @RequiredArgsConstructor
 public class AdminController {
 

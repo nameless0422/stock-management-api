@@ -1,5 +1,6 @@
 package com.stockmanagement.domain.notification.service;
 
+import com.stockmanagement.common.dto.CursorPage;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.domain.notification.dto.NotificationResponse;
@@ -13,10 +14,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
@@ -55,27 +52,25 @@ class NotificationServiceTest {
         @Test
         @DisplayName("read=null — 전체 알림을 반환한다")
         void returnsAll() {
-            Pageable pageable = PageRequest.of(0, 20);
             Notification n = createNotification(1L, 1L);
-            given(notificationRepository.findByUserIdOrderByCreatedAtDesc(1L, pageable))
-                    .willReturn(new PageImpl<>(List.of(n)));
+            given(notificationRepository.findByUserIdOrderByIdDesc(any(), any()))
+                    .willReturn(List.of(n));
 
-            Page<NotificationResponse> result = notificationService.getNotifications(1L, null, pageable);
+            CursorPage<NotificationResponse> result = notificationService.getNotifications(1L, null, null, 20);
 
-            assertThat(result.getTotalElements()).isEqualTo(1);
+            assertThat(result.getContent()).hasSize(1);
             assertThat(result.getContent().get(0).getTitle()).isEqualTo("주문 접수");
         }
 
         @Test
         @DisplayName("read=false — 미읽음 알림만 반환한다")
         void returnsUnread() {
-            Pageable pageable = PageRequest.of(0, 20);
-            given(notificationRepository.findByUserIdAndReadAtIsNullOrderByCreatedAtDesc(1L, pageable))
-                    .willReturn(new PageImpl<>(List.of()));
+            given(notificationRepository.findByUserIdAndReadAtIsNullOrderByIdDesc(any(), any()))
+                    .willReturn(List.of());
 
-            Page<NotificationResponse> result = notificationService.getNotifications(1L, false, pageable);
+            CursorPage<NotificationResponse> result = notificationService.getNotifications(1L, false, null, 20);
 
-            assertThat(result.getTotalElements()).isEqualTo(0);
+            assertThat(result.getContent()).isEmpty();
         }
     }
 

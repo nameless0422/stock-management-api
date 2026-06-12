@@ -29,6 +29,7 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Statement;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -132,6 +133,7 @@ abstract class AbstractIntegrationTest {
             // order_status_history → orders (ON DELETE CASCADE로 자동 삭제되지만 명시적으로 먼저 삭제)
             stmt.execute("DELETE FROM cart_items");
             stmt.execute("DELETE FROM shipments");
+            stmt.execute("DELETE FROM product_qna");
             stmt.execute("DELETE FROM reviews");
             stmt.execute("DELETE FROM wishlist_items");
             stmt.execute("DELETE FROM notifications");
@@ -149,6 +151,7 @@ abstract class AbstractIntegrationTest {
             stmt.execute("DELETE FROM inventory_transactions");
             stmt.execute("DELETE FROM inventory");
             stmt.execute("DELETE FROM product_images");
+            stmt.execute("DELETE FROM product_variants");
             stmt.execute("DELETE FROM products");
             stmt.execute("DELETE FROM daily_order_stats");
             stmt.execute("DELETE FROM daily_inventory_snapshots");
@@ -168,15 +171,19 @@ abstract class AbstractIntegrationTest {
 
     // ===== 공통 헬퍼 =====
 
-    /** 회원가입 후 JWT 토큰을 반환한다. */
+    /** 회원가입 후 이메일 인증 완료 처리 후 JWT 토큰을 반환한다. */
     protected String signupAndLogin(String username, String password, String email) throws Exception {
         String signupJson = String.format(
                 "{\"username\":\"%s\",\"password\":\"%s\",\"email\":\"%s\"}",
                 username, password, email);
-        mockMvc.perform(post("/api/auth/signup")
+        mockMvc.perform(post("/api/v1/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson))
                 .andExpect(status().isCreated());
+        // 통합 테스트에서 @RequireEmailVerified 차단 방지
+        User signedUpUser = userRepository.findByUsername(username).orElseThrow();
+        signedUpUser.verifyEmail();
+        userRepository.save(signedUpUser);
         return login(username, password);
     }
 
@@ -184,12 +191,20 @@ abstract class AbstractIntegrationTest {
     protected String login(String username, String password) throws Exception {
         String loginJson = String.format(
                 "{\"username\":\"%s\",\"password\":\"%s\"}", username, password);
-        String body = mockMvc.perform(post("/api/auth/login")
+        String body = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(loginJson))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("data").path("accessToken").asText();
+    }
+
+    /** 상품의 기본 variant ID를 반환한다 (인벤토리 API 호출용). */
+    protected long getDefaultVariantId(long productId) throws Exception {
+        String body = mockMvc.perform(get("/api/v1/products/" + productId + "/variants"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).path("data").get(0).path("id").asLong();
     }
 
     /** ADMIN 사용자를 DB에 직접 저장 후 JWT 토큰을 반환한다. */
@@ -200,6 +215,7 @@ abstract class AbstractIntegrationTest {
                 .email(email)
                 .role(UserRole.ADMIN)
                 .build();
+        admin.verifyEmail();
         userRepository.save(admin);
         return login(username, password);
     }

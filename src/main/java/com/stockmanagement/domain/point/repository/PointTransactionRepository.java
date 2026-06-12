@@ -35,4 +35,12 @@ public interface PointTransactionRepository extends JpaRepository<PointTransacti
     /** 사용자의 만료 예정 CONFIRMED 포인트 조회 (만료일 가까운 순) */
     Page<PointTransaction> findByUserIdAndStatusAndExpiresAtBeforeOrderByExpiresAtAsc(
             Long userId, PointTransactionStatus status, LocalDateTime deadline, Pageable pageable);
+
+    // 커서 기반 — 전체 이력
+    List<PointTransaction> findByUserIdOrderByIdDesc(Long userId, Pageable pageable);
+    List<PointTransaction> findByUserIdAndIdLessThanOrderByIdDesc(Long userId, Long lastId, Pageable pageable);
+
+    // 커서 기반 — 상태 필터
+    List<PointTransaction> findByUserIdAndStatusOrderByIdDesc(Long userId, PointTransactionStatus status, Pageable pageable);
+    List<PointTransaction> findByUserIdAndStatusAndIdLessThanOrderByIdDesc(Long userId, PointTransactionStatus status, Long lastId, Pageable pageable);
 }

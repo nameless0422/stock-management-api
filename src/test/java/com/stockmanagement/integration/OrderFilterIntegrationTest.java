@@ -17,6 +17,7 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
     private long userId1;
     private long userId2;
     private long productId;
+    private long variantId;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -26,12 +27,13 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
         userId1 = userRepository.findByUsername("user1").orElseThrow().getId();
         userId2 = userRepository.findByUsername("user2").orElseThrow().getId();
         productId = createProductAndReceive("SKU-F1", 1000, 100);
+        variantId = getDefaultVariantId(productId);
     }
 
     // ===== 공통 헬퍼 =====
 
     private long createProductAndReceive(String sku, int price, int qty) throws Exception {
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format("{\"name\":\"상품_%s\",\"sku\":\"%s\",\"price\":%d}", sku, sku, price)))
@@ -39,7 +41,8 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         long pid = objectMapper.readTree(body).path("data").path("id").asLong();
 
-        mockMvc.perform(post("/api/inventory/" + pid + "/receive")
+        long vid = getDefaultVariantId(pid);
+        mockMvc.perform(post("/api/v1/inventory/variants/" + vid + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + qty + "}"))
@@ -48,24 +51,24 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
     }
 
     private void createOrder(String token, long userId, String idempotencyKey) throws Exception {
-        mockMvc.perform(post("/api/orders")
+        mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":1000}]}",
-                                userId, idempotencyKey, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":1000}]}",
+                                userId, idempotencyKey, productId, variantId)))
                 .andExpect(status().isCreated());
     }
 
     private long createOrderAndGetId(String token, long userId, String idempotencyKey) throws Exception {
-        String body = mockMvc.perform(post("/api/orders")
+        String body = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
                                 "{\"userId\":%d,\"idempotencyKey\":\"%s\"," +
-                                "\"items\":[{\"productId\":%d,\"quantity\":1,\"unitPrice\":1000}]}",
-                                userId, idempotencyKey, productId)))
+                                "\"items\":[{\"productId\":%d,\"variantId\":%d,\"quantity\":1,\"unitPrice\":1000}]}",
+                                userId, idempotencyKey, productId, variantId)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("data").path("id").asLong();
@@ -80,10 +83,10 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
         createOrder(userToken1, userId1, "ik-user1-b");
         createOrder(userToken2, userId2, "ik-user2-a");
 
-        mockMvc.perform(get("/api/orders")
+        mockMvc.perform(get("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken1))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.content.length()").value(2))
                 .andExpect(jsonPath("$.data.content[0].userId").value(userId1));
     }
 
@@ -94,11 +97,11 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
         createOrder(userToken2, userId2, "ik-user2-b");
 
         // user1이 user2의 주문을 조회하려 해도 본인 주문만 나와야 한다
-        mockMvc.perform(get("/api/orders")
+        mockMvc.perform(get("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken1)
                         .param("userId", String.valueOf(userId2)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
                 .andExpect(jsonPath("$.data.content[0].userId").value(userId1));
     }
 
@@ -111,15 +114,15 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
         createOrder(userToken1, userId1, "ik-status-b");
 
         // 첫 번째 주문 취소 (→ CANCELLED)
-        mockMvc.perform(post("/api/orders/" + orderId + "/cancel")
+        mockMvc.perform(post("/api/v1/orders/" + orderId + "/cancel")
                         .header("Authorization", "Bearer " + userToken1))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/orders")
+        mockMvc.perform(get("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken1)
                         .param("status", "PENDING"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
                 .andExpect(jsonPath("$.data.content[0].status").value("PENDING"));
     }
 
@@ -129,15 +132,15 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
         long orderId = createOrderAndGetId(userToken1, userId1, "ik-status-c");
         createOrder(userToken1, userId1, "ik-status-d");
 
-        mockMvc.perform(post("/api/orders/" + orderId + "/cancel")
+        mockMvc.perform(post("/api/v1/orders/" + orderId + "/cancel")
                         .header("Authorization", "Bearer " + userToken1))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/orders")
+        mockMvc.perform(get("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken1)
                         .param("status", "CANCELLED"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
                 .andExpect(jsonPath("$.data.content[0].status").value("CANCELLED"));
     }
 
@@ -149,11 +152,11 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
         createOrder(userToken1, userId1, "ik-admin-a");
         createOrder(userToken2, userId2, "ik-admin-b");
 
-        mockMvc.perform(get("/api/orders")
+        mockMvc.perform(get("/api/v1/orders")
                         .header("Authorization", "Bearer " + adminToken)
                         .param("userId", String.valueOf(userId1)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
                 .andExpect(jsonPath("$.data.content[0].userId").value(userId1));
     }
 
@@ -163,10 +166,10 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
         createOrder(userToken1, userId1, "ik-admin-c");
         createOrder(userToken2, userId2, "ik-admin-d");
 
-        mockMvc.perform(get("/api/orders")
+        mockMvc.perform(get("/api/v1/orders")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(2));
+                .andExpect(jsonPath("$.data.content.length()").value(2));
     }
 
     @Test
@@ -176,16 +179,16 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
         createOrder(userToken1, userId1, "ik-combo-b"); // PENDING 유지
         createOrder(userToken2, userId2, "ik-combo-c");
 
-        mockMvc.perform(post("/api/orders/" + orderId + "/cancel")
+        mockMvc.perform(post("/api/v1/orders/" + orderId + "/cancel")
                         .header("Authorization", "Bearer " + userToken1))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/orders")
+        mockMvc.perform(get("/api/v1/orders")
                         .header("Authorization", "Bearer " + adminToken)
                         .param("userId", String.valueOf(userId1))
                         .param("status", "PENDING"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
                 .andExpect(jsonPath("$.data.content[0].status").value("PENDING"));
     }
 
@@ -198,12 +201,12 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
 
         String today = java.time.LocalDate.now().toString();
 
-        mockMvc.perform(get("/api/orders")
+        mockMvc.perform(get("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken1)
                         .param("startDate", today)
                         .param("endDate", today))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(1));
+                .andExpect(jsonPath("$.data.content.length()").value(1));
     }
 
     @Test
@@ -213,10 +216,10 @@ class OrderFilterIntegrationTest extends AbstractIntegrationTest {
 
         String yesterday = java.time.LocalDate.now().minusDays(1).toString();
 
-        mockMvc.perform(get("/api/orders")
+        mockMvc.perform(get("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken1)
                         .param("endDate", yesterday))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(0));
+                .andExpect(jsonPath("$.data.content.length()").value(0));
     }
 }

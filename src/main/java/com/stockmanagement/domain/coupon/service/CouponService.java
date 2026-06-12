@@ -17,10 +17,12 @@ import com.stockmanagement.domain.coupon.entity.UserCoupon;
 import com.stockmanagement.domain.coupon.repository.CouponRepository;
 import com.stockmanagement.domain.coupon.repository.CouponUsageRepository;
 import com.stockmanagement.domain.coupon.repository.UserCouponRepository;
+import com.stockmanagement.common.dto.CursorPage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -85,10 +87,15 @@ public class CouponService {
         return couponRepository.findAll(pageable).map(CouponResponse::from);
     }
 
-    /** 공개 쿠폰 목록 조회 — 인증 불필요. */
-    public Page<CouponResponse> getPublicCoupons(Pageable pageable) {
-        return couponRepository.findAvailablePublicCoupons(LocalDateTime.now(), pageable)
-                .map(CouponResponse::from);
+    /** 공개 쿠폰 목록 조회 — 인증 불필요 (커서 기반). */
+    public CursorPage<CouponResponse> getPublicCoupons(Long lastId, int size) {
+        LocalDateTime now = LocalDateTime.now();
+        PageRequest limit = PageRequest.of(0, size + 1);
+        List<Coupon> items = lastId == null
+                ? couponRepository.findAvailablePublicCouponsCursor(now, limit)
+                : couponRepository.findAvailablePublicCouponsCursorAfter(now, lastId, limit);
+        List<CouponResponse> responses = items.stream().map(CouponResponse::from).toList();
+        return CursorPage.of(responses, size, CouponResponse::getId);
     }
 
     public CouponResponse getById(Long id) {

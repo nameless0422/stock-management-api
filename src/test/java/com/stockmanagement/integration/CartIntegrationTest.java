@@ -13,7 +13,7 @@ class CartIntegrationTest extends AbstractIntegrationTest {
     // ===== 공통 헬퍼 =====
 
     private long createProductAndReceive(String adminToken, String sku, int price, int qty) throws Exception {
-        String body = mockMvc.perform(post("/api/products")
+        String body = mockMvc.perform(post("/api/v1/products")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(String.format(
@@ -21,8 +21,9 @@ class CartIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long productId = objectMapper.readTree(body).path("data").path("id").asLong();
+        long variantId = getDefaultVariantId(productId);
 
-        mockMvc.perform(post("/api/inventory/" + productId + "/receive")
+        mockMvc.perform(post("/api/v1/inventory/variants/" + variantId + "/receive")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"quantity\":" + qty + "}"))
@@ -35,19 +36,20 @@ class CartIntegrationTest extends AbstractIntegrationTest {
     void addItemAndGetCart() throws Exception {
         String adminToken = createAdminAndLogin("admin", "pass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-C1", 2000, 50);
+        long variantId = getDefaultVariantId(productId);
         String userToken = signupAndLogin("buyer", "Password1!", "buyer@test.com");
 
         // 담기
-        mockMvc.perform(post("/api/cart/items")
+        mockMvc.perform(post("/api/v1/cart/items")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"productId\":" + productId + ",\"quantity\":3}"))
+                        .content("{\"productId\":" + productId + ",\"variantId\":" + variantId + ",\"quantity\":3}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.quantity").value(3))
                 .andExpect(jsonPath("$.data.subtotal").value(6000));
 
         // 조회
-        mockMvc.perform(get("/api/cart")
+        mockMvc.perform(get("/api/v1/cart")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isArray())
@@ -60,18 +62,19 @@ class CartIntegrationTest extends AbstractIntegrationTest {
     void addSameItemUpdatesQuantity() throws Exception {
         String adminToken = createAdminAndLogin("admin", "pass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-C2", 1000, 50);
+        long variantId = getDefaultVariantId(productId);
         String userToken = signupAndLogin("buyer", "Password1!", "buyer@test.com");
 
-        mockMvc.perform(post("/api/cart/items")
+        mockMvc.perform(post("/api/v1/cart/items")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"productId\":" + productId + ",\"quantity\":2}"))
+                        .content("{\"productId\":" + productId + ",\"variantId\":" + variantId + ",\"quantity\":2}"))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/cart/items")
+        mockMvc.perform(post("/api/v1/cart/items")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"productId\":" + productId + ",\"quantity\":5}"))
+                        .content("{\"productId\":" + productId + ",\"variantId\":" + variantId + ",\"quantity\":5}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.quantity").value(5))
                 .andExpect(jsonPath("$.data.subtotal").value(5000));
@@ -82,26 +85,28 @@ class CartIntegrationTest extends AbstractIntegrationTest {
     void removeItem() throws Exception {
         String adminToken = createAdminAndLogin("admin", "pass1", "admin@test.com");
         long p1 = createProductAndReceive(adminToken, "SKU-C3", 1000, 10);
+        long v1 = getDefaultVariantId(p1);
         long p2 = createProductAndReceive(adminToken, "SKU-C4", 2000, 10);
+        long v2 = getDefaultVariantId(p2);
         String userToken = signupAndLogin("buyer", "Password1!", "buyer@test.com");
 
-        mockMvc.perform(post("/api/cart/items")
+        mockMvc.perform(post("/api/v1/cart/items")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"productId\":" + p1 + ",\"quantity\":1}"))
+                        .content("{\"productId\":" + p1 + ",\"variantId\":" + v1 + ",\"quantity\":1}"))
                 .andExpect(status().isOk());
-        mockMvc.perform(post("/api/cart/items")
+        mockMvc.perform(post("/api/v1/cart/items")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"productId\":" + p2 + ",\"quantity\":1}"))
+                        .content("{\"productId\":" + p2 + ",\"variantId\":" + v2 + ",\"quantity\":1}"))
                 .andExpect(status().isOk());
 
         // p1 제거
-        mockMvc.perform(delete("/api/cart/items/" + p1)
+        mockMvc.perform(delete("/api/v1/cart/items/variants/" + v1)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/cart")
+        mockMvc.perform(get("/api/v1/cart")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items.length()").value(1))
@@ -113,19 +118,20 @@ class CartIntegrationTest extends AbstractIntegrationTest {
     void clearCart() throws Exception {
         String adminToken = createAdminAndLogin("admin", "pass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-C5", 500, 20);
+        long variantId = getDefaultVariantId(productId);
         String userToken = signupAndLogin("buyer", "Password1!", "buyer@test.com");
 
-        mockMvc.perform(post("/api/cart/items")
+        mockMvc.perform(post("/api/v1/cart/items")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"productId\":" + productId + ",\"quantity\":2}"))
+                        .content("{\"productId\":" + productId + ",\"variantId\":" + variantId + ",\"quantity\":2}"))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(delete("/api/cart")
+        mockMvc.perform(delete("/api/v1/cart")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/cart")
+        mockMvc.perform(get("/api/v1/cart")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isEmpty())
@@ -137,18 +143,19 @@ class CartIntegrationTest extends AbstractIntegrationTest {
     void checkout() throws Exception {
         String adminToken = createAdminAndLogin("admin", "pass1", "admin@test.com");
         long productId = createProductAndReceive(adminToken, "SKU-C6", 3000, 20);
+        long variantId = getDefaultVariantId(productId);
         String userToken = signupAndLogin("buyer", "Password1!", "buyer@test.com");
         long userId = userRepository.findByUsername("buyer").orElseThrow().getId();
 
         // 담기
-        mockMvc.perform(post("/api/cart/items")
+        mockMvc.perform(post("/api/v1/cart/items")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"productId\":" + productId + ",\"quantity\":2}"))
+                        .content("{\"productId\":" + productId + ",\"variantId\":" + variantId + ",\"quantity\":2}"))
                 .andExpect(status().isOk());
 
         // 주문 전환
-        mockMvc.perform(post("/api/cart/checkout")
+        mockMvc.perform(post("/api/v1/cart/checkout")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotencyKey\":\"cart-checkout-001\"}"))
@@ -157,13 +164,13 @@ class CartIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.totalAmount").value(6000));
 
         // 장바구니 비워졌는지 확인
-        mockMvc.perform(get("/api/cart")
+        mockMvc.perform(get("/api/v1/cart")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isEmpty());
 
         // 재고 예약 확인 — ADMIN 전용 엔드포인트
-        mockMvc.perform(get("/api/inventory/" + productId)
+        mockMvc.perform(get("/api/v1/inventory/variants/" + variantId)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reserved").value(2))
@@ -176,7 +183,7 @@ class CartIntegrationTest extends AbstractIntegrationTest {
         signupAndLogin("buyer2", "Password1!", "buyer2@test.com");
         String userToken = login("buyer2", "Password1!");
 
-        mockMvc.perform(post("/api/cart/checkout")
+        mockMvc.perform(post("/api/v1/cart/checkout")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotencyKey\":\"cart-checkout-002\"}"))

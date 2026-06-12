@@ -62,7 +62,7 @@ class InventoryControllerTest {
         void returnsPage() throws Exception {
             given(inventoryService.search(any(), any())).willReturn(Page.empty());
 
-            mockMvc.perform(get("/api/inventory"))
+            mockMvc.perform(get("/api/v1/inventory"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.content").isArray());
@@ -74,7 +74,7 @@ class InventoryControllerTest {
         void filterByStatus() throws Exception {
             given(inventoryService.search(any(), any())).willReturn(Page.empty());
 
-            mockMvc.perform(get("/api/inventory").param("status", "LOW_STOCK"))
+            mockMvc.perform(get("/api/v1/inventory").param("status", "LOW_STOCK"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -85,7 +85,7 @@ class InventoryControllerTest {
         void filterByMultipleParams() throws Exception {
             given(inventoryService.search(any(), any())).willReturn(Page.empty());
 
-            mockMvc.perform(get("/api/inventory")
+            mockMvc.perform(get("/api/v1/inventory")
                             .param("productName", "노트북")
                             .param("category", "전자기기")
                             .param("minAvailable", "5")
@@ -99,31 +99,31 @@ class InventoryControllerTest {
         @WithMockUser(roles = "ADMIN")
         @DisplayName("잘못된 status 값 → 400")
         void invalidStatusParam_returns400() throws Exception {
-            mockMvc.perform(get("/api/inventory").param("status", "INVALID_STATUS"))
+            mockMvc.perform(get("/api/v1/inventory").param("status", "INVALID_STATUS"))
                     .andExpect(status().isBadRequest());
         }
 
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(get("/api/inventory"))
+            mockMvc.perform(get("/api/v1/inventory"))
                     .andExpect(status().isUnauthorized());
         }
     }
 
-    // ===== GET /api/inventory/{productId} =====
+    // ===== GET /api/inventory/variants/{variantId} =====
 
     @Nested
-    @DisplayName("GET /api/inventory/{productId}")
-    class GetByProductId {
+    @DisplayName("GET /api/inventory/variants/{variantId}")
+    class GetByVariantId {
 
         @Test
         @WithMockUser(roles = "ADMIN")
         @DisplayName("ADMIN — 재고 현황 조회 → 200")
         void returnsInventory() throws Exception {
-            given(inventoryService.getByProductId(1L)).willReturn(mock(InventoryResponse.class));
+            given(inventoryService.getByVariantId(1L)).willReturn(mock(InventoryResponse.class));
 
-            mockMvc.perform(get("/api/inventory/1"))
+            mockMvc.perform(get("/api/v1/inventory/variants/1"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -131,27 +131,27 @@ class InventoryControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(get("/api/inventory/1"))
+            mockMvc.perform(get("/api/v1/inventory/variants/1"))
                     .andExpect(status().isUnauthorized());
         }
 
         @Test
         @WithMockUser(roles = "ADMIN")
-        @DisplayName("존재하지 않는 상품 재고 조회 → 404")
+        @DisplayName("존재하지 않는 variant 재고 조회 → 404")
         void returnsNotFound() throws Exception {
-            given(inventoryService.getByProductId(999L))
+            given(inventoryService.getByVariantId(999L))
                     .willThrow(new BusinessException(ErrorCode.INVENTORY_NOT_FOUND));
 
-            mockMvc.perform(get("/api/inventory/999"))
+            mockMvc.perform(get("/api/v1/inventory/variants/999"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
         }
     }
 
-    // ===== GET /api/inventory/{productId}/transactions =====
+    // ===== GET /api/inventory/variants/{variantId}/transactions =====
 
     @Nested
-    @DisplayName("GET /api/inventory/{productId}/transactions")
+    @DisplayName("GET /api/inventory/variants/{variantId}/transactions")
     class GetTransactions {
 
         @Test
@@ -161,7 +161,7 @@ class InventoryControllerTest {
             given(inventoryService.getTransactions(eq(1L), any(), eq(20)))
                     .willReturn(CursorPage.of(java.util.List.of(), 20, t -> t.getId()));
 
-            mockMvc.perform(get("/api/inventory/1/transactions"))
+            mockMvc.perform(get("/api/v1/inventory/variants/1/transactions"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.hasNext").value(false));
@@ -170,27 +170,27 @@ class InventoryControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(get("/api/inventory/1/transactions"))
+            mockMvc.perform(get("/api/v1/inventory/variants/1/transactions"))
                     .andExpect(status().isUnauthorized());
         }
 
         @Test
         @WithMockUser(roles = "ADMIN")
-        @DisplayName("재고가 없는 상품 이력 조회 → 404")
+        @DisplayName("재고가 없는 variant 이력 조회 → 404")
         void returnsNotFoundWhenInventoryMissing() throws Exception {
             given(inventoryService.getTransactions(eq(999L), any(), eq(20)))
                     .willThrow(new BusinessException(ErrorCode.INVENTORY_NOT_FOUND));
 
-            mockMvc.perform(get("/api/inventory/999/transactions"))
+            mockMvc.perform(get("/api/v1/inventory/variants/999/transactions"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
         }
     }
 
-    // ===== POST /api/inventory/{productId}/receive =====
+    // ===== POST /api/inventory/variants/{variantId}/receive =====
 
     @Nested
-    @DisplayName("POST /api/inventory/{productId}/receive")
+    @DisplayName("POST /api/inventory/variants/{variantId}/receive")
     class Receive {
 
         private static final String VALID_JSON = "{\"quantity\":10}";
@@ -201,7 +201,7 @@ class InventoryControllerTest {
         void receivesInventory() throws Exception {
             given(inventoryService.receive(eq(1L), any())).willReturn(mock(InventoryResponse.class));
 
-            mockMvc.perform(post("/api/inventory/1/receive")
+            mockMvc.perform(post("/api/v1/inventory/variants/1/receive")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isOk())
@@ -212,7 +212,7 @@ class InventoryControllerTest {
         @WithMockUser
         @DisplayName("USER — ADMIN 전용 → 403")
         void forbiddenForUser() throws Exception {
-            mockMvc.perform(post("/api/inventory/1/receive")
+            mockMvc.perform(post("/api/v1/inventory/variants/1/receive")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isForbidden());
@@ -221,7 +221,7 @@ class InventoryControllerTest {
         @Test
         @DisplayName("인증 없음 → 401")
         void unauthorizedWithoutAuth() throws Exception {
-            mockMvc.perform(post("/api/inventory/1/receive")
+            mockMvc.perform(post("/api/v1/inventory/variants/1/receive")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(VALID_JSON))
                     .andExpect(status().isUnauthorized());
@@ -231,7 +231,7 @@ class InventoryControllerTest {
         @WithMockUser(roles = "ADMIN")
         @DisplayName("quantity 누락 또는 0 이하 → 400")
         void validationFailure() throws Exception {
-            mockMvc.perform(post("/api/inventory/1/receive")
+            mockMvc.perform(post("/api/v1/inventory/variants/1/receive")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isBadRequest());

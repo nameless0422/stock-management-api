@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
  * 배송 엔티티.
  *
  * <p>주문 1건당 배송 1건(order_id UNIQUE)으로 관리된다.
- * 상태 전이: PREPARING → SHIPPED → DELIVERED / RETURNED
+ * 상태 전이: PREPARING → SHIPPED → DELIVERED → RETURN_REQUESTED → RETURNED
  *
  * <p>설계 원칙:
  * <ul>
@@ -40,7 +40,7 @@ public class Shipment {
     private Long orderId;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 30)
     private ShipmentStatus status;
 
     /** 택배사명 (예: CJ대한통운, 한진택배) */
@@ -60,6 +60,14 @@ public class Shipment {
     /** 택배사 예상 도착일 (출고 시 입력, 선택값) */
     @Column(name = "estimated_delivery_at")
     private LocalDate estimatedDeliveryAt;
+
+    /** 반품 사유 (사용자 입력) */
+    @Column(name = "return_reason", length = 500)
+    private String returnReason;
+
+    /** 반품 신청 일시 */
+    @Column(name = "return_requested_at")
+    private LocalDateTime returnRequestedAt;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
@@ -109,12 +117,58 @@ public class Shipment {
     /**
      * 반품 처리한다. (PREPARING|SHIPPED → RETURNED)
      *
-     * @throws BusinessException DELIVERED·RETURNED 상태에서 반품 시도 시
+     * @throws BusinessException DELIVERED·RETURNED·RETURN_REQUESTED 상태에서 반품 시도 시
      */
     public void processReturn() {
-        if (this.status == ShipmentStatus.DELIVERED || this.status == ShipmentStatus.RETURNED) {
+        if (this.status == ShipmentStatus.DELIVERED
+                || this.status == ShipmentStatus.RETURNED
+                || this.status == ShipmentStatus.RETURN_REQUESTED) {
             throw new BusinessException(ErrorCode.INVALID_SHIPMENT_STATUS);
         }
         this.status = ShipmentStatus.RETURNED;
+    }
+
+    /**
+     * 사용자가 반품을 신청한다. (DELIVERED → RETURN_REQUESTED)
+     *
+     * @throws BusinessException DELIVERED 상태가 아닌 경우
+     * @throws BusinessException 이미 반품 신청된 경우 (RETURN_REQUESTED)
+     */
+    public void requestReturn(String reason) {
+        if (this.status == ShipmentStatus.RETURN_REQUESTED) {
+            throw new BusinessException(ErrorCode.RETURN_ALREADY_REQUESTED);
+        }
+        if (this.status != ShipmentStatus.DELIVERED) {
+            throw new BusinessException(ErrorCode.INVALID_SHIPMENT_STATUS);
+        }
+        this.status = ShipmentStatus.RETURN_REQUESTED;
+        this.returnReason = reason;
+        this.returnRequestedAt = LocalDateTime.now();
+    }
+
+    /**
+     * ADMIN이 반품을 승인한다. (RETURN_REQUESTED → RETURNED)
+     *
+     * @throws BusinessException RETURN_REQUESTED 상태가 아닌 경우
+     */
+    public void approveReturn() {
+        if (this.status != ShipmentStatus.RETURN_REQUESTED) {
+            throw new BusinessException(ErrorCode.INVALID_SHIPMENT_STATUS);
+        }
+        this.status = ShipmentStatus.RETURNED;
+    }
+
+    /**
+     * ADMIN이 반품을 거부한다. (RETURN_REQUESTED → DELIVERED)
+     *
+     * @throws BusinessException RETURN_REQUESTED 상태가 아닌 경우
+     */
+    public void rejectReturn() {
+        if (this.status != ShipmentStatus.RETURN_REQUESTED) {
+            throw new BusinessException(ErrorCode.INVALID_SHIPMENT_STATUS);
+        }
+        this.status = ShipmentStatus.DELIVERED;
+        this.returnReason = null;
+        this.returnRequestedAt = null;
     }
 }

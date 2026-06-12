@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.shipment.service;
 
 import com.stockmanagement.common.event.ShipmentDeliveredEvent;
+import com.stockmanagement.common.event.ShipmentReturnedEvent;
 import com.stockmanagement.common.event.ShipmentShippedEvent;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
@@ -212,6 +213,137 @@ class ShipmentServiceTest {
             given(shipmentRepository.findByOrderId(2L)).willReturn(Optional.of(shippedShipment));
 
             assertThatThrownBy(() -> shipmentService.processReturn(2L))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage(ErrorCode.INVALID_SHIPMENT_STATUS.getMessage());
+        }
+    }
+
+    @Nested
+    @DisplayName("반품 신청 (requestReturn)")
+    class RequestReturn {
+
+        @Test
+        @DisplayName("DELIVERED 상태 + 본인 주문 → RETURN_REQUESTED")
+        void requestsReturnSuccessfully() {
+            Shipment delivered = Shipment.builder().orderId(1L).build();
+            delivered.ship("CJ", "111", null);
+            delivered.deliver();
+
+            given(orderRepository.findUserIdById(1L)).willReturn(Optional.of(10L));
+            given(shipmentRepository.findByOrderId(1L)).willReturn(Optional.of(delivered));
+
+            ShipmentResponse response = shipmentService.requestReturn(1L, 10L, "단순 변심");
+
+            assertThat(response.getStatus()).isEqualTo(ShipmentStatus.RETURN_REQUESTED);
+            assertThat(response.getReturnReason()).isEqualTo("단순 변심");
+            assertThat(response.getReturnRequestedAt()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("타인 주문 → SHIPMENT_NOT_FOUND")
+        void throwsWhenNotOwner() {
+            given(orderRepository.findUserIdById(1L)).willReturn(Optional.of(10L));
+
+            assertThatThrownBy(() -> shipmentService.requestReturn(1L, 99L, "사유"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage(ErrorCode.SHIPMENT_NOT_FOUND.getMessage());
+        }
+
+        @Test
+        @DisplayName("이미 반품 신청됨 → RETURN_ALREADY_REQUESTED")
+        void throwsWhenAlreadyRequested() {
+            Shipment delivered = Shipment.builder().orderId(1L).build();
+            delivered.ship("CJ", "111", null);
+            delivered.deliver();
+            delivered.requestReturn("첫 번째 사유");
+
+            given(orderRepository.findUserIdById(1L)).willReturn(Optional.of(10L));
+            given(shipmentRepository.findByOrderId(1L)).willReturn(Optional.of(delivered));
+
+            assertThatThrownBy(() -> shipmentService.requestReturn(1L, 10L, "두 번째 사유"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage(ErrorCode.RETURN_ALREADY_REQUESTED.getMessage());
+        }
+
+        @Test
+        @DisplayName("PREPARING 상태 → INVALID_SHIPMENT_STATUS")
+        void throwsWhenNotDelivered() {
+            given(orderRepository.findUserIdById(1L)).willReturn(Optional.of(10L));
+            given(shipmentRepository.findByOrderId(1L)).willReturn(Optional.of(preparingShipment));
+
+            assertThatThrownBy(() -> shipmentService.requestReturn(1L, 10L, "사유"))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage(ErrorCode.INVALID_SHIPMENT_STATUS.getMessage());
+        }
+    }
+
+    @Nested
+    @DisplayName("반품 승인 (approveReturn)")
+    class ApproveReturn {
+
+        @Test
+        @DisplayName("RETURN_REQUESTED → RETURNED + 이벤트 발행")
+        void approvesSuccessfully() {
+            Shipment delivered = Shipment.builder().orderId(1L).build();
+            delivered.ship("CJ", "111", null);
+            delivered.deliver();
+            delivered.requestReturn("변심");
+
+            given(shipmentRepository.findByOrderId(1L)).willReturn(Optional.of(delivered));
+
+            ShipmentResponse response = shipmentService.approveReturn(1L);
+
+            assertThat(response.getStatus()).isEqualTo(ShipmentStatus.RETURNED);
+            verify(outboxEventStore).save(any(ShipmentReturnedEvent.class));
+        }
+
+        @Test
+        @DisplayName("DELIVERED 상태에서 승인 → INVALID_SHIPMENT_STATUS")
+        void throwsWhenNotRequested() {
+            Shipment delivered = Shipment.builder().orderId(1L).build();
+            delivered.ship("CJ", "111", null);
+            delivered.deliver();
+
+            given(shipmentRepository.findByOrderId(1L)).willReturn(Optional.of(delivered));
+
+            assertThatThrownBy(() -> shipmentService.approveReturn(1L))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage(ErrorCode.INVALID_SHIPMENT_STATUS.getMessage());
+        }
+    }
+
+    @Nested
+    @DisplayName("반품 거부 (rejectReturn)")
+    class RejectReturn {
+
+        @Test
+        @DisplayName("RETURN_REQUESTED → DELIVERED (필드 초기화)")
+        void rejectsSuccessfully() {
+            Shipment delivered = Shipment.builder().orderId(1L).build();
+            delivered.ship("CJ", "111", null);
+            delivered.deliver();
+            delivered.requestReturn("변심");
+
+            given(shipmentRepository.findByOrderId(1L)).willReturn(Optional.of(delivered));
+
+            ShipmentResponse response = shipmentService.rejectReturn(1L);
+
+            assertThat(response.getStatus()).isEqualTo(ShipmentStatus.DELIVERED);
+            assertThat(response.getReturnReason()).isNull();
+            assertThat(response.getReturnRequestedAt()).isNull();
+            verify(outboxEventStore, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("DELIVERED 상태에서 거부 → INVALID_SHIPMENT_STATUS")
+        void throwsWhenNotRequested() {
+            Shipment delivered = Shipment.builder().orderId(1L).build();
+            delivered.ship("CJ", "111", null);
+            delivered.deliver();
+
+            given(shipmentRepository.findByOrderId(1L)).willReturn(Optional.of(delivered));
+
+            assertThatThrownBy(() -> shipmentService.rejectReturn(1L))
                     .isInstanceOf(BusinessException.class)
                     .hasMessage(ErrorCode.INVALID_SHIPMENT_STATUS.getMessage());
         }
