@@ -628,6 +628,7 @@ stateDiagram-v2
         PAYMENT_IN_PROGRESS --> PENDING : 결제 실패 (복원)
         PENDING --> CANCELLED : 취소·만료
         CONFIRMED --> CANCELLED : 환불
+        CONFIRMED --> PARTIAL_CANCELLED : 부분 취소
     }
 
     state "배송 (Shipment)" as Shipment {
@@ -683,7 +684,7 @@ available = onHand - reserved - allocated
 요청 → @DistributedLock (Redis, waitTime 5s) → @Lock(PESSIMISTIC_WRITE) (DB) → 재고 변경
 ```
 
-- **분산 락**: 멀티 인스턴스 환경에서 Redis를 통해 직렬화 (key: `lock:inventory:{productId}`)
+- **분산 락**: 멀티 인스턴스 환경에서 Redis를 통해 직렬화 (key: `lock:inventory:{variantId}`)
 - **비관적 락**: DB 레벨 lost update 방지 (`SELECT ... FOR UPDATE`)
 
 ### Order — 멱등성 보장
