@@ -1,29 +1,41 @@
 package com.stockmanagement.domain.product.service;
 
+import co.elastic.clients.elasticsearch._types.FieldValue;
 import co.elastic.clients.elasticsearch._types.SortOptions;
 import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
+import com.stockmanagement.domain.order.repository.OrderItemRepository;
+import com.stockmanagement.domain.product.category.repository.CategoryRepository;
 import com.stockmanagement.domain.product.document.ProductDocument;
 import com.stockmanagement.domain.product.dto.ProductSearchRequest;
 import com.stockmanagement.domain.product.dto.ProductResponse;
 import com.stockmanagement.domain.product.entity.Product;
+import com.stockmanagement.domain.product.entity.ProductStatus;
+import com.stockmanagement.domain.product.repository.ProductRepository;
 import com.stockmanagement.domain.product.repository.ProductSearchRepository;
+import com.stockmanagement.domain.product.review.repository.ReviewRepository;
+import com.stockmanagement.domain.product.review.repository.ReviewStatsProjection;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Elasticsearch 기반 상품 검색 서비스.
@@ -37,8 +49,15 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class ProductSearchService {
 
+    /** 재색인 시 한 번에 색인하는 상품 수 — DB 조회·bulk 요청 크기의 균형 */
+    private static final int REINDEX_BATCH_SIZE = 500;
+
     private final ElasticsearchOperations elasticsearchOperations;
     private final ProductSearchRepository productSearchRepository;
+    private final CategoryRepository categoryRepository;
+    private final ProductRepository productRepository;
+    private final ReviewRepository reviewRepository;
+    private final OrderItemRepository orderItemRepository;
 
     /**
      * 동적 조건으로 상품을 검색한다.
@@ -78,6 +97,19 @@ public class ProductSearchService {
         // 카테고리 필터 (정확 일치)
         if (request.getCategory() != null && !request.getCategory().isBlank()) {
             boolQuery.filter(f -> f.term(t -> t.field("category").value(request.getCategory())));
+        }
+
+        // 카테고리 ID 필터 — includeChildren=true이면 하위 카테고리 포함
+        if (request.getCategoryId() != null) {
+            List<Long> categoryIds = new ArrayList<>();
+            categoryIds.add(request.getCategoryId());
+            if (request.isIncludeChildren()) {
+                categoryIds.addAll(categoryRepository.findChildIdsByParentId(request.getCategoryId()));
+            }
+            List<FieldValue> values = categoryIds.stream()
+                    .map(id -> FieldValue.of(id.longValue()))
+                    .toList();
+            boolQuery.filter(f -> f.terms(t -> t.field("categoryId").terms(ts -> ts.value(values))));
         }
 
         // 정렬 옵션
@@ -161,6 +193,63 @@ public class ProductSearchService {
             if (seen.size() >= size) break;
         }
         return new ArrayList<>(seen);
+    }
+
+    /**
+     * 전체 재색인 — 인덱스를 재생성하고 ACTIVE 상품 전체를 다시 색인한다 (ADMIN 전용).
+     *
+     * <p>ES 데이터 유실, 매핑 변경, 색인 stale 누적(리뷰/판매 통계, 카테고리명 변경) 복구용.
+     * 인덱스 삭제 후 배치 색인이 끝날 때까지 검색 결과가 부분적일 수 있다.
+     *
+     * <p>{@code @Transactional(readOnly = true)}: 배치 페이징 중 LAZY 카테고리 접근을 위해
+     * 영속성 컨텍스트를 메서드 전체에 유지한다.
+     *
+     * @return 색인된 상품 수
+     */
+    @Transactional(readOnly = true)
+    public long reindexAll() {
+        IndexOperations indexOps = elasticsearchOperations.indexOps(ProductDocument.class);
+        if (indexOps.exists()) {
+            indexOps.delete();
+        }
+        indexOps.createWithMapping();
+
+        long total = 0;
+        int page = 0;
+        Page<Product> products;
+        do {
+            products = productRepository.findByStatus(ProductStatus.ACTIVE,
+                    PageRequest.of(page, REINDEX_BATCH_SIZE, Sort.by("id")));
+            if (products.isEmpty()) {
+                break;
+            }
+            productSearchRepository.saveAll(buildDocuments(products.getContent()));
+            total += products.getNumberOfElements();
+            page++;
+        } while (products.hasNext());
+
+        indexOps.refresh();
+        log.info("[ES] 전체 재색인 완료: {}건", total);
+        return total;
+    }
+
+    /** 상품 배치에 리뷰·판매 통계를 배치 조회로 결합하여 ES 문서 목록을 생성한다. */
+    private List<ProductDocument> buildDocuments(List<Product> products) {
+        List<Long> ids = products.stream().map(Product::getId).toList();
+
+        Map<Long, Long> reviewCounts = reviewRepository.findReviewStatsByProductIdIn(ids).stream()
+                .collect(Collectors.toMap(
+                        ReviewStatsProjection::getProductId,
+                        ReviewStatsProjection::getReviewCount));
+
+        Map<Long, Long> salesCounts = orderItemRepository.sumSalesCountByProductIdIn(ids).stream()
+                .collect(Collectors.toMap(row -> (Long) row[0], row -> (Long) row[1]));
+
+        return products.stream()
+                .map(p -> ProductDocument.from(p,
+                        reviewCounts.getOrDefault(p.getId(), 0L),
+                        salesCounts.getOrDefault(p.getId(), 0L)))
+                .toList();
     }
 
     // ===== 내부 헬퍼 =====

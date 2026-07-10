@@ -51,6 +51,10 @@ public class ProductDocument {
     @Field(type = FieldType.Keyword)
     private String category;
 
+    /** 카테고리 ID — categoryId 필터(하위 카테고리 포함) 대상 */
+    @Field(type = FieldType.Long)
+    private Long categoryId;
+
     @Field(type = FieldType.Keyword)
     private String status;
 
@@ -80,6 +84,7 @@ public class ProductDocument {
                 .price(product.getPrice() != null ? product.getPrice().doubleValue() : 0)
                 .sku(product.getSku())
                 .category(product.getCategoryName())
+                .categoryId(product.getCategory() != null ? product.getCategory().getId() : null)
                 .status(product.getStatus() != null ? product.getStatus().name() : null)
                 .thumbnailUrl(product.getThumbnailUrl())
                 .createdAt(product.getCreatedAt())
@@ -101,6 +106,7 @@ public class ProductDocument {
                 .price(getPriceAsBigDecimal())
                 .sku(sku)
                 .category(category)
+                .categoryId(categoryId)
                 .thumbnailUrl(thumbnailUrl)
                 .status(status != null ? ProductStatus.valueOf(status) : null)
                 .createdAt(createdAt)

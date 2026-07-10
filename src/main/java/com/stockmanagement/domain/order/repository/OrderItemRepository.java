@@ -25,4 +25,12 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
            "AND oi.order.status IN (com.stockmanagement.domain.order.entity.OrderStatus.CONFIRMED, " +
            "com.stockmanagement.domain.order.entity.OrderStatus.CANCEL_IN_PROGRESS)")
     long sumSalesCountByProductId(@Param("productId") Long productId);
+
+    /** 결제 완료된 주문에서 상품별 누적 판매 수량 배치 조회 — [productId, sum] 배열 목록 (재색인용) */
+    @Query("SELECT oi.product.id, COALESCE(SUM(oi.quantity), 0) FROM OrderItem oi " +
+           "WHERE oi.product.id IN :productIds " +
+           "AND oi.order.status IN (com.stockmanagement.domain.order.entity.OrderStatus.CONFIRMED, " +
+           "com.stockmanagement.domain.order.entity.OrderStatus.CANCEL_IN_PROGRESS) " +
+           "GROUP BY oi.product.id")
+    List<Object[]> sumSalesCountByProductIdIn(@Param("productIds") List<Long> productIds);
 }
