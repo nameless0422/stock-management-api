@@ -189,7 +189,7 @@ public class InventoryService {
     @CacheEvict(cacheNames = "inventory", key = "#variantId")
     public void reserve(Long variantId, int quantity) {
         Inventory inventory = findByVariantIdWithLock(variantId);
-        int availableBefore = inventory.getAvailable() + quantity; // reserve 전 가용 재고
+        int availableBefore = inventory.getAvailable(); // reserve 전 가용 재고
         inventory.reserve(quantity);
         recordTransaction(inventory, InventoryTransactionType.RESERVE, quantity);
 
