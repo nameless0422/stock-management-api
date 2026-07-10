@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -262,6 +263,18 @@ public class Order {
     /** ACTIVE 상태인 아이템만 반환한다. */
     public List<OrderItem> getActiveItems() {
         return items.stream().filter(OrderItem::isActive).toList();
+    }
+
+    /**
+     * variantId 오름차순으로 정렬된 아이템을 반환한다.
+     *
+     * <p>재고 비관적 락을 다건으로 획득하는 모든 경로(예약·확정·해제)는
+     * 반드시 이 순서를 사용해야 한다 — 획득 순서가 다르면 동시 요청 간 데드락이 발생할 수 있다.
+     */
+    public List<OrderItem> getItemsSortedByVariant() {
+        return items.stream()
+                .sorted(Comparator.comparing(i -> i.getVariant().getId()))
+                .toList();
     }
 
     /**

@@ -54,7 +54,8 @@ public class OrderPaymentService {
         OrderStatus previousStatus = order.getStatus();
         order.confirm();
 
-        for (OrderItem item : order.getItems()) {
+        // variantId 오름차순 — 재고 락 획득 순서 통일 (데드락 방지)
+        for (OrderItem item : order.getItemsSortedByVariant()) {
             inventoryService.confirmAllocation(item.getVariant().getId(), item.getQuantity());
         }
 
@@ -79,8 +80,11 @@ public class OrderPaymentService {
         order.refund();
 
         // ACTIVE 아이템만 재고 해제 — 부분 취소로 이미 CANCELLED된 아이템은 건너뜀
-        for (OrderItem item : order.getActiveItems()) {
-            inventoryService.releaseAllocation(item.getVariant().getId(), item.getQuantity());
+        // variantId 오름차순 — 재고 락 획득 순서 통일 (데드락 방지)
+        for (OrderItem item : order.getItemsSortedByVariant()) {
+            if (item.isActive()) {
+                inventoryService.releaseAllocation(item.getVariant().getId(), item.getQuantity());
+            }
         }
 
         couponService.releaseCoupon(order.getId());
@@ -108,7 +112,8 @@ public class OrderPaymentService {
         OrderStatus previousStatus = order.getStatus();
         order.cancelByWebhook(reason);
 
-        for (OrderItem item : order.getItems()) {
+        // variantId 오름차순 — 재고 락 획득 순서 통일 (데드락 방지)
+        for (OrderItem item : order.getItemsSortedByVariant()) {
             inventoryService.releaseReservation(item.getVariant().getId(), item.getQuantity());
         }
 

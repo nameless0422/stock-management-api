@@ -122,9 +122,9 @@ class OrderItemCancelTransactionHelper {
         OrderStatus previousStatus = order.getStatus();
         Set<Long> requestedIds = new HashSet<>(itemIds);
 
-        // 아이템 취소 + 재고 해제
+        // 아이템 취소 + 재고 해제 (variantId 오름차순 — 재고 락 획득 순서 통일, 데드락 방지)
         List<OrderItemResponse> cancelledResponses = new ArrayList<>();
-        for (OrderItem item : order.getItems()) {
+        for (OrderItem item : order.getItemsSortedByVariant()) {
             if (requestedIds.contains(item.getId()) && item.isActive()) {
                 item.cancel();
                 inventoryService.releaseAllocation(item.getVariant().getId(), item.getQuantity());
