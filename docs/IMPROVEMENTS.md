@@ -91,6 +91,10 @@ ALB가 요청을 두 인스턴스에 분산하므로 동일 상품 주문이 Ser
 7. [N+1 쿼리 및 배치 처리 최적화](#7-n1-쿼리-및-배치-처리-최적화)
 8. [보안 취약점](#8-보안-취약점)
 9. [CategoryService Redis 캐시](#9-categoryservice-redis-캐시)
+10. [코드 리뷰 개선 항목](#10-코드-리뷰-개선-항목)
+11. [Self-Invocation으로 인한 부분 취소 트랜잭션 무효화](#11-self-invocation으로-인한-부분-취소-트랜잭션-무효화)
+12. [재고 락 획득 순서 불일치와 저재고 경보 중복](#12-재고-락-획득-순서-불일치와-저재고-경보-중복)
+13. [Elasticsearch 색인 정합성](#13-elasticsearch-색인-정합성)
 
 ---
 
@@ -787,6 +791,132 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 
 ---
 
+## 11. Self-Invocation으로 인한 부분 취소 트랜잭션 무효화
+
+> 이슈 [#200](https://github.com/nameless0422/stock-management-api/issues/200) · PR [#204](https://github.com/nameless0422/stock-management-api/pull/204)
+
+### 배경 및 문제정의
+
+* **상황:** 전체 코드베이스 리뷰 중 주문 아이템 부분 취소(`OrderCommandService.cancelItems`)의 트랜잭션 경계를 검토
+* **문제:** `@Transactional(NOT_SUPPORTED)` 메서드가 같은 클래스의 `@Transactional` 메서드(`validateAndPrepare`, `applyItemCancel`)를 `this`로 직접 호출 — Spring 트랜잭션은 프록시 기반이므로 **자기 호출(self-invocation)에는 AOP가 적용되지 않는다**
+
+```
+cancelItems()  [@Transactional(NOT_SUPPORTED)]  ← 프록시 경유 (정상)
+ ├─ this.validateAndPrepare()  [@Transactional]  ← 프록시 우회 → 트랜잭션 없음
+ ├─ Toss 부분 환불 API 호출
+ └─ this.applyItemCancel()     [@Transactional]  ← 프록시 우회 → 트랜잭션 없음
+```
+
+`spring.jpa.open-in-view=false` 환경이므로 실제 동작은:
+
+* `FOR UPDATE` 비관적 락이 리포지토리 자체의 짧은 트랜잭션 종료와 함께 즉시 해제
+* 반환된 Order/OrderItem은 **detached 상태** → `item.cancel()`, `order.partialCancel()` 변경이 dirty checking 없이 **유실**
+* 반면 재고 해제·포인트 반환·이력 저장은 각자 프록시 트랜잭션으로 **커밋됨** → 정합성 붕괴
+* 주문 아이템이 ACTIVE로 남아 있으므로 동일 아이템 재취소가 검증을 통과 → **Toss 중복 환불 + 재고 이중 해제 반복 가능** (금전 손실)
+
+부분 취소 경로에 테스트가 한 건도 없어 779개 테스트가 이를 잡지 못했다.
+
+### 솔루션: Short TX를 별도 빈으로 분리
+
+결제 도메인이 이미 사용 중인 패턴(`PaymentTransactionHelper`)을 그대로 적용 — 외부 HTTP 호출 전후의 DB 연산을 **별도 빈**의 `@Transactional` 메서드로 분리하여 항상 프록시를 경유하게 한다.
+
+### 기능 구현
+
+* `OrderItemCancelTransactionHelper` 신설 — `validateAndPrepare`(검증 + 환불 금액 계산), `applyItemCancel`(아이템 취소 + 재고 해제 + 상태 전이)을 이동
+* `cancelItems()`는 분산 락 + Toss 호출 + 헬퍼 위임만 담당 (로직 변경 없음)
+* 회귀 통합 테스트 신설: 부분 취소 → 상태 **영속화** 검증, 동일 아이템 재취소 409 + Toss 재환불 없음(`times(1)`), 전체 취소 시 CANCELLED 전이
+
+### Trade-off
+
+클래스가 하나 늘어나지만, self-invocation 함정을 구조적으로 제거하고 결제 도메인과 동일한 패턴으로 통일된다. 대안인 self-injection(자기 자신 주입)은 순환 참조 경고와 가독성 문제로 배제했다.
+
+### 결과
+
+* 부분 취소의 상태 변경이 DB에 정상 영속화 — 중복 환불·재고 이중 해제 경로 차단
+* `@CacheEvict`도 프록시 경유로 정상 동작
+* 교훈: **Short TX 분리는 반드시 별도 빈으로** — 같은 클래스 내 `@Transactional` 호출은 무효
+
+---
+
+## 12. 재고 락 획득 순서 불일치와 저재고 경보 중복
+
+> 이슈 [#201](https://github.com/nameless0422/stock-management-api/issues/201), [#202](https://github.com/nameless0422/stock-management-api/issues/202) · PR [#205](https://github.com/nameless0422/stock-management-api/pull/205), [#206](https://github.com/nameless0422/stock-management-api/pull/206)
+
+### 배경 및 문제정의
+
+**(1) 락 순서 불일치 — 데드락 가능성 (#202)**
+
+주문 생성은 데드락 방지를 위해 variantId 오름차순으로 재고를 예약하지만, 취소·확정·환불 경로는 아이템 리스트 순서대로 비관적 락을 획득했다.
+
+```
+주문 A 확정: variant 1 락 → variant 2 락 대기
+주문 B 취소: variant 2 락 → variant 1 락 대기   ← 데드락
+```
+
+**(2) 저재고 경보 기준값 오류 (#201)**
+
+```java
+int availableBefore = inventory.getAvailable() + quantity; // reserve 호출 전인데 +quantity
+inventory.reserve(quantity);
+```
+
+`getAvailable()`이 이미 "reserve 전" 값인데 `quantity`를 더해 기준값이 부풀려짐 — 리팩터링 중 계산식의 위치만 이동하며 생긴 결함. 임계값 하향 돌파 감지(`before ≥ threshold && after < threshold`)가 왜곡되어 **이미 임계값 미만인 재고에서도 주문마다 경보 재발행** (관리자 중복 메일).
+
+### 솔루션
+
+* (1) `Order.getItemsSortedByVariant()` 공통 헬퍼 신설 — 다건 재고 락을 획득하는 **7개 경로 전체**(생성·취소·시스템취소·확정·환불·웹훅취소·부분취소)에 동일 정렬 적용
+* (2) `+ quantity` 제거 (한 줄)
+
+### Trade-off
+
+정렬 비용은 주문당 아이템 수(수 개) 수준으로 무시 가능. 공통 헬퍼로 묶어 새 경로 추가 시 정렬 누락이 재발하지 않도록 했다.
+
+### 결과
+
+* 모든 재고 락 경로가 동일한 순서로 획득 — 순서 역전에 의한 데드락 구조적 차단
+* 저재고 경보가 임계값을 처음 하향 돌파하는 순간에만 1회 발행 — 회귀 테스트로 고정 (수정 전 코드에서는 실패하는 테스트)
+
+---
+
+## 13. Elasticsearch 색인 정합성
+
+> 이슈 [#209](https://github.com/nameless0422/stock-management-api/issues/209)~[#213](https://github.com/nameless0422/stock-management-api/issues/213) · PR [#215](https://github.com/nameless0422/stock-management-api/pull/215)~[#218](https://github.com/nameless0422/stock-management-api/pull/218)
+
+### 배경 및 문제정의
+
+ES 도입 시 "색인을 만드는 것"에 집중한 나머지, **색인을 최신으로 유지하는 것**과 **깨졌을 때 복구하는 것** 두 축이 비어 있었다.
+
+| # | 문제 | 영향 |
+|---|------|------|
+| #209 | ES 문서에 categoryId 미색인 — `q`+`categoryId` 조합 시 ES 경로에서 카테고리 필터 **조용히 무시** | 잘못된 검색 결과 |
+| #210 | 전체 재색인 수단 없음 | ES 유실·매핑 변경 시 복구 불가 |
+| #211 | ES 클라이언트 타임아웃 미설정 (기본 socket 30초) | ES 행업 시 상품 쓰기·검색이 최대 30초 블록 |
+| #212 | 색인 실패 시 로그만 남김 | ES 일시 장애 → 영구 DB/ES 불일치 |
+| #213 | 리뷰·판매 통계, 카테고리명 변경 시 재색인 없음 | `popular`/`review` 정렬·카테고리 검색 stale |
+
+### 솔루션 및 기능 구현
+
+* **categoryId 필터 (#209):** `ProductDocument`에 `categoryId` 필드 추가, terms 필터 적용 (`includeChildren=true` 시 하위 카테고리 ID 포함)
+* **재색인 API (#210):** `POST /api/v1/admin/search/reindex` — 인덱스 재생성(@Setting/@Field 기반) 후 ACTIVE 상품 500건 단위 배치 색인, 리뷰·판매 통계는 배치 쿼리로 N+1 없이 결합
+* **fail-fast (#211):** `connection-timeout=1s`, `socket-timeout=5s` — MySQL fallback이 있으므로 빨리 실패하는 것이 옳은 정책
+* **Outbox 재시도 (#212):** 동기 색인 실패 시에만 `PRODUCT_SYNC` 이벤트를 Outbox에 저장 → 기존 릴레이 인프라가 최대 5회 재시도, 초과 시 dead-letter 메트릭 노출. AFTER_COMMIT 컨텍스트에서는 커밋이 끝난 트랜잭션에 참여하면 INSERT가 유실되므로 `saveInNewTransaction`(REQUIRES_NEW)으로 분리
+* **stale 해소 (#213):** 리뷰 작성/삭제, 결제 확정/환불, 카테고리명 변경 시 `ProductSyncEvent` 발행 — 기존 AFTER_COMMIT 리스너 경로 재사용
+
+### Trade-off
+
+* 재색인은 인덱스를 삭제 후 재생성하므로 진행 중 검색 결과가 부분적일 수 있음 — 관리자 작업 빈도상 허용
+* 결제 확정 경로에 상품 수만큼 ES 색인이 추가되지만 AFTER_COMMIT이라 결제 트랜잭션 자체에는 영향 없음, 장애 시에도 5초 타임아웃 + Outbox 재시도로 방어
+* 동기 1차 색인은 유지 — 전면 Outbox 경유로 바꾸면 색인 지연(릴레이 주기 5초)이 기본이 되어 검색 일관성이 나빠짐
+
+### 결과
+
+* `q`+`categoryId` 검색이 정확한 결과 반환 (수정 전에는 필터 무시로 2건 반환되던 통합 테스트 케이스로 고정)
+* ES 유실 시 재색인 API 1회로 복구 — 색인 유실 → 검색 0건 → 재색인 → 복구 시나리오 통합 테스트 검증
+* ES 일시 장애가 영구 불일치로 남지 않음 (Outbox 재시도 + dead-letter 가시성)
+* 인기순·리뷰순 정렬과 카테고리 검색이 실시간 데이터 반영
+
+---
+
 ## 테스트 커버리지 추이
 
 | 시점 | 테스트 수 |
@@ -803,3 +933,4 @@ public CategoryResponse create(CategoryCreateRequest request) { ... }
 | 비밀번호 재설정 API (#110) + 홈 화면 집계 API (#127) | **655개** |
 | 커서 기반 페이지네이션 전환 (#15, 12개 엔드포인트) | ~670개 |
 | ProductVariant 시스템 도입 (Product 1:N Variant 1:1 Inventory) | **779개** |
+| 전체 코드 리뷰 수정 (#11/#12) + ES 색인 정합성 (#13) | **~799개** (ES PR 머지 기준) |
