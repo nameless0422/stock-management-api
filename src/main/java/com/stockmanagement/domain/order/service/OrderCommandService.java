@@ -185,9 +185,9 @@ public class OrderCommandService {
         }
 
         // 6. 재고 예약 (variantId 오름차순 — 데드락 방지)
-        savedOrder.getItems().stream()
-                .sorted(java.util.Comparator.comparing(i -> i.getVariant().getId()))
-                .forEach(item -> inventoryService.reserve(item.getVariant().getId(), item.getQuantity()));
+        for (OrderItem item : savedOrder.getItemsSortedByVariant()) {
+            inventoryService.reserve(item.getVariant().getId(), item.getQuantity());
+        }
 
         // 7. 쿠폰 적용
         if (request.getCouponCode() != null && !request.getCouponCode().isBlank()) {
@@ -232,7 +232,8 @@ public class OrderCommandService {
         OrderStatus previousStatus = order.getStatus();
         order.cancel(reason);
 
-        for (OrderItem item : order.getItems()) {
+        // variantId 오름차순 — 재고 락 획득 순서 통일 (데드락 방지)
+        for (OrderItem item : order.getItemsSortedByVariant()) {
             inventoryService.releaseReservation(item.getVariant().getId(), item.getQuantity());
         }
 
@@ -256,7 +257,8 @@ public class OrderCommandService {
         OrderStatus previousStatus = order.getStatus();
         order.cancel(null);
 
-        for (OrderItem item : order.getItems()) {
+        // variantId 오름차순 — 재고 락 획득 순서 통일 (데드락 방지)
+        for (OrderItem item : order.getItemsSortedByVariant()) {
             inventoryService.releaseReservation(item.getVariant().getId(), item.getQuantity());
         }
 
