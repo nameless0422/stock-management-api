@@ -51,6 +51,33 @@ class AdminControllerTest {
     @MockBean private JwtTokenProvider jwtTokenProvider;
     @MockBean private JwtBlacklist jwtBlacklist;
     @MockBean private UserService userService;
+    @MockBean private com.stockmanagement.domain.product.service.ProductSearchService productSearchService;
+
+    // ===== POST /api/admin/search/reindex =====
+
+    @Nested
+    @DisplayName("POST /api/admin/search/reindex")
+    class Reindex {
+
+        @Test
+        @WithMockUser(roles = "ADMIN")
+        @DisplayName("ADMIN → 200, 색인 건수 반환")
+        void reindexAsAdmin() throws Exception {
+            given(productSearchService.reindexAll()).willReturn(42L);
+
+            mockMvc.perform(post("/api/v1/admin/search/reindex"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.indexedCount").value(42));
+        }
+
+        @Test
+        @WithMockUser(roles = "USER")
+        @DisplayName("USER → 403")
+        void reindexAsUserForbidden() throws Exception {
+            mockMvc.perform(post("/api/v1/admin/search/reindex"))
+                    .andExpect(status().isForbidden());
+        }
+    }
 
     // ===== GET /api/admin/dashboard =====
 

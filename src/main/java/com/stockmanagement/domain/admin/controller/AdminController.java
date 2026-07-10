@@ -5,11 +5,13 @@ import com.stockmanagement.domain.admin.dto.AdminOrderResponse;
 import com.stockmanagement.domain.admin.dto.DashboardResponse;
 import com.stockmanagement.domain.admin.dto.LowStockThresholdRequest;
 import com.stockmanagement.domain.admin.dto.LowStockThresholdResponse;
+import com.stockmanagement.domain.admin.dto.ReindexResponse;
 import com.stockmanagement.domain.admin.dto.RoleUpdateRequest;
 import com.stockmanagement.domain.admin.dto.ShippingPolicyRequest;
 import com.stockmanagement.domain.admin.dto.ShippingPolicyResponse;
 import com.stockmanagement.domain.admin.service.AdminService;
 import com.stockmanagement.domain.admin.setting.service.SystemSettingService;
+import com.stockmanagement.domain.product.service.ProductSearchService;
 import com.stockmanagement.domain.inventory.dto.DailyInventorySnapshotResponse;
 import com.stockmanagement.domain.order.dto.DailyOrderStatsResponse;
 import com.stockmanagement.domain.order.entity.OrderStatus;
@@ -50,6 +52,15 @@ public class AdminController {
 
     private final AdminService adminService;
     private final SystemSettingService systemSettingService;
+    private final ProductSearchService productSearchService;
+
+    @Operation(summary = "상품 검색 전체 재색인",
+            description = "ES 인덱스를 재생성하고 ACTIVE 상품 전체를 다시 색인한다. " +
+                    "매핑 변경·색인 유실·통계 stale 복구용. 재색인 중 검색 결과가 부분적일 수 있다.")
+    @PostMapping("/search/reindex")
+    public ApiResponse<ReindexResponse> reindexProducts() {
+        return ApiResponse.ok(new ReindexResponse(productSearchService.reindexAll()));
+    }
 
     @Operation(summary = "관리자 대시보드", description = "주문 통계, 매출(CONFIRMED 기준), 사용자 수, 저재고(available<10) 목록 반환.")
     @GetMapping("/dashboard")
