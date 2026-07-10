@@ -11,5 +11,7 @@ public enum OutboxEventType {
     SHIPMENT_CREATE,
     SHIPMENT_RETURNED,
     /** 결제 확정 후 포인트 적립 요청 — 실패 시 릴레이 스케줄러가 재시도한다. */
-    POINT_EARN
+    POINT_EARN,
+    /** ES 상품 색인 동기화 재시도 — 동기 색인 실패 시에만 저장되어 릴레이 스케줄러가 재시도한다. */
+    PRODUCT_SYNC
 }

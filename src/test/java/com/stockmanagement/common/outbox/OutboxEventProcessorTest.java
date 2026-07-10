@@ -37,6 +37,7 @@ class OutboxEventProcessorTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock ShipmentService shipmentService;
     @Mock PointService pointService;
+    @Mock com.stockmanagement.domain.product.service.ProductIndexSynchronizer productIndexSynchronizer;
     @Spy  ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @InjectMocks OutboxEventProcessor processor;
@@ -204,6 +205,52 @@ class OutboxEventProcessorTest {
             assertThat(result).isTrue();
             verify(pointService).earn(5L, 50000L, 20L);
             assertThat(outbox.getPublishedAt()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("PRODUCT_SYNC(delete=false) → productIndexSynchronizer.sync() 호출")
+        void callsSynchronizerForProductSync() throws Exception {
+            String payload = objectMapper.writeValueAsString(
+                    Map.of("productId", 7, "delete", false));
+            OutboxEvent outbox = outboxEvent(14L, OutboxEventType.PRODUCT_SYNC, payload);
+            given(repository.findById(14L)).willReturn(Optional.of(outbox));
+
+            boolean result = processor.processOne(14L);
+
+            assertThat(result).isTrue();
+            verify(productIndexSynchronizer).sync(7L);
+            assertThat(outbox.getPublishedAt()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("PRODUCT_SYNC(delete=true) → productIndexSynchronizer.deleteFromIndex() 호출")
+        void callsSynchronizerForProductSyncDelete() throws Exception {
+            String payload = objectMapper.writeValueAsString(
+                    Map.of("productId", 8, "delete", true));
+            OutboxEvent outbox = outboxEvent(15L, OutboxEventType.PRODUCT_SYNC, payload);
+            given(repository.findById(15L)).willReturn(Optional.of(outbox));
+
+            boolean result = processor.processOne(15L);
+
+            assertThat(result).isTrue();
+            verify(productIndexSynchronizer).deleteFromIndex(8L);
+            assertThat(outbox.getPublishedAt()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("PRODUCT_SYNC — 색인 실패 시 retryCount 증가")
+        void productSyncFailureRecorded() throws Exception {
+            String payload = objectMapper.writeValueAsString(
+                    Map.of("productId", 9, "delete", false));
+            OutboxEvent outbox = outboxEvent(16L, OutboxEventType.PRODUCT_SYNC, payload);
+            given(repository.findById(16L)).willReturn(Optional.of(outbox));
+            doThrow(new RuntimeException("ES 연결 실패")).when(productIndexSynchronizer).sync(9L);
+
+            boolean result = processor.processOne(16L);
+
+            assertThat(result).isFalse();
+            assertThat(outbox.getRetryCount()).isEqualTo(1);
+            assertThat(outbox.getPublishedAt()).isNull();
         }
     }
 
