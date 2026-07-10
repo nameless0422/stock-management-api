@@ -37,6 +37,9 @@ class CategoryServiceTest {
     @Mock
     private ProductRepository productRepository;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private CategoryService categoryService;
 
@@ -205,6 +208,37 @@ class CategoryServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.INVALID_INPUT));
+        }
+
+        @Test
+        @DisplayName("이름 변경 → 소속 상품 ES 재색인 이벤트 발행 (#213)")
+        void nameChangePublishesProductSync() {
+            given(categoryRepository.findById(1L)).willReturn(Optional.of(parent));
+
+            CategoryUpdateRequest request = mock(CategoryUpdateRequest.class);
+            given(request.getName()).willReturn("가전"); // "전자" → "가전"
+            given(request.getParentId()).willReturn(null);
+            given(categoryRepository.existsByNameAndIdNot("가전", 1L)).willReturn(false);
+            given(productRepository.findIdsByCategoryId(1L)).willReturn(java.util.List.of(10L, 11L));
+
+            categoryService.update(1L, request);
+
+            verify(eventPublisher, times(2))
+                    .publishEvent(any(com.stockmanagement.common.event.ProductSyncEvent.class));
+        }
+
+        @Test
+        @DisplayName("이름 미변경 → ES 재색인 이벤트 미발행")
+        void noNameChangeNoProductSync() {
+            given(categoryRepository.findById(1L)).willReturn(Optional.of(parent));
+
+            CategoryUpdateRequest request = mock(CategoryUpdateRequest.class);
+            given(request.getName()).willReturn("전자"); // 동일 이름
+            given(request.getParentId()).willReturn(null);
+
+            categoryService.update(1L, request);
+
+            verify(eventPublisher, never()).publishEvent(any());
         }
     }
 }

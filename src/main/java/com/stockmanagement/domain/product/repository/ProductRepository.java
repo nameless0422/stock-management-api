@@ -89,6 +89,10 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
            countQuery = "SELECT COUNT(DISTINCT p) FROM Product p LEFT JOIN Review r ON r.productId = p.id WHERE p.status = :status")
     Page<Product> findPopularByStatus(@Param("status") ProductStatus status, Pageable pageable);
 
+    /** 카테고리 소속 상품 ID 목록 — 카테고리명 변경 시 ES 재색인 대상 조회용 */
+    @Query("SELECT p.id FROM Product p WHERE p.category.id = :categoryId")
+    List<Long> findIdsByCategoryId(@Param("categoryId") Long categoryId);
+
     /** countActiveProductsByCategoryIds() 결과를 Map으로 변환한다. */
     default Map<Long, Long> countMapByCategoryIds(Collection<Long> ids) {
         return countActiveProductsByCategoryIds(ids).stream()
