@@ -1,9 +1,7 @@
 package com.stockmanagement.domain.product.service;
 
 import com.stockmanagement.common.event.ProductSyncEvent;
-import com.stockmanagement.domain.order.repository.OrderItemRepository;
-import com.stockmanagement.domain.product.repository.ProductRepository;
-import com.stockmanagement.domain.product.review.repository.ReviewRepository;
+import com.stockmanagement.common.outbox.OutboxEventStore;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -18,16 +16,19 @@ import org.springframework.transaction.event.TransactionalEventListener;
  *
  * <p>비동기(@Async)를 사용하지 않는 이유: 검색 색인은 요청 스레드에서 완료되어야 통합 테스트에서
  * 인덱스 refresh 타이밍 문제 없이 즉시 검증 가능하며, 응답 시간 영향은 미미하다 (~10–50 ms).
+ *
+ * <p>동기 색인 실패 시 이벤트를 Outbox({@code PRODUCT_SYNC})에 저장하여
+ * 릴레이 스케줄러가 최대 5회 재시도한다 — ES 일시 장애가 영구 불일치로 남지 않는다.
+ * AFTER_COMMIT 컨텍스트에서는 이미 커밋된 트랜잭션에 참여하면 INSERT가 유실되므로
+ * {@link OutboxEventStore#saveInNewTransaction}(REQUIRES_NEW)을 사용한다.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class ProductEventListener {
 
-    private final ProductRepository productRepository;
-    private final ProductSearchService productSearchService;
-    private final ReviewRepository reviewRepository;
-    private final OrderItemRepository orderItemRepository;
+    private final ProductIndexSynchronizer indexSynchronizer;
+    private final OutboxEventStore outboxEventStore;
 
     /**
      * 상품 변경이 DB에 커밋된 후 ES 색인을 동기화한다.
@@ -37,34 +38,26 @@ public class ProductEventListener {
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onProductSync(ProductSyncEvent event) {
-        if (event.isDelete()) {
-            safeDeleteFromIndex(event.getProductId());
-        } else {
-            syncToEs(event.getProductId());
+        try {
+            if (event.isDelete()) {
+                indexSynchronizer.deleteFromIndex(event.getProductId());
+            } else {
+                indexSynchronizer.sync(event.getProductId());
+            }
+        } catch (Exception e) {
+            log.error("[ProductEventListener] ES 색인 동기화 실패 — Outbox 재시도 위임. productId={}, delete={}",
+                    event.getProductId(), event.isDelete(), e);
+            enqueueRetry(event);
         }
     }
 
-    private void syncToEs(Long productId) {
+    /** 색인 실패 이벤트를 Outbox에 저장한다. 저장마저 실패하면 로그만 남긴다 (DB 장애 등). */
+    private void enqueueRetry(ProductSyncEvent event) {
         try {
-            productRepository.findById(productId).ifPresentOrElse(
-                    product -> {
-                        long reviewCount = reviewRepository.countByProductId(productId);
-                        long salesCount = orderItemRepository.sumSalesCountByProductId(productId);
-                        productSearchService.index(product, reviewCount, salesCount);
-                        log.debug("[ProductEventListener] ES 색인 완료. productId={}", productId);
-                    },
-                    () -> log.warn("[ProductEventListener] ES 색인 대상 상품 미존재. productId={}", productId)
-            );
+            outboxEventStore.saveInNewTransaction(event);
         } catch (Exception e) {
-            log.error("[ProductEventListener] ES 색인 실패 — DB/ES 불일치 발생. productId={}", productId, e);
-        }
-    }
-
-    private void safeDeleteFromIndex(Long productId) {
-        try {
-            productSearchService.deleteFromIndex(productId);
-        } catch (Exception e) {
-            log.error("[ProductEventListener] ES 색인 삭제 실패 — 삭제된 상품이 검색에 잔존할 수 있음. productId={}", productId, e);
+            log.error("[ProductEventListener] Outbox 저장 실패 — DB/ES 불일치 발생, 재색인 API로 복구 필요. productId={}",
+                    event.getProductId(), e);
         }
     }
 }
