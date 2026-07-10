@@ -245,6 +245,31 @@ class InventoryServiceTest {
         }
 
         @Test
+        @DisplayName("가용 재고가 임계값을 하향 돌파하면 LowStockEvent를 발행한다")
+        void publishesLowStockEventOnThresholdCrossing() {
+            // onHand=15, reserved=3 → available=12 (임계값 10 이상)
+            Inventory inventory = Inventory.builder().variant(variant).build();
+            inventory.receive(15);
+            inventory.reserve(3);
+            given(inventoryRepository.findByVariantIdWithLock(1L)).willReturn(Optional.of(inventory));
+
+            inventoryService.reserve(1L, 5); // available 12 → 7 (임계값 하향 돌파)
+
+            verify(eventPublisher).publishEvent(any(com.stockmanagement.common.event.LowStockEvent.class));
+        }
+
+        @Test
+        @DisplayName("이미 임계값 미만인 재고는 LowStockEvent를 재발행하지 않는다")
+        void doesNotRepublishLowStockEventWhenAlreadyBelowThreshold() {
+            Inventory inventory = inventoryWithStock(); // available=7 (임계값 10 미만)
+            given(inventoryRepository.findByVariantIdWithLock(1L)).willReturn(Optional.of(inventory));
+
+            inventoryService.reserve(1L, 5); // available 7 → 2 (이미 미만 → 중복 경보 없음)
+
+            verify(eventPublisher, never()).publishEvent(any(com.stockmanagement.common.event.LowStockEvent.class));
+        }
+
+        @Test
         @DisplayName("가용 재고 부족 시 InsufficientStockException이 전파된다")
         void propagatesInsufficientStockException() {
             Inventory inventory = inventoryWithStock(); // available=7
