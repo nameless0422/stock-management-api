@@ -13,8 +13,10 @@ import com.stockmanagement.domain.product.review.repository.ReviewRepository;
 import com.stockmanagement.domain.user.entity.User;
 import com.stockmanagement.domain.user.repository.UserRepository;
 import com.stockmanagement.common.dto.CursorPage;
+import com.stockmanagement.common.event.ProductSyncEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -36,6 +38,7 @@ public class ReviewService {
     private final ProductRepository productRepository;
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 리뷰를 작성한다.
@@ -64,7 +67,10 @@ public class ReviewService {
                 .content(request.getContent())
                 .build();
 
-        return ReviewResponse.from(reviewRepository.save(review));
+        ReviewResponse response = ReviewResponse.from(reviewRepository.save(review));
+        // ES 색인의 reviewCount 갱신 (review 정렬 최신화) — 커밋 후 리스너가 재색인
+        eventPublisher.publishEvent(new ProductSyncEvent(productId, false));
+        return response;
     }
 
     /**
@@ -156,6 +162,8 @@ public class ReviewService {
         }
 
         reviewRepository.delete(review);
+        // ES 색인의 reviewCount 갱신 — 커밋 후 리스너가 재색인
+        eventPublisher.publishEvent(new ProductSyncEvent(productId, false));
     }
 
     /**

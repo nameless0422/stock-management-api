@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.order.service;
 
 import com.stockmanagement.common.event.OrderCancelledEvent;
+import com.stockmanagement.common.event.ProductSyncEvent;
 import com.stockmanagement.common.exception.BusinessException;
 import com.stockmanagement.common.exception.ErrorCode;
 import com.stockmanagement.common.outbox.OutboxEventStore;
@@ -15,6 +16,7 @@ import com.stockmanagement.domain.order.repository.OrderStatusHistoryRepository;
 import com.stockmanagement.domain.point.service.PointService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,7 @@ public class OrderPaymentService {
     private final PointService pointService;
     private final OutboxEventStore outboxEventStore;
     private final OrderStatusHistoryRepository historyRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 결제 완료 후 주문을 확정한다 — Payment 도메인에서 호출.
@@ -60,6 +63,7 @@ public class OrderPaymentService {
         }
 
         recordHistory(order.getId(), previousStatus, OrderStatus.CONFIRMED, null);
+        publishProductSync(order); // ES salesCount 갱신 (popular 정렬 최신화)
         return order;
     }
 
@@ -92,6 +96,7 @@ public class OrderPaymentService {
 
         recordHistory(order.getId(), previousStatus, OrderStatus.CANCELLED, null);
         outboxEventStore.save(new OrderCancelledEvent(order.getId(), order.getUserId(), "PAYMENT_REFUNDED"));
+        publishProductSync(order); // ES salesCount 갱신 (환불 시 판매량 차감 반영)
     }
 
     /**
@@ -136,6 +141,14 @@ public class OrderPaymentService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         order.resetPaymentFailed();
         recordHistory(order.getId(), OrderStatus.PAYMENT_IN_PROGRESS, OrderStatus.PENDING, "system:stuck-payment-reset");
+    }
+
+    /** 주문에 포함된 상품들의 ES 재색인 이벤트를 발행한다 — 커밋 후 리스너가 salesCount를 재계산한다. */
+    private void publishProductSync(Order order) {
+        order.getItems().stream()
+                .map(item -> item.getProduct().getId())
+                .distinct()
+                .forEach(productId -> eventPublisher.publishEvent(new ProductSyncEvent(productId, false)));
     }
 
     private String currentUser() {
