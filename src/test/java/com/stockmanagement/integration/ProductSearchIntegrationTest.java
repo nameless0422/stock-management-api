@@ -213,6 +213,35 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.content[0].sku").value("IC-001"));
     }
 
+    // ===== 카테고리 ID 단독 조회 — MySQL Specification 경로 (#214) =====
+
+    @Test
+    @DisplayName("categoryId 단독 → MySQL Specification 경로에서 카테고리 필터 적용")
+    void browse_byCategoryIdOnly_mysqlPath() throws Exception {
+        createProduct("헤드셋", "SPEC-001", 90000, "음향기기");
+        createProduct("셔츠", "SPEC-002", 40000, "남성의류");
+        long categoryId = getOrCreateCategory("음향기기");
+
+        mockMvc.perform(get("/api/v1/products")
+                        .param("categoryId", String.valueOf(categoryId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].sku").value("SPEC-001"));
+    }
+
+    // ===== ES 경로 응답 스키마 — updatedAt 포함 (#214) =====
+
+    @Test
+    @DisplayName("ES 검색 결과에 updatedAt 포함 — MySQL 경로와 응답 스키마 일치")
+    void search_responseIncludesUpdatedAt() throws Exception {
+        createProduct("스탠드 조명", "UA-001", 60000, "조명");
+
+        mockMvc.perform(get("/api/v1/products").param("q", "스탠드 조명"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].updatedAt").isNotEmpty());
+    }
+
     // ===== 전체 재색인 (#210) =====
 
     @Test
