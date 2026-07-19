@@ -80,9 +80,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/email/resend").authenticated()
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/api/v1/payments/webhook").permitAll()
-                        // Actuator — health/info/prometheus는 공개 (내부망 전용), 나머지는 ADMIN 전용
+                        // Actuator — health/info만 공개, 나머지(prometheus 포함)는 ADMIN 전용
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
-                        .requestMatchers("/actuator/prometheus").hasRole("ADMIN")
                         .requestMatchers("/actuator/**").hasRole("ADMIN")
                         // Swagger UI — swagger.public=false(운영) 시 ADMIN 인증 필요
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html")
