@@ -7,6 +7,7 @@ import com.stockmanagement.domain.inventory.repository.InventoryRepository;
 import com.stockmanagement.domain.product.category.repository.CategoryRepository;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
 import com.stockmanagement.domain.product.dto.ProductResponse;
+import com.stockmanagement.domain.product.dto.ProductSearchRequest;
 import com.stockmanagement.domain.product.dto.ProductUpdateRequest;
 import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
@@ -30,6 +31,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -216,6 +218,56 @@ class ProductServiceTest {
 
             verify(productRepository).findByStatus(ProductStatus.ACTIVE, pageable);
         }
+
+        @Test
+        @DisplayName("ES 장애 시 가격 필터 포함 전체 조건을 Specification으로 fallback 조회한다")
+        void fallsBackToSpecificationOnEsFailure() {
+            Pageable pageable = PageRequest.of(0, 10);
+            ProductSearchRequest request = new ProductSearchRequest();
+            request.setQ("테스트");
+            request.setMinPrice(new BigDecimal("5000"));
+            given(productSearchService.search(any(), any()))
+                    .willThrow(new RuntimeException("ES down"));
+            given(productRepository.findAll(any(Specification.class), any(Pageable.class)))
+                    .willReturn(new PageImpl<>(List.of(product), pageable, 1));
+
+            Page<ProductResponse> result = productService.getList(pageable, request, null);
+
+            assertThat(result.getTotalElements()).isEqualTo(1);
+            verify(productRepository).findAll(any(Specification.class), any(Pageable.class));
+            verify(productRepository, never()).findByStatus(any(), any());
+        }
+
+        @Test
+        @DisplayName("categoryId만 있으면 ES 없이 Specification으로 조회한다")
+        void usesSpecificationForCategoryOnlyBrowsing() {
+            Pageable pageable = PageRequest.of(0, 10);
+            ProductSearchRequest request = new ProductSearchRequest();
+            request.setCategoryId(1L);
+            given(productRepository.findAll(any(Specification.class), any(Pageable.class)))
+                    .willReturn(new PageImpl<>(List.of(product), pageable, 1));
+
+            productService.getList(pageable, request, null);
+
+            verify(productSearchService, never()).search(any(), any());
+            verify(productRepository).findAll(any(Specification.class), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("categoryId + includeChildren=true → 하위 카테고리 ID를 함께 조회한다")
+        void includesChildCategoryIds() {
+            Pageable pageable = PageRequest.of(0, 10);
+            ProductSearchRequest request = new ProductSearchRequest();
+            request.setCategoryId(1L);
+            request.setIncludeChildren(true);
+            given(categoryRepository.findChildIdsByParentId(1L)).willReturn(List.of(2L, 3L));
+            given(productRepository.findAll(any(Specification.class), any(Pageable.class)))
+                    .willReturn(Page.empty());
+
+            productService.getList(pageable, request, null);
+
+            verify(categoryRepository).findChildIdsByParentId(1L);
+        }
     }
 
     // ===== update() =====
@@ -288,7 +340,7 @@ class ProductServiceTest {
             productService.delete(1L);
 
             assertThat(product.getStatus()).isEqualTo(ProductStatus.DISCONTINUED);
-            verify(productRepository, never()).delete(any());
+            verify(productRepository, never()).delete(any(Product.class));
         }
 
         @Test

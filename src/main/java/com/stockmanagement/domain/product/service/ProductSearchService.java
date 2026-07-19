@@ -139,15 +139,9 @@ public class ProductSearchService {
     }
 
     /**
-     * 상품을 Elasticsearch에 색인한다.
-     * ProductService의 create/update/changeStatus에서 호출된다.
+     * 리뷰/판매 통계를 포함해 상품을 Elasticsearch에 색인한다.
+     * {@link ProductIndexSynchronizer}에서 호출된다.
      */
-    public void index(Product product) {
-        productSearchRepository.save(ProductDocument.from(product));
-        log.debug("ES 색인 완료. productId={}", product.getId());
-    }
-
-    /** 리뷰/판매 통계를 포함한 ES 색인. */
     public void index(Product product, long reviewCount, long salesCount) {
         productSearchRepository.save(ProductDocument.from(product, reviewCount, salesCount));
         log.debug("ES 색인 완료. productId={} reviewCount={} salesCount={}", product.getId(), reviewCount, salesCount);

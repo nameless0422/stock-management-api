@@ -22,6 +22,7 @@ import com.stockmanagement.domain.product.entity.Product;
 import com.stockmanagement.domain.product.entity.ProductStatus;
 import com.stockmanagement.domain.product.entity.ProductVariant;
 import com.stockmanagement.domain.product.repository.ProductRepository;
+import com.stockmanagement.domain.product.repository.ProductSpecification;
 import com.stockmanagement.domain.product.repository.ProductVariantRepository;
 import com.stockmanagement.domain.product.image.dto.ProductImageResponse;
 import com.stockmanagement.domain.product.image.repository.ProductImageRepository;
@@ -144,7 +145,8 @@ public class ProductService {
      *
      * <p>검색 조건({@code q}, {@code minPrice}, {@code maxPrice}, {@code category}, {@code sort})이
      * 하나라도 있으면 Elasticsearch로 검색하고, 없으면 MySQL 페이징 조회를 사용한다.
-     * ES 장애 시 MySQL로 fallback하여 서비스 가용성을 유지한다.
+     * ES 장애 시 MySQL로 fallback하며, 모든 필터를 Specification으로 동일하게 적용한다.
+     * (단, {@code popular}/{@code review} 정렬은 ES 전용 — fallback에서는 기본 정렬 사용)
      */
     public Page<ProductResponse> getList(Pageable pageable, ProductSearchRequest request, Long userId) {
         if (request != null && request.hasSearchCondition()) {
@@ -155,24 +157,27 @@ public class ProductService {
                 log.warn("Elasticsearch 검색 실패, MySQL fallback 사용. query={}", request.getQ(), e);
             }
         }
-        // ES 미사용 또는 fallback: sort/keyword를 MySQL에서 처리
+        // ES 미사용 또는 fallback: 필터를 Specification으로 MySQL에서 처리
         Pageable effectivePageable = toSortedPageable(pageable, request);
-        String keyword = request != null ? request.getQ() : null;
-        Long categoryId = request != null ? request.getCategoryId() : null;
-        Page<Product> products;
-        if (categoryId != null) {
-            Set<Long> categoryIds = new HashSet<>();
-            categoryIds.add(categoryId);
-            if (request.isIncludeChildren()) {
-                categoryIds.addAll(categoryRepository.findChildIdsByParentId(categoryId));
-            }
-            products = productRepository.findByStatusAndCategoryIdIn(ProductStatus.ACTIVE, categoryIds, effectivePageable);
-        } else if (keyword != null && !keyword.isBlank()) {
-            products = productRepository.searchByStatus(ProductStatus.ACTIVE, escapeLike(keyword), effectivePageable);
-        } else {
-            products = productRepository.findByStatus(ProductStatus.ACTIVE, effectivePageable);
-        }
+        boolean hasFilter = request != null
+                && (request.hasSearchCondition() || request.getCategoryId() != null);
+        Page<Product> products = hasFilter
+                ? productRepository.findAll(
+                        ProductSpecification.activeWithFilters(request, resolveCategoryIds(request)),
+                        effectivePageable)
+                : productRepository.findByStatus(ProductStatus.ACTIVE, effectivePageable);
         return enrichPage(products, userId);
+    }
+
+    /** categoryId 필터 대상 ID 집합 — includeChildren=true이면 하위 카테고리 포함 */
+    private Set<Long> resolveCategoryIds(ProductSearchRequest request) {
+        if (request.getCategoryId() == null) return Set.of();
+        Set<Long> categoryIds = new HashSet<>();
+        categoryIds.add(request.getCategoryId());
+        if (request.isIncludeChildren()) {
+            categoryIds.addAll(categoryRepository.findChildIdsByParentId(request.getCategoryId()));
+        }
+        return categoryIds;
     }
 
     /** sort 파라미터를 Pageable의 Sort로 변환 (MySQL fallback용) */
@@ -299,11 +304,6 @@ public class ProductService {
     }
 
     // ===== 내부 헬퍼 =====
-
-    /** LIKE 패턴 와일드카드(!, %, _)를 이스케이프한다. ESCAPE ! 기준. */
-    private static String escapeLike(String value) {
-        return com.stockmanagement.common.util.SqlUtils.escapeLike(value);
-    }
 
     /** 상품의 전체 variant 가용 재고를 합산한다. */
     private int sumAvailableByProductId(Long productId) {
