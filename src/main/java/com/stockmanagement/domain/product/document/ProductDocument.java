@@ -51,6 +51,10 @@ public class ProductDocument {
     @Field(type = FieldType.Keyword)
     private String category;
 
+    /** 카테고리 ID — categoryId 필터(하위 카테고리 포함) 대상 */
+    @Field(type = FieldType.Long)
+    private Long categoryId;
+
     @Field(type = FieldType.Keyword)
     private String status;
 
@@ -60,16 +64,14 @@ public class ProductDocument {
     @Field(type = FieldType.Date, format = {}, pattern = "uuuu-MM-dd'T'HH:mm:ss.SSSSSS||uuuu-MM-dd'T'HH:mm:ss.SSS||uuuu-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
 
+    @Field(type = FieldType.Date, format = {}, pattern = "uuuu-MM-dd'T'HH:mm:ss.SSSSSS||uuuu-MM-dd'T'HH:mm:ss.SSS||uuuu-MM-dd'T'HH:mm:ss")
+    private LocalDateTime updatedAt;
+
     @Field(type = FieldType.Long)
     private long reviewCount;
 
     @Field(type = FieldType.Long)
     private long salesCount;
-
-    /** Product JPA 엔티티로부터 ES 문서를 생성한다. */
-    public static ProductDocument from(Product product) {
-        return from(product, 0L, 0L);
-    }
 
     /** Product JPA 엔티티 + 리뷰/판매 통계를 포함한 ES 문서를 생성한다. */
     public static ProductDocument from(Product product, long reviewCount, long salesCount) {
@@ -80,9 +82,11 @@ public class ProductDocument {
                 .price(product.getPrice() != null ? product.getPrice().doubleValue() : 0)
                 .sku(product.getSku())
                 .category(product.getCategoryName())
+                .categoryId(product.getCategory() != null ? product.getCategory().getId() : null)
                 .status(product.getStatus() != null ? product.getStatus().name() : null)
                 .thumbnailUrl(product.getThumbnailUrl())
                 .createdAt(product.getCreatedAt())
+                .updatedAt(product.getUpdatedAt())
                 .reviewCount(reviewCount)
                 .salesCount(salesCount)
                 .build();
@@ -101,9 +105,11 @@ public class ProductDocument {
                 .price(getPriceAsBigDecimal())
                 .sku(sku)
                 .category(category)
+                .categoryId(categoryId)
                 .thumbnailUrl(thumbnailUrl)
                 .status(status != null ? ProductStatus.valueOf(status) : null)
                 .createdAt(createdAt)
+                .updatedAt(updatedAt)
                 .build();
     }
 }

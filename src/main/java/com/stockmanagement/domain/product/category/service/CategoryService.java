@@ -7,10 +7,12 @@ import com.stockmanagement.domain.product.category.dto.CategoryResponse;
 import com.stockmanagement.domain.product.category.dto.CategoryUpdateRequest;
 import com.stockmanagement.domain.product.category.entity.Category;
 import com.stockmanagement.domain.product.category.repository.CategoryRepository;
+import com.stockmanagement.common.event.ProductSyncEvent;
 import com.stockmanagement.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +35,7 @@ public class CategoryService {
 
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @CacheEvict(cacheNames = "categories", allEntries = true)
     @Transactional
@@ -121,7 +124,15 @@ public class CategoryService {
         }
 
         Category parent = resolveParent(request.getParentId());
+        boolean nameChanged = !newName.equals(category.getName());
         category.update(newName, request.getDescription(), parent);
+
+        // 카테고리명 변경 시 소속 상품 ES 재색인 — ES 문서가 카테고리를 이름(keyword)으로 저장하므로
+        // 갱신하지 않으면 이름 필터·키워드 검색이 옛 이름으로 남는다
+        if (nameChanged) {
+            productRepository.findIdsByCategoryId(id)
+                    .forEach(productId -> eventPublisher.publishEvent(new ProductSyncEvent(productId, false)));
+        }
         return CategoryResponse.from(category);
     }
 

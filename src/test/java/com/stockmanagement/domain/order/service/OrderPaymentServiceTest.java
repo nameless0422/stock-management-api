@@ -53,6 +53,9 @@ class OrderPaymentServiceTest {
     @Mock
     private OrderStatusHistoryRepository historyRepository;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private OrderPaymentService orderPaymentService;
 
@@ -98,6 +101,17 @@ class OrderPaymentServiceTest {
     @Nested
     @DisplayName("confirm()")
     class Confirm {
+
+        @Test
+        @DisplayName("확정 시 상품 ES 재색인 이벤트 발행 — salesCount 갱신 (#213)")
+        void confirmPublishesProductSync() {
+            given(orderRepository.findByIdWithItemsForUpdate(1L)).willReturn(Optional.of(order));
+
+            orderPaymentService.confirm(1L);
+
+            verify(eventPublisher).publishEvent(
+                    any(com.stockmanagement.common.event.ProductSyncEvent.class));
+        }
 
         @Test
         @DisplayName("PENDING 주문 확정 — CONFIRMED 전환 및 재고 confirmAllocation 호출")

@@ -1,6 +1,7 @@
 package com.stockmanagement.domain.product.controller;
 
 import com.stockmanagement.common.dto.ApiResponse;
+import com.stockmanagement.common.ratelimit.RateLimit;
 import com.stockmanagement.common.security.CurrentUserId;
 import com.stockmanagement.domain.product.dto.ProductCreateRequest;
 import com.stockmanagement.domain.product.dto.ProductResponse;
@@ -68,6 +69,7 @@ public class ProductController {
 
     @Operation(summary = "검색 자동완성", description = "검색어 prefix로 상품명 자동완성 후보를 반환한다. 최대 10건.")
     @GetMapping("/search/suggestions")
+    @RateLimit(limit = 30, windowSeconds = 60, keyType = RateLimit.KeyType.IP)
     public ApiResponse<SuggestResponse> suggest(
             @RequestParam @Size(min = 1, max = 200, message = "검색어는 1~200자여야 합니다.") String q) {
         return ApiResponse.ok(new SuggestResponse(productService.suggest(q, 10)));

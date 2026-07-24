@@ -9,6 +9,7 @@ import com.stockmanagement.common.event.ShipmentDeliveredEvent;
 import com.stockmanagement.common.event.ShipmentReturnedEvent;
 import com.stockmanagement.common.event.ShipmentShippedEvent;
 import com.stockmanagement.domain.point.service.PointService;
+import com.stockmanagement.domain.product.service.ProductIndexSynchronizer;
 import com.stockmanagement.domain.shipment.service.ShipmentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +47,7 @@ class OutboxEventProcessor {
     private final ObjectMapper objectMapper;
     private final ShipmentService shipmentService;
     private final PointService pointService;
+    private final ProductIndexSynchronizer productIndexSynchronizer;
 
     /**
      * outboxId에 해당하는 이벤트를 독립 트랜잭션으로 발행한다.
@@ -105,6 +107,16 @@ class OutboxEventProcessor {
                 Long orderId = toLong(p.get("orderId"));
                 pointService.earn(userId, paidAmount, orderId);
                 log.info("[Outbox] 포인트 적립 완료: userId={}, paidAmount={}, orderId={}", userId, paidAmount, orderId);
+            }
+            case PRODUCT_SYNC -> {
+                Long productId = toLong(p.get("productId"));
+                boolean delete = Boolean.parseBoolean(String.valueOf(p.get("delete")));
+                if (delete) {
+                    productIndexSynchronizer.deleteFromIndex(productId);
+                } else {
+                    productIndexSynchronizer.sync(productId);
+                }
+                log.info("[Outbox] ES 색인 재시도 성공: productId={}, delete={}", productId, delete);
             }
             case SHIPMENT_DELIVERED -> {
                 Long orderId = toLong(p.get("orderId"));

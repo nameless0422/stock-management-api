@@ -161,6 +161,118 @@ class ProductSearchIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.content[0].sku").value("TS-001"));
     }
 
+    // ===== 카테고리 ID 필터 — ES 경로 (#209) =====
+
+    @Test
+    @DisplayName("q + categoryId → 해당 카테고리 상품만 반환")
+    void search_byKeywordAndCategoryId() throws Exception {
+        createProduct("무선 마우스", "CID-001", 30000, "전자");
+        createProduct("무선 이어폰 파우치", "CID-002", 20000, "패션잡화");
+        long categoryId = getOrCreateCategory("전자");
+
+        // 수정 전에는 ES 경로에서 categoryId가 무시되어 2건이 반환됐다
+        mockMvc.perform(get("/api/v1/products")
+                        .param("q", "무선")
+                        .param("categoryId", String.valueOf(categoryId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].sku").value("CID-001"))
+                .andExpect(jsonPath("$.data.content[0].categoryId").value(categoryId));
+    }
+
+    @Test
+    @DisplayName("q + categoryId + includeChildren=true → 하위 카테고리 상품 포함")
+    void search_byKeywordAndCategoryId_includeChildren() throws Exception {
+        long parentId = getOrCreateCategory("가전");
+        String childBody = mockMvc.perform(post("/api/v1/categories")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format("{\"name\":\"주방가전\",\"parentId\":%d}", parentId)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        long childId = objectMapper.readTree(childBody).path("data").path("id").asLong();
+
+        createProduct("소형 냉장고", "IC-001", 300000, "가전");
+        createProduct("소형 전기포트", "IC-002", 40000, "주방가전");
+        // 다른 카테고리의 동일 키워드 상품 — 필터로 제외되어야 함
+        createProduct("소형 가방", "IC-003", 50000, "패션잡화");
+
+        mockMvc.perform(get("/api/v1/products")
+                        .param("q", "소형")
+                        .param("categoryId", String.valueOf(parentId))
+                        .param("includeChildren", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(2));
+
+        // includeChildren=false(기본) → 부모 카테고리 직속 상품만
+        mockMvc.perform(get("/api/v1/products")
+                        .param("q", "소형")
+                        .param("categoryId", String.valueOf(parentId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].sku").value("IC-001"));
+    }
+
+    // ===== 카테고리 ID 단독 조회 — MySQL Specification 경로 (#214) =====
+
+    @Test
+    @DisplayName("categoryId 단독 → MySQL Specification 경로에서 카테고리 필터 적용")
+    void browse_byCategoryIdOnly_mysqlPath() throws Exception {
+        createProduct("헤드셋", "SPEC-001", 90000, "음향기기");
+        createProduct("셔츠", "SPEC-002", 40000, "남성의류");
+        long categoryId = getOrCreateCategory("음향기기");
+
+        mockMvc.perform(get("/api/v1/products")
+                        .param("categoryId", String.valueOf(categoryId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].sku").value("SPEC-001"));
+    }
+
+    // ===== ES 경로 응답 스키마 — updatedAt 포함 (#214) =====
+
+    @Test
+    @DisplayName("ES 검색 결과에 updatedAt 포함 — MySQL 경로와 응답 스키마 일치")
+    void search_responseIncludesUpdatedAt() throws Exception {
+        createProduct("스탠드 조명", "UA-001", 60000, "조명");
+
+        mockMvc.perform(get("/api/v1/products").param("q", "스탠드 조명"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].updatedAt").isNotEmpty());
+    }
+
+    // ===== 전체 재색인 (#210) =====
+
+    @Test
+    @DisplayName("색인 유실 후 관리자 재색인 → 검색 복구")
+    void reindex_restoresIndex() throws Exception {
+        createProduct("복구 노트북", "RI-001", 500000, "전자");
+        createProduct("복구 마우스", "RI-002", 30000, "전자");
+        long categoryId = getOrCreateCategory("전자");
+
+        // 색인 유실 시뮬레이션
+        productSearchRepository.deleteAll();
+        elasticsearchOperations.indexOps(ProductDocument.class).refresh();
+
+        mockMvc.perform(get("/api/v1/products").param("q", "복구"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+
+        // 재색인 (ADMIN)
+        mockMvc.perform(post("/api/v1/admin/search/reindex")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.indexedCount").value(2));
+
+        // 검색 복구 + 재생성된 매핑에서 categoryId 필터 동작 확인
+        mockMvc.perform(get("/api/v1/products")
+                        .param("q", "복구")
+                        .param("categoryId", String.valueOf(categoryId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(2));
+    }
+
     // ===== 복합 필터 =====
 
     @Test

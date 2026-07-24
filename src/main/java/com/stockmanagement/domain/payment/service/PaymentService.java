@@ -340,15 +340,6 @@ public class PaymentService {
         return PaymentResponse.from(payment);
     }
 
-    /**
-     * 주문 ID로 결제 정보를 조회한다. 결제 레코드가 없으면 빈 Optional을 반환한다.
-     * ADMIN은 전체 조회 가능, USER는 본인 주문만 조회 가능.
-     *
-     * @param orderId  조회할 주문 ID
-     * @param username 요청자 username
-     * @param isAdmin  ADMIN 여부
-     * @return 결제 정보 (없으면 Optional.empty())
-     */
     /** 현재 인증 사용자의 결제 목록을 최신순으로 페이징 조회한다. 주문 요약 정보 포함. */
     public Page<PaymentResponse> getMyPayments(Long userId, Pageable pageable) {
         Page<Payment> payments = paymentRepository.findByUserId(userId, pageable);
@@ -367,6 +358,15 @@ public class PaymentService {
         });
     }
 
+    /**
+     * 주문 ID로 결제 정보를 조회한다. 결제 레코드가 없으면 빈 Optional을 반환한다.
+     * ADMIN은 전체 조회 가능, USER는 본인 주문만 조회 가능.
+     *
+     * @param orderId 조회할 주문 ID
+     * @param userId  요청자 사용자 ID
+     * @param isAdmin ADMIN 여부
+     * @return 결제 정보 (없으면 Optional.empty())
+     */
     public Optional<PaymentResponse> getByOrderId(Long orderId, Long userId, boolean isAdmin) {
         if (!isAdmin) {
             Long ownerUserId = orderRepository.findUserIdById(orderId)

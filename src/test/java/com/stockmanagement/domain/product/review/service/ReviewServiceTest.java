@@ -38,6 +38,7 @@ class ReviewServiceTest {
     @Mock private ProductRepository productRepository;
     @Mock private OrderRepository orderRepository;
     @Mock private UserRepository userRepository;
+    @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks private ReviewService reviewService;
 
@@ -79,6 +80,8 @@ class ReviewServiceTest {
 
             assertThat(response.getRating()).isEqualTo(5);
             verify(reviewRepository).save(any());
+            // ES reviewCount 갱신용 재색인 이벤트 발행 (#213)
+            verify(eventPublisher).publishEvent(any(com.stockmanagement.common.event.ProductSyncEvent.class));
         }
 
         @Test
@@ -139,6 +142,8 @@ class ReviewServiceTest {
             reviewService.delete(1L, 10L, 2L);
 
             verify(reviewRepository).delete(r);
+            // ES reviewCount 갱신용 재색인 이벤트 발행 (#213)
+            verify(eventPublisher).publishEvent(any(com.stockmanagement.common.event.ProductSyncEvent.class));
         }
 
         @Test

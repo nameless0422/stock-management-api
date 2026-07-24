@@ -31,11 +31,27 @@ public class OutboxEventStore {
      * @param event Outbox 저장을 지원하는 도메인 이벤트
      */
     public void save(OutboxSupport event) {
+        repository.save(toEntity(event));
+    }
+
+    /**
+     * 독립 트랜잭션(REQUIRES_NEW)으로 Outbox 이벤트를 저장한다.
+     *
+     * <p>AFTER_COMMIT 리스너처럼 이미 커밋된 트랜잭션 컨텍스트에서 호출할 때 사용한다.
+     * 그 컨텍스트에서 {@link #save}로 저장하면 커밋이 끝난 트랜잭션에 참여하여
+     * INSERT가 유실되므로 반드시 새 트랜잭션으로 커밋해야 한다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void saveInNewTransaction(OutboxSupport event) {
+        repository.save(toEntity(event));
+    }
+
+    private OutboxEvent toEntity(OutboxSupport event) {
         try {
-            repository.save(OutboxEvent.builder()
+            return OutboxEvent.builder()
                     .eventType(event.outboxEventType())
                     .payload(objectMapper.writeValueAsString(event.toOutboxPayload()))
-                    .build());
+                    .build();
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Outbox 이벤트 직렬화 실패: " + event.outboxEventType(), ex);
         }
