@@ -41,6 +41,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.HashSet;
 import java.util.List;
@@ -146,7 +148,11 @@ public class ProductService {
      * <p>검색 조건({@code q}, {@code minPrice}, {@code maxPrice}, {@code category}, {@code sort})이
      * 하나라도 있으면 Elasticsearch로 검색하고, 없으면 MySQL 페이징 조회를 사용한다.
      * ES 장애 시 MySQL로 fallback하며, 모든 필터를 Specification으로 동일하게 적용한다.
-     * (단, {@code popular}/{@code review} 정렬은 ES 전용 — fallback에서는 기본 정렬 사용)
+     * (단, {@code popular}/{@code review} 정렬은 ES 전용 — fallback에서는 기본 정렬 사용,
+     * ES의 형태소 분석 대신 LIKE 매칭이라 검색 결과가 달라질 수 있음)
+     *
+     * <p>fallback 발생 시 응답 헤더 {@code X-Search-Fallback: true}를 추가해 클라이언트가
+     * 검색 결과 품질 저하 가능성을 안내할 수 있게 한다.
      */
     public Page<ProductResponse> getList(Pageable pageable, ProductSearchRequest request, Long userId) {
         if (request != null && request.hasSearchCondition()) {
@@ -155,6 +161,7 @@ public class ProductService {
                 return enrichSearchResult(esResult, userId);
             } catch (Exception e) {
                 log.warn("Elasticsearch 검색 실패, MySQL fallback 사용. query={}", request.getQ(), e);
+                markSearchFallback();
             }
         }
         // ES 미사용 또는 fallback: 필터를 Specification으로 MySQL에서 처리
@@ -167,6 +174,17 @@ public class ProductService {
                         effectivePageable)
                 : productRepository.findByStatus(ProductStatus.ACTIVE, effectivePageable);
         return enrichPage(products, userId);
+    }
+
+    /**
+     * ES 장애로 MySQL fallback이 발생했음을 응답 헤더로 알린다.
+     * 요청 스코프 밖(배치 등)에서 호출될 수 있어 RequestAttributes 부재는 무시한다.
+     */
+    private void markSearchFallback() {
+        var attrs = RequestContextHolder.getRequestAttributes();
+        if (attrs instanceof ServletRequestAttributes servletAttrs) {
+            servletAttrs.getResponse().setHeader("X-Search-Fallback", "true");
+        }
     }
 
     /** categoryId 필터 대상 ID 집합 — includeChildren=true이면 하위 카테고리 포함 */
