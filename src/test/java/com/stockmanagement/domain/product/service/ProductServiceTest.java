@@ -239,6 +239,48 @@ class ProductServiceTest {
         }
 
         @Test
+        @DisplayName("ES 장애로 fallback 시 응답 헤더 X-Search-Fallback: true를 추가한다")
+        void setsFallbackHeaderOnEsFailure() {
+            Pageable pageable = PageRequest.of(0, 10);
+            ProductSearchRequest request = new ProductSearchRequest();
+            request.setQ("테스트");
+            given(productSearchService.search(any(), any())).willThrow(new RuntimeException("ES down"));
+            given(productRepository.findAll(any(Specification.class), any(Pageable.class)))
+                    .willReturn(Page.empty());
+
+            var mockRequest = new org.springframework.mock.web.MockHttpServletRequest();
+            var mockResponse = new org.springframework.mock.web.MockHttpServletResponse();
+            org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
+                    new org.springframework.web.context.request.ServletRequestAttributes(mockRequest, mockResponse));
+            try {
+                productService.getList(pageable, request, null);
+                assertThat(mockResponse.getHeader("X-Search-Fallback")).isEqualTo("true");
+            } finally {
+                org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
+            }
+        }
+
+        @Test
+        @DisplayName("ES 정상 조회 시에는 fallback 헤더를 추가하지 않는다")
+        void doesNotSetFallbackHeaderOnEsSuccess() {
+            Pageable pageable = PageRequest.of(0, 10);
+            ProductSearchRequest request = new ProductSearchRequest();
+            request.setQ("테스트");
+            given(productSearchService.search(any(), any())).willReturn(Page.empty());
+
+            var mockRequest = new org.springframework.mock.web.MockHttpServletRequest();
+            var mockResponse = new org.springframework.mock.web.MockHttpServletResponse();
+            org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
+                    new org.springframework.web.context.request.ServletRequestAttributes(mockRequest, mockResponse));
+            try {
+                productService.getList(pageable, request, null);
+                assertThat(mockResponse.getHeader("X-Search-Fallback")).isNull();
+            } finally {
+                org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
+            }
+        }
+
+        @Test
         @DisplayName("categoryId만 있으면 ES 없이 Specification으로 조회한다")
         void usesSpecificationForCategoryOnlyBrowsing() {
             Pageable pageable = PageRequest.of(0, 10);

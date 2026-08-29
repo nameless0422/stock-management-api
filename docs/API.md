@@ -185,6 +185,9 @@ Authorization: Bearer <accessToken>
 | `sort` | `price_asc` \| `price_desc` \| `newest` \| `relevance` (기본) |
 | `page` / `size` | 페이징 (관리자·카탈로그 검색용) |
 
+> ES 장애로 MySQL LIKE fallback이 발생하면 응답 헤더 `X-Search-Fallback: true`가 추가된다.
+> LIKE는 ES 형태소 분석과 다른 결과를 반환할 수 있으므로, 프론트는 이 헤더로 안내 배너 노출 여부를 판단한다.
+
 ### `GET /api/products/search/suggestions`
 
 > 권한: 공개 | Elasticsearch prefix query 기반 자동완성
